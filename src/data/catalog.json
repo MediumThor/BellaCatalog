@@ -1,0 +1,141 @@
+{
+  "importWarnings": [
+    {
+      "sourceFile": "legacy-archive-2024.csv",
+      "message": "3 rows had missing vendor item number and were imported with blanks."
+    }
+  ],
+  "sources": [
+    {
+      "sourceFile": "vendor-alpha-pricebook.csv",
+      "status": "ok",
+      "records": [
+        {
+          "id": "alpha-calacatta-2cm",
+          "vendor": "Bella South",
+          "manufacturer": "HanStone",
+          "productName": "Calacatta Gold",
+          "displayName": "Calacatta Gold 2cm",
+          "material": "Quartz",
+          "category": "Slab",
+          "collection": "Signature",
+          "tierOrGroup": "Tier 1",
+          "thickness": "2cm",
+          "finish": "Polished",
+          "size": "Jumbo",
+          "sku": "HS-CALG-2",
+          "vendorItemNumber": "BS-2231",
+          "bundleNumber": "B-1005",
+          "priceEntries": [
+            { "label": "price per sq ft", "price": 48.25, "unit": "sq ft", "thickness": "2cm", "sourceContext": "base" },
+            { "label": "price per slab", "price": 1630, "unit": "slab", "size": "Jumbo", "sourceContext": "base" }
+          ],
+          "notes": "Preferred for island runs.",
+          "freightInfo": "FOB Dallas, weekly truck.",
+          "availabilityFlags": ["instock"],
+          "tags": ["best-seller"],
+          "rawSourceFields": {
+            "legacyRow": 12
+          }
+        },
+        {
+          "id": "alpha-hanstone-signature",
+          "vendor": "Bella South",
+          "manufacturer": "HanStone",
+          "productName": "Signature Collection",
+          "displayName": "HanStone Signature Collection",
+          "material": "Quartz",
+          "category": "Collection",
+          "collection": "Signature",
+          "tierOrGroup": "Tier 2",
+          "thickness": "2cm/3cm",
+          "finish": "Polished",
+          "size": "Standard",
+          "priceEntries": [
+            { "label": "price per sq ft", "price": 54.25, "unit": "sq ft", "sourceContext": "collection-default" }
+          ],
+          "collectionItems": [
+            {
+              "color": "Aurelia",
+              "sku": "HS-AUR-2",
+              "tierOrGroup": "Tier 1",
+              "priceEntries": [
+                { "label": "2cm", "price": 52.25, "unit": "sq ft", "thickness": "2cm", "sourceContext": "collection-color" },
+                { "label": "3cm", "price": 58.75, "unit": "sq ft", "thickness": "3cm", "sourceContext": "collection-color" }
+              ]
+            },
+            {
+              "color": "Whistler White",
+              "sku": "HS-WW-3",
+              "tierOrGroup": "Tier 2",
+              "priceEntries": [
+                { "label": "2cm", "price": 54.5, "unit": "sq ft", "thickness": "2cm", "sourceContext": "collection-color" },
+                { "label": "3cm", "price": 60.25, "unit": "sq ft", "thickness": "3cm", "sourceContext": "collection-color" }
+              ]
+            }
+          ],
+          "notes": "Collection pricing expanded into searchable colors.",
+          "freightInfo": "Ships from Houston in mixed bundles.",
+          "availabilityFlags": ["limited"],
+          "tags": ["collection"]
+        }
+      ]
+    },
+    {
+      "sourceFile": "vendor-beta-pricebook.xlsx",
+      "status": "partial",
+      "warning": "Freight notes unavailable from source workbook metadata.",
+      "records": [
+        {
+          "id": "beta-taj-mahal",
+          "vendor": "Bella West",
+          "manufacturer": "MSI",
+          "productName": "Taj Mahal",
+          "displayName": "Taj Mahal 3cm",
+          "material": "Quartzite",
+          "category": "Slab",
+          "collection": "Premium Natural",
+          "tierOrGroup": "Group 4",
+          "thickness": "3cm",
+          "finish": "Honed",
+          "size": "Jumbo",
+          "sku": "MSI-TM-3",
+          "vendorItemNumber": "BW-9982",
+          "priceEntries": [
+            { "label": "single slab", "price": 1950, "unit": "slab", "thickness": "3cm", "sourceContext": "bundle breakout" },
+            { "label": "price per sq ft", "price": 72, "unit": "sq ft", "thickness": "3cm", "sourceContext": "quote sheet" }
+          ],
+          "notes": "Call to confirm current lot availability.",
+          "freightInfo": "",
+          "availabilityFlags": ["instock", "limited"],
+          "tags": ["natural-stone"]
+        },
+        {
+          "id": "beta-calacatta-2cm",
+          "vendor": "Bella West",
+          "manufacturer": "HanStone",
+          "productName": "Calacatta Gold",
+          "displayName": "Calacatta Gold 2cm",
+          "material": "Quartz",
+          "category": "Slab",
+          "collection": "Classic",
+          "tierOrGroup": "Tier 3",
+          "thickness": "2cm",
+          "finish": "Polished",
+          "size": "Standard",
+          "sku": "HS-CALG-2-BW",
+          "vendorItemNumber": "BW-8871",
+          "bundleNumber": "WB-771",
+          "priceEntries": [
+            { "label": "price per sq ft", "price": 46.5, "unit": "sq ft", "sourceContext": "base" },
+            { "label": "bundle", "price": 1510, "unit": "bundle", "quantityRule": "min 8 slabs", "sourceContext": "promo" }
+          ],
+          "notes": "Same-name product kept separate by vendor/source.",
+          "freightInfo": "West coast lane surcharge may apply.",
+          "availabilityFlags": ["instock"],
+          "tags": ["compare-pricing"]
+        }
+      ]
+    }
+  ]
+}

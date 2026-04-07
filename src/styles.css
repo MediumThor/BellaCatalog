@@ -1,0 +1,205 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f0f10;
+  --panel: #1a1a1d;
+  --text: #f8f8f8;
+  --muted: #bbbbbb;
+  --red: #c31a1a;
+  --gold: #d4af37;
+  --border: #343438;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.header h1 { margin: 0; color: var(--gold); }
+.header p { margin: 4px 0 0; color: var(--muted); }
+.brand-badge {
+  border: 1px solid var(--gold);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.search-panel {
+  display: grid;
+  gap: 8px;
+}
+.search-panel input {
+  background: #111;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px;
+  border-radius: 6px;
+}
+.result-count { color: var(--gold); font-size: 13px; }
+
+.vendor-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+button, select {
+  background: #18181b;
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button.active { border-color: var(--gold); background: #272117; }
+button:hover { border-color: var(--red); }
+
+.filter-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+legend { color: var(--gold); }
+.option-list {
+  display: grid;
+  max-height: 120px;
+  overflow: auto;
+  gap: 4px;
+}
+
+.active-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.active-chips button { background: #311212; border-color: #5e2020; }
+.active-chips .clear { background: #3d3320; border-color: #7a6027; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.toolbar-group { display: flex; gap: 6px; align-items: center; }
+.toolbar-stats { display: flex; gap: 12px; color: var(--gold); }
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px;
+  vertical-align: top;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: #16161a;
+  z-index: 1;
+}
+.detail-row td { background: #121214; }
+
+.favorite-star {
+  color: #666;
+  font-size: 18px;
+  padding: 4px;
+  min-width: 28px;
+}
+.favorite-star.active { color: var(--gold); }
+
+.price-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.price-badge {
+  background: #1f1f25;
+  border: 1px solid #484850;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.no-price { color: var(--muted); }
+
+.vendor-notes p { margin: 4px 0; color: var(--muted); }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+.catalog-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+}
+.card-header h3 { margin: 0; color: var(--gold); }
+.card-meta p { margin: 4px 0; color: #ddd; font-size: 13px; }
+
+.empty-state {
+  padding: 30px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.import-warnings {
+  border-color: #6f4e00;
+  background: #231a07;
+}
+.import-warnings h2 { margin: 0 0 8px; color: var(--gold); }
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .header { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
