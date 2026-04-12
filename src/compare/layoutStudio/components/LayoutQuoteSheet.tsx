@@ -127,15 +127,21 @@ export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }:
               <dd>{model.summary.areaSqFt.toFixed(1)} sq ft</dd>
             </div>
             <div>
-              <dt>Finished edge (est.)</dt>
-              <dd>{model.summary.finishedEdgeLf.toFixed(1)} lf</dd>
+              <dt>Profile edge (est.)</dt>
+              <dd>
+                {model.summary.profileEdgeLf > 0
+                  ? `${model.summary.profileEdgeLf.toFixed(1)} lf`
+                  : "—"}
+              </dd>
             </div>
-            {model.summary.profileEdgeLf > 0 ? (
-              <div>
-                <dt>Profile edge (est.)</dt>
-                <dd>{model.summary.profileEdgeLf.toFixed(1)} lf</dd>
-              </div>
-            ) : null}
+            <div>
+              <dt>Miter edge (est.)</dt>
+              <dd>
+                {(model.summary.miterEdgeLf ?? 0) > 0
+                  ? `${(model.summary.miterEdgeLf ?? 0).toFixed(1)} lf`
+                  : "—"}
+              </dd>
+            </div>
             <div>
               <dt>Slab count (est.)</dt>
               <dd>{model.summary.estimatedSlabCount}</dd>

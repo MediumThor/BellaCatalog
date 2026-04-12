@@ -10,6 +10,7 @@ import {
   type SavedLayoutStudioState,
   type SavedOptionLayoutPlacement,
 } from "../types";
+import { normalizeLegacyStripPieces } from "../utils/pieceRoles";
 import { ensurePlacementsForPieces } from "../utils/placements";
 import { computeLayoutSummary } from "../utils/summary";
 import { slabsForOption } from "../utils/slabDimensions";
@@ -136,19 +137,21 @@ export function recomputeDraftSummary(
   layoutSlabs?: LayoutSlab[]
 ): SavedLayoutStudioState {
   const d0 = ensureBlankPlanCalibration(draft);
+  const piecesNorm = normalizeLegacyStripPieces(d0.pieces);
+  const dNorm = piecesNorm === d0.pieces ? d0 : { ...d0, pieces: piecesNorm };
   const slabs = layoutSlabs ?? (option ? slabsForOption(option) : []);
-  const placements = ensurePlacementsForPieces(d0.pieces, d0.placements);
+  const placements = ensurePlacementsForPieces(dNorm.pieces, dNorm.placements);
   const summary = computeLayoutSummary({
-    pieces: d0.pieces,
+    pieces: dNorm.pieces,
     placements,
-    pixelsPerInch: d0.calibration.pixelsPerInch,
+    pixelsPerInch: dNorm.calibration.pixelsPerInch,
     slabs,
   });
   return {
-    ...d0,
+    ...dNorm,
     placements,
     summary,
-    updatedAt: d0.updatedAt,
+    updatedAt: dNorm.updatedAt,
   };
 }
 
@@ -201,6 +204,7 @@ export async function persistLayoutDraft(
   if (opts?.quotePromotion) {
     patch.layoutQuoteReadyAt = t;
     patch.layoutProfileLf = withPlacements.summary.profileEdgeLf ?? 0;
+    patch.layoutMiterLf = withPlacements.summary.miterEdgeLf ?? 0;
     patch.layoutSplashLf = 0;
     patch.layoutSplashCount = withPlacements.summary.splashPieceCount ?? 0;
   }

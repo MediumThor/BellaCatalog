@@ -46,6 +46,7 @@ export function buildLayoutQuoteDisplayModel(input: {
   });
   const materialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
   const profileLf = draft.summary.profileEdgeLf ?? 0;
+  const miterLf = draft.summary.miterEdgeLf ?? 0;
   const previewUrl = draft.preview?.imageUrl ?? option.layoutPreviewImageUrl ?? null;
 
   return {
@@ -62,6 +63,7 @@ export function buildLayoutQuoteDisplayModel(input: {
       areaSqFt: draft.summary.areaSqFt,
       finishedEdgeLf: draft.summary.finishedEdgeLf,
       profileEdgeLf: profileLf,
+      miterEdgeLf: miterLf,
       estimatedSlabCount: draft.summary.estimatedSlabCount,
       sinkCount: draft.summary.sinkCount,
       splashAreaSqFt: draft.summary.splashAreaSqFt ?? 0,
@@ -79,6 +81,7 @@ export function displayModelFromSharePayload(p: LayoutQuoteSharePayloadV1): Layo
     typeof p.summary.splashAreaSqFt === "number"
       ? p.summary.splashAreaSqFt
       : 0;
+  const miterLf = typeof p.summary.miterEdgeLf === "number" ? p.summary.miterEdgeLf : 0;
   return {
     customer: p.customer ?? null,
     jobName: p.jobName,
@@ -89,7 +92,7 @@ export function displayModelFromSharePayload(p: LayoutQuoteSharePayloadV1): Layo
     placementImageUrl: p.placementImageUrl,
     slabThumbs: p.slabThumbs,
     activeSlabLabel: p.activeSlabLabel,
-    summary: { ...p.summary, splashAreaSqFt },
+    summary: { ...p.summary, splashAreaSqFt, miterEdgeLf: miterLf },
     quotedTotal: p.price.quotedTotal,
     quotedPerSqft: p.price.quotedPerSqft,
     jobAssumptions: p.jobAssumptions,

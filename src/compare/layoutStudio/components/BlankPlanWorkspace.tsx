@@ -72,9 +72,10 @@ import {
 } from "../utils/blankPlanSnap";
 import {
   defaultNonSplashPieceName,
+  edgeStripLetterLabelByPieceId,
   pieceLetterLabelByPieceId,
-  splashLetterLabelByPieceId,
 } from "../utils/pieceLabels";
+import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
   applyArcSagittaToEdge,
   arcBulgeArrowParams,
@@ -127,8 +128,13 @@ import {
 export const BLANK_PLAN_WORLD_W_IN = 480;
 export const BLANK_PLAN_WORLD_H_IN = 240;
 export const BLANK_VIEW_ZOOM_MIN = 0.5;
-export const BLANK_VIEW_ZOOM_MAX = 4;
+export const BLANK_VIEW_ZOOM_MAX = 5;
 const VIEW_ZOOM_STEP = 0.25;
+
+/** Plan zoom readout: raw scale % is halved (5× max → “250%”). */
+export function blankPlanZoomDisplayPct(viewZoom: number): number {
+  return Math.round(viewZoom * 50);
+}
 /** Blank plan coordinates are inches; sink templates use the same units. */
 const BLANK_COORD_PER_INCH = 1;
 
@@ -179,7 +185,7 @@ function pieceHasAnyArc(pc: LayoutPiece): boolean {
  * straight edges; applying a new length clears all radii on that piece (see UI disclaimers).
  */
 function canEditEdgeSegmentLength(pc: LayoutPiece, edgeIndex: number): boolean {
-  if (pc.pieceRole === "splash") return false;
+  if (isPlanStripPiece(pc)) return false;
   if (edgeSegmentHasArc(pc, edgeIndex)) return false;
   const ring = normalizeClosedRing(pc.points);
   if (isAxisAlignedRectangle(ring) && !pieceHasAnyArc(pc)) return true;
@@ -210,8 +216,10 @@ type Props = {
   onPiecesChangeLive?: (pieces: LayoutPiece[]) => void;
   /** Snapshot undo point once when a drag begins (piece body or vertex). */
   onPieceDragStart?: () => void;
-  /** Called with the currently selected edge when the user chooses Splash. */
-  onRequestSplashForEdge: (edge: EdgeSel) => void;
+  /** Called with the currently selected edge when the user chooses Splash or Miter. */
+  onRequestSplashForEdge: (edge: EdgeSel, kind: "splash" | "miter") => void;
+  /** Backsplash / miter strip only: mark the selected edge as the 3D hinge / counter contact. */
+  onSetSplashBottomEdge?: (edge: EdgeSel) => void;
   /** Blank plan: add a sink aligned to the selected edge (Layout Studio). */
   onRequestAddSinkForEdge?: (edge: EdgeSel) => void;
   onToggleProfileEdge: (sel: EdgeSel) => void;
@@ -243,7 +251,7 @@ export type BlankPlanWorkspaceHandle = {
 };
 
 function nextPieceName(pieces: LayoutPiece[]): string {
-  const n = pieces.filter((p) => p.pieceRole !== "splash").length;
+  const n = pieces.filter((p) => !isPlanStripPiece(p)).length;
   return defaultNonSplashPieceName(n);
 }
 
@@ -286,7 +294,7 @@ function pickCountertopPieceAtPoint(
 ): LayoutPiece | null {
   for (let i = pieces.length - 1; i >= 0; i--) {
     const pc = pieces[i]!;
-    if (pc.pieceRole === "splash") continue;
+    if (isPlanStripPiece(pc)) continue;
     if (pointInPolygon(p, planDisplayPoints(pc, pieces))) return pc;
   }
   return null;
@@ -309,7 +317,7 @@ function pickNearestPlanEdge(
   const thresh = planEdgePickThresholdIn(planPerPx);
   let best: { pieceId: string; edgeIndex: number; d: number } | null = null;
   for (const pc of pieces) {
-    if (!includeSplash && pc.pieceRole === "splash") continue;
+    if (!includeSplash && isPlanStripPiece(pc)) continue;
     const disp = planDisplayPoints(pc, pieces);
     const ring = normalizeClosedRing(disp);
     const n = ring.length;
@@ -327,7 +335,7 @@ function pickNearestPlanEdge(
           : thresh;
       const d =
         c != null && c.r > 1e-9
-          ? distancePointToCircleArcEdge(p, a, b, c, cen)
+          ? distancePointToCircleArcEdge(p, a, b, c, cen, ring)
           : h != null && Math.abs(h) > 1e-9
             ? distancePointToArcEdge(p, a, b, h, cen)
             : distancePointToSegment(p, a, b);
@@ -365,7 +373,7 @@ function planPointHitsSelectableContent(
     }
   }
   for (const pc of pieces) {
-    if (pc.pieceRole === "splash") continue;
+    if (isPlanStripPiece(pc)) continue;
     const disp = planDisplayPoints(pc, pieces);
     const ring = normalizeClosedRing(disp);
     const n = ring.length;
@@ -383,7 +391,7 @@ function planPointHitsSelectableContent(
           : thresh;
       const d =
         c != null && c.r > 1e-9
-          ? distancePointToCircleArcEdge(p, a, b, c, cen)
+          ? distancePointToCircleArcEdge(p, a, b, c, cen, ring)
           : h != null && Math.abs(h) > 1e-9
             ? distancePointToArcEdge(p, a, b, h, cen)
             : distancePointToSegment(p, a, b);
@@ -413,6 +421,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       onPiecesChangeLive,
       onPieceDragStart,
       onRequestSplashForEdge,
+      onSetSplashBottomEdge,
       onRequestAddSinkForEdge,
       onToggleProfileEdge,
       slabs,
@@ -861,7 +870,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const openSeamModalFromEdge = useCallback(() => {
       if (!selectedEdge) return;
       const pc = pieces.find((p) => p.id === selectedEdge.pieceId);
-      if (!pc || pc.pieceRole === "splash") {
+      if (!pc || isPlanStripPiece(pc)) {
         return;
       }
       const world = planDisplayPoints(pc, pieces);
@@ -886,7 +895,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       const targetPiece = piecesRef.current.find(
         (p) => p.id === seamModal.pieceId,
       );
-      if (!targetPiece || targetPiece.pieceRole === "splash") {
+      if (!targetPiece || isPlanStripPiece(targetPiece)) {
         setSeamModal(null);
         return;
       }
@@ -1354,7 +1363,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           return;
         }
         const hitPc = piecesRef.current.find((x) => x.id === hit.pieceId);
-        if (!hitPc || hitPc.pieceRole === "splash") {
+        if (!hitPc || isPlanStripPiece(hitPc)) {
           return;
         }
         if (!cornerRadiusFirstEdge) {
@@ -1437,7 +1446,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           return;
         }
         const hitPc = piecesRef.current.find((x) => x.id === hit.pieceId);
-        if (!hitPc || hitPc.pieceRole === "splash") {
+        if (!hitPc || isPlanStripPiece(hitPc)) {
           return;
         }
         if (!connectFirstEdge) {
@@ -1624,7 +1633,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         /** Sink drag (selected piece only; vertices stay priority) */
         if (selectedPieceId) {
           const sp = pieces.find((x) => x.id === selectedPieceId);
-          if (sp && sp.sinks?.length && sp.pieceRole !== "splash") {
+          if (sp && sp.sinks?.length && !isPlanStripPiece(sp)) {
             const hit = hitTestSinkAtWorld(
               p,
               sp,
@@ -1649,7 +1658,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         }
         /** Edge hit — arc-aware (corner radii), wider pick on fillet circle edges */
         const ppu = planUnitsPerScreenPx();
-        const best = pickNearestPlanEdge(p, pieces, ppu, false);
+        const best = pickNearestPlanEdge(p, pieces, ppu, true);
         if (best) {
           onSelectPiece(best.pieceId);
           onSelectEdge({ pieceId: best.pieceId, edgeIndex: best.edgeIndex });
@@ -1788,7 +1797,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           }
         }
         const ppu = planUnitsPerScreenPx();
-        const hit = pickNearestPlanEdge(p, pieces, ppu, false);
+        const hit = pickNearestPlanEdge(p, pieces, ppu, true);
         setHoverEdge(
           hit ? { pieceId: hit.pieceId, edgeIndex: hit.edgeIndex } : null,
         );
@@ -1801,7 +1810,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         let jp: string | null = null;
         for (let i = pieces.length - 1; i >= 0; i--) {
           const pc = pieces[i]!;
-          if (pc.pieceRole === "splash") continue;
+          if (isPlanStripPiece(pc)) continue;
           if (pointInPolygon(p, planDisplayPoints(pc, pieces))) {
             jp = pc.id;
             break;
@@ -2283,8 +2292,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       () => pieceLetterLabelByPieceId(pieces),
       [pieces],
     );
-    const splashLetterLabelById = useMemo(
-      () => splashLetterLabelByPieceId(pieces),
+    const stripLetterLabelById = useMemo(
+      () => edgeStripLetterLabelByPieceId(pieces),
       [pieces],
     );
 
@@ -2366,7 +2375,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 <IconZoomOut />
               </button>
               <span className="ls-plan-toolbar-zoom-pct" aria-live="polite">
-                {Math.round(viewZoom * 100)}%
+                {blankPlanZoomDisplayPct(viewZoom)}%
               </span>
               <button
                 type="button"
@@ -2470,20 +2479,26 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               const disp = planDisplayPoints(piece, pieces);
               const ringOpen = normalizeClosedRing(disp);
               const ringCen = centroid(ringOpen);
+              const edgeSagittasStroke = getEffectiveEdgeArcSagittasIn(piece);
+              const edgeCirclesStroke = getEffectiveEdgeArcCirclesIn(piece);
+              /** Kitchen sinks clip edge strokes into segments; keep polyline there. */
+              const strokeArcEdgesAsSingleSvgPath = !(piece.sinks ?? []).some(
+                (s) => s.templateKind === "kitchen",
+              );
               const hasArcEdge = pieceHasArcEdges(piece);
               const d = hasArcEdge
                 ? pathDClosedRingWithArcs(
                     ringOpen,
-                    getEffectiveEdgeArcSagittasIn(piece),
+                    edgeSagittasStroke,
                     ringCen,
-                    getEffectiveEdgeArcCirclesIn(piece),
+                    edgeCirclesStroke,
                   )
                 : ensureClosedRing(ringOpen)
                     .map((q, i) => `${i === 0 ? "M" : "L"} ${q.x} ${q.y}`)
                     .join(" ") + " Z";
-              const isSplash = piece.pieceRole === "splash";
+              const isStrip = isPlanStripPiece(piece);
               const joinPieceHover =
-                tool === "join" && joinHoverPieceId === piece.id && !isSplash;
+                tool === "join" && joinHoverPieceId === piece.id && !isStrip;
               const placement = placementByPiece.get(piece.id);
               const slab =
                 placement?.slabId != null
@@ -2506,16 +2521,21 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               /** When slab texture is clipped in, do not stack a fill on top — it tints the stone. */
               const fill = slabTex
                 ? "none"
-                : isSplash
+                : isStrip
                   ? "rgba(180,220,255,0.12)"
                   : joinPieceHover && !sel
                     ? "rgba(90, 170, 255, 0.2)"
                     : sel
                       ? "rgba(201,162,39,0.2)"
                       : `rgba(120,200,255,${0.08 + (idx % 5) * 0.03})`;
-              const stroke = sel
-                ? "rgba(232,212,139,0.95)"
-                : "rgba(180,210,255,0.45)";
+              /** Miter-tagged edges: always dark blue for quote + fabrication cue. */
+              const MITER_PLAN_STROKE = "#0d47a1";
+              const edgeStroke = (ei: number) =>
+                piece.edgeTags?.miterEdgeIndices?.includes(ei)
+                  ? MITER_PLAN_STROKE
+                  : sel
+                    ? "rgba(232,212,139,0.95)"
+                    : "rgba(180,210,255,0.45)";
               const xs = ringOpen.map((q) => q.x);
               const ys = ringOpen.map((q) => q.y);
               const minX = Math.min(...xs);
@@ -2532,8 +2552,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 2.6,
                 Math.max(1.15, Math.min(bw, bh) * 0.09),
               );
-              const labelText = isSplash
-                ? (splashLetterLabelById.get(piece.id) ?? "—")
+              const labelText = isStrip
+                ? (stripLetterLabelById.get(piece.id) ?? "—")
                 : (pieceLetterLabelById.get(piece.id) ?? piece.name);
               return (
                 <g key={piece.id}>
@@ -2579,6 +2599,54 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     }}
                   />
                   {ringOpen.map((_, ei) => {
+                    const a = ringOpen[ei]!;
+                    const b = ringOpen[(ei + 1) % ringOpen.length]!;
+                    const arcC = edgeCirclesStroke[ei];
+                    const arcH = edgeSagittasStroke[ei];
+                    const arcFragFromCircle =
+                      strokeArcEdgesAsSingleSvgPath &&
+                      arcC != null &&
+                      arcC.r > 1e-9
+                        ? svgCircularArcFragmentFromCircleCenter(
+                            { x: arcC.cx, y: arcC.cy },
+                            arcC.r,
+                            a,
+                            b,
+                            ringCen,
+                            ringOpen,
+                          )
+                        : null;
+                    const arcFragFromSag =
+                      strokeArcEdgesAsSingleSvgPath &&
+                      arcH != null &&
+                      Math.abs(arcH) > 1e-9
+                        ? svgCircularArcFragmentFromSagitta(
+                            a,
+                            b,
+                            arcH,
+                            ringCen,
+                          )
+                        : null;
+                    const arcFrag = arcFragFromCircle ?? arcFragFromSag;
+                    if (arcFrag) {
+                      return (
+                        <path
+                          key={`${piece.id}-str-${ei}`}
+                          d={`M ${a.x} ${a.y} ${arcFrag}`}
+                          fill="none"
+                          stroke={edgeStroke(ei)}
+                          strokeWidth={
+                            piece.edgeTags?.miterEdgeIndices?.includes(ei)
+                              ? 0.2
+                              : sel
+                                ? 0.22
+                                : 0.14
+                          }
+                          strokeLinecap="round"
+                          style={{ pointerEvents: "none" }}
+                        />
+                      );
+                    }
                     const arcPts = sampleArcEdgePointsForStroke(
                       piece,
                       ei,
@@ -2605,14 +2673,16 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                         y1={s.a.y}
                         x2={s.b.x}
                         y2={s.b.y}
-                        stroke={stroke}
-                        strokeWidth={sel ? 0.22 : 0.14}
+                        stroke={edgeStroke(ei)}
+                        strokeWidth={
+                          piece.edgeTags?.miterEdgeIndices?.includes(ei) ? 0.2 : sel ? 0.22 : 0.14
+                        }
                         strokeLinecap="round"
                         style={{ pointerEvents: "none" }}
                       />
                     ));
                   })}
-                  {piece.pieceRole !== "splash" ? (
+                  {!isPlanStripPiece(piece) ? (
                     <PieceSinkCutoutsSvg
                       piece={piece}
                       allPieces={pieces}
@@ -2723,10 +2793,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             tool === "cornerRadius" ||
             tool === "connectCorner"
               ? pieces.map((piece) => {
+                  /** Splash edges: selectable in select / snapLines (green); skip join/corner/connect (false-positives vs counters). */
                   if (
-                    piece.pieceRole === "splash" &&
-                    (tool === "select" ||
-                      tool === "join" ||
+                    isPlanStripPiece(piece) &&
+                    (tool === "join" ||
                       tool === "cornerRadius" ||
                       tool === "connectCorner")
                   )
@@ -2807,9 +2877,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       !isConnectFirst &&
                       !isHoverEdge;
                     const strokeCol = isHoverEdge
-                      ? tool === "snapLines"
-                        ? "rgba(70, 155, 255, 0.98)"
-                        : "rgba(235, 65, 65, 0.98)"
+                      ? isPlanStripPiece(piece)
+                        ? "rgba(72, 210, 140, 0.98)"
+                        : tool === "snapLines"
+                          ? "rgba(70, 155, 255, 0.98)"
+                          : "rgba(235, 65, 65, 0.98)"
                       : isFilletMarqueeSel
                         ? "rgba(255, 210, 120, 0.98)"
                         : isSnapPairAnchor
@@ -2823,7 +2895,9 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                               : isJoinFirstPieceEdge
                                 ? "rgba(232,212,139,0.95)"
                                 : isSelEdge
-                                  ? "rgba(255,240,200,0.98)"
+                                  ? isPlanStripPiece(piece)
+                                    ? "rgba(38, 175, 105, 0.98)"
+                                    : "rgba(255,240,200,0.98)"
                                   : isProf
                                     ? "rgba(232,212,100,0.95)"
                                     : subtleSnap
@@ -2858,6 +2932,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                             a!,
                             b!,
                             ringCen,
+                            ring,
                           )
                         : null;
                     const arcFragFromSag =
@@ -2871,17 +2946,21 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                         : null;
                     const arcFrag = arcFragFromCircle ?? arcFragFromSag;
                     if (arcFrag) {
-                        lines.push(
-                          <path
-                            key={`${piece.id}-e-${i}`}
-                            d={`M ${a!.x} ${a!.y} ${arcFrag}`}
-                            stroke={strokeCol}
-                            strokeWidth={strokeW}
-                            strokeLinecap="round"
-                            fill="none"
-                            style={{ pointerEvents: "none" }}
-                          />,
-                        );
+                        /* Avoid double-stroking the same arc: base layer already draws the true
+                         * SVG arc; subtle “snap” edges only repeat a second path on top. */
+                        if (!subtleSnap) {
+                          lines.push(
+                            <path
+                              key={`${piece.id}-e-${i}`}
+                              d={`M ${a!.x} ${a!.y} ${arcFrag}`}
+                              stroke={strokeCol}
+                              strokeWidth={strokeW}
+                              strokeLinecap="round"
+                              fill="none"
+                              style={{ pointerEvents: "none" }}
+                            />,
+                          );
+                        }
                         if (
                           tool === "select" &&
                           isSelEdge &&
@@ -2942,7 +3021,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                                     const pc = piecesRef.current.find(
                                       (p) => p.id === piece.id,
                                     );
-                                    if (!pc || pc.pieceRole === "splash")
+                                    if (!pc || isPlanStripPiece(pc))
                                       return;
                                     const hh =
                                       getEffectiveEdgeArcSagittasIn(pc)[i];
@@ -3242,10 +3321,35 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               <button
                 type="button"
                 className="ls-edge-popover-btn"
-                onClick={() => onRequestSplashForEdge(selectedEdge)}
+                onClick={() => onRequestSplashForEdge(selectedEdge, "splash")}
               >
                 Splash
               </button>
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                title="Same plan placement as splash; 3D preview folds the miter strip down from the edge"
+                onClick={() => onRequestSplashForEdge(selectedEdge, "miter")}
+              >
+                Miter
+              </button>
+              {onSetSplashBottomEdge &&
+              (() => {
+                const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
+                return pe && isPlanStripPiece(pe);
+              })() ? (
+                <button
+                  type="button"
+                  className="ls-edge-popover-btn"
+                  title="Use this edge as the hinge / counter contact for 3D preview"
+                  onClick={() => {
+                    onSetSplashBottomEdge(selectedEdge);
+                    onSelectEdge(null);
+                  }}
+                >
+                  Bottom (3D)
+                </button>
+              ) : null}
               {(() => {
                 const popPc = pieces.find((p) => p.id === selectedEdge.pieceId);
                 if (
@@ -3269,8 +3373,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   </button>
                 );
               })()}
-              {pieces.find((p) => p.id === selectedEdge.pieceId)?.pieceRole !==
-              "splash" ? (
+              {(() => {
+                const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
+                return pe && !isPlanStripPiece(pe);
+              })() ? (
                 <button
                   type="button"
                   className="ls-edge-popover-btn"
@@ -3297,7 +3403,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               ) : null}
               {(() => {
                 const popPc = pieces.find((p) => p.id === selectedEdge.pieceId);
-                if (!popPc || popPc.pieceRole === "splash") return false;
+                if (!popPc || isPlanStripPiece(popPc)) return false;
                 const c = getEffectiveEdgeArcCirclesIn(popPc)[
                   selectedEdge.edgeIndex
                 ];
@@ -3336,7 +3442,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               ) : null}
               {(() => {
                 const popPc = pieces.find((p) => p.id === selectedEdge.pieceId);
-                if (!popPc || popPc.pieceRole === "splash") return false;
+                if (!popPc || isPlanStripPiece(popPc)) return false;
                 const c = getEffectiveEdgeArcCirclesIn(popPc)[
                   selectedEdge.edgeIndex
                 ];
@@ -3365,8 +3471,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 </button>
               ) : null}
               {onRequestAddSinkForEdge &&
-              pieces.find((p) => p.id === selectedEdge.pieceId)?.pieceRole !==
-                "splash" ? (
+              (() => {
+                const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
+                return pe && !isPlanStripPiece(pe);
+              })() ? (
                 <button
                   type="button"
                   className="ls-edge-popover-btn"
@@ -3375,8 +3483,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   Sink
                 </button>
               ) : null}
-              {pieces.find((p) => p.id === selectedEdge.pieceId)?.pieceRole !==
-              "splash" ? (
+              {(() => {
+                const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
+                return pe && !isPlanStripPiece(pe);
+              })() ? (
                 <button
                   type="button"
                   className="ls-edge-popover-btn"

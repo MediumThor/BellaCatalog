@@ -1,6 +1,7 @@
 import type { LayoutPiece, LayoutPoint } from "../types";
 import { planDisplayPoints } from "./blankPlanGeometry";
 import { normalizeClosedRing, pointInPolygon } from "./geometry";
+import { isPlanStripPiece } from "./pieceRoles";
 
 const EPS = 1e-4;
 
@@ -143,7 +144,7 @@ export function anyPiecesOverlap(pieces: LayoutPiece[]): boolean {
 }
 
 /**
- * True if a countertop piece overlaps another **countertop** (not splash strips).
+ * True if a countertop piece overlaps another **countertop** (not backsplash / miter strips).
  * Splash often sits along counter edges and can false-positive as “interior overlap” with counters.
  * `siblingPieceId` is the other half of a seam split — excluded so we don’t compare the two new parts.
  */
@@ -153,11 +154,11 @@ export function countertopOverlapsOtherCountertops(
   siblingPieceId: string
 ): boolean {
   const self = pieces.find((p) => p.id === pieceId);
-  if (!self || self.pieceRole === "splash") return false;
+  if (!self || isPlanStripPiece(self)) return false;
   const ringSelf = planDisplayPoints(self, pieces);
   for (const other of pieces) {
     if (other.id === pieceId || other.id === siblingPieceId) continue;
-    if (other.pieceRole === "splash") continue;
+    if (isPlanStripPiece(other)) continue;
     const ringOther = planDisplayPoints(other, pieces);
     if (polygonsInteriorOverlap(ringSelf, ringOther)) return true;
   }

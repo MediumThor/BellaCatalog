@@ -1,7 +1,7 @@
 import type { LayoutPoint } from "../types";
 
-/** Shoelace area (signed); positive if counter-clockwise. */
-export function polygonArea(points: LayoutPoint[]): number {
+/** Shoelace signed area; positive = CCW vertex order. */
+export function polygonSignedArea(points: LayoutPoint[]): number {
   if (points.length < 3) return 0;
   let sum = 0;
   const n = points.length;
@@ -9,7 +9,12 @@ export function polygonArea(points: LayoutPoint[]): number {
     const j = (i + 1) % n;
     sum += points[i].x * points[j].y - points[j].x * points[i].y;
   }
-  return Math.abs(sum / 2);
+  return sum / 2;
+}
+
+/** Absolute polygon area (same ring as {@link polygonSignedArea}). */
+export function polygonArea(points: LayoutPoint[]): number {
+  return Math.abs(polygonSignedArea(points));
 }
 
 /** Edge lengths in same units as points. */

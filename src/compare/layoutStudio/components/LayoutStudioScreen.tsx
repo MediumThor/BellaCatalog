@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { CustomerRecord, JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
+import type {
+  CustomerRecord,
+  JobComparisonOptionRecord,
+  JobRecord,
+  LayoutQuoteCustomerRowId,
+  LayoutQuoteSettings,
+} from "../../../types/compareQuote";
+import { updateJob } from "../../../services/compareQuoteFirestore";
 import { createDefaultLayoutState } from "../constants";
 import { uploadJobLayoutSource } from "../services/layoutStorage";
 import { useLayoutStudio } from "../hooks/useLayoutStudio";
@@ -31,6 +38,7 @@ import {
   rotatePlanPieceAroundCentroid,
 } from "../utils/blankPlanGeometry";
 import { normalizeClosedRing } from "../utils/geometry";
+import { isMiterStripPiece, isPlanStripPiece } from "../utils/pieceRoles";
 import { removeCornerFilletsBatch } from "../utils/blankPlanEdgeArc";
 import { anyPiecesOverlap } from "../utils/blankPlanOverlap";
 import { hasFlushSnapJoinCandidate } from "../utils/blankPlanPolygonOps";
@@ -45,6 +53,7 @@ import {
   BlankPlanWorkspace,
   BLANK_VIEW_ZOOM_MAX,
   BLANK_VIEW_ZOOM_MIN,
+  blankPlanZoomDisplayPct,
   type BlankPlanWorkspaceHandle,
 } from "./BlankPlanWorkspace";
 import { ManualLShapeSheet, ManualRectangleSheet } from "./ManualPieceSheets";
@@ -55,6 +64,8 @@ import { PlaceWorkspace } from "./PlaceWorkspace";
 import { DEFAULT_SLAB_THICKNESS_IN, parseThicknessToInches } from "../utils/parseThicknessInches";
 import { LayoutQuoteModal } from "./LayoutQuoteModal";
 import { QuotePhaseView } from "./QuotePhaseView";
+import { LayoutQuoteSettingsModal } from "./LayoutQuoteSettingsModal";
+import { mergeCustomerExclusions, mergeLayoutQuoteSettings } from "../utils/commercialQuote";
 import { StudioEntryHub } from "./StudioEntryHub";
 import { TraceWorkspace } from "./TraceWorkspace";
 import {
@@ -156,6 +167,7 @@ export function LayoutStudioScreen({
   const selectedFilletEdgesRef = useRef(selectedFilletEdges);
   selectedFilletEdgesRef.current = selectedFilletEdges;
   const [splashModalOpen, setSplashModalOpen] = useState(false);
+  const [edgeStripKind, setEdgeStripKind] = useState<"splash" | "miter">("splash");
   const [splashTargetEdge, setSplashTargetEdge] = useState<{
     pieceId: string;
     edgeIndex: number;
@@ -172,6 +184,7 @@ export function LayoutStudioScreen({
   /** Expanded live layout modal: 2D SVG preview vs 3D extruded view. */
   const [layoutPreviewExpandedMode, setLayoutPreviewExpandedMode] = useState<"2d" | "3d">("2d");
   const [layoutQuoteModalOpen, setLayoutQuoteModalOpen] = useState(false);
+  const [layoutQuoteSettingsOpen, setLayoutQuoteSettingsOpen] = useState(false);
   const [addSinkModalOpen, setAddSinkModalOpen] = useState(false);
   /** Edge chosen in the plan before opening the sink modal (blank workspace). */
   const [addSinkEdge, setAddSinkEdge] = useState<{ pieceId: string; edgeIndex: number } | null>(null);
@@ -183,6 +196,13 @@ export function LayoutStudioScreen({
   const [autoNestModalOpen, setAutoNestModalOpen] = useState(false);
   const [autoNestMinGapStr, setAutoNestMinGapStr] = useState("1.5");
   const [autoNestEdgeInsetStr, setAutoNestEdgeInsetStr] = useState("1.5");
+  /** In-app feedback for auto nest (replaces browser `alert`). */
+  const [autoNestFeedback, setAutoNestFeedback] = useState<{
+    title: string;
+    lines: string[];
+    /** Extra help shown after nest warnings (omitted for simple validation messages). */
+    footerNote?: string;
+  } | null>(null);
   const blankPlanRef = useRef<BlankPlanWorkspaceHandle | null>(null);
   const [blankViewZoom, setBlankViewZoom] = useState(1);
   const onBlankViewZoomChange = useCallback((z: number) => {
@@ -212,6 +232,29 @@ export function LayoutStudioScreen({
   }, [draft.workspaceKind, draft.source, draft.pieces.length]);
 
   const showEntryHub = workspaceKind === undefined;
+
+  const mergedQuoteSettings = useMemo(() => mergeLayoutQuoteSettings(job), [job]);
+
+  const saveLayoutQuoteSettings = useCallback(
+    async (next: LayoutQuoteSettings) => {
+      await updateJob(job.id, { layoutQuoteSettings: next });
+    },
+    [job.id]
+  );
+
+  const mergedCustomerExclusions = useMemo(() => mergeCustomerExclusions(job), [job]);
+
+  const setCustomerExclusion = useCallback(
+    async (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => {
+      await updateJob(job.id, {
+        layoutQuoteCustomerExclusions: {
+          ...mergedCustomerExclusions,
+          [rowId]: excluded,
+        },
+      });
+    },
+    [job.id, mergedCustomerExclusions]
+  );
 
   const displayUrl = draft.source?.fileUrl ?? null;
   const isPdfSource = draft.source?.kind === "pdf";
@@ -603,11 +646,17 @@ export function LayoutStudioScreen({
     const minGap = parseFloat(autoNestMinGapStr.replace(/,/g, "."));
     const edgeInset = parseFloat(autoNestEdgeInsetStr.replace(/,/g, "."));
     if (!Number.isFinite(minGap) || minGap < 0) {
-      window.alert("Enter a valid minimum distance between pieces (inches), e.g. 1.5");
+      setAutoNestFeedback({
+        title: "Check spacing",
+        lines: ["Enter a valid minimum distance between pieces (inches), for example 1.5."],
+      });
       return;
     }
     if (!Number.isFinite(edgeInset) || edgeInset < 0) {
-      window.alert("Enter a valid distance from slab edge (inches), e.g. 1.5");
+      setAutoNestFeedback({
+        title: "Check spacing",
+        lines: ["Enter a valid distance from the slab edge (inches), for example 1.5."],
+      });
       return;
     }
 
@@ -628,7 +677,12 @@ export function LayoutStudioScreen({
     }));
     setAutoNestModalOpen(false);
     if (warnings.length) {
-      window.alert(warnings.join("\n"));
+      setAutoNestFeedback({
+        title: "Couldn’t place every piece",
+        lines: warnings,
+        footerNote:
+          "Unplaced pieces keep their last position. Try a larger slab, smaller spacing, or move pieces manually.",
+      });
     }
   }, [
     activeSlabId,
@@ -649,6 +703,20 @@ export function LayoutStudioScreen({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [autoNestModalOpen]);
+
+  useEffect(() => {
+    if (!autoNestFeedback) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAutoNestFeedback(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [autoNestFeedback]);
 
   const selectedPiece = draft.pieces.find((p) => p.id === selectedPieceId) ?? null;
 
@@ -697,7 +765,7 @@ export function LayoutStudioScreen({
   }) => {
     if (!isBlankWorkspace || !addSinkEdge) return;
     const piece = draft.pieces.find((p) => p.id === addSinkEdge.pieceId);
-    if (!piece || piece.pieceRole === "splash") return;
+    if (!piece || isPlanStripPiece(piece)) return;
     const coordPerInch = 1;
     const pl = sinkPlacementFromEdgeInCanonical(
       piece,
@@ -760,12 +828,12 @@ export function LayoutStudioScreen({
           : { ...selectedPiece.manualDimensions }
         : undefined,
       splashMeta: undefined,
-      pieceRole: selectedPiece.pieceRole === "splash" ? "countertop" : selectedPiece.pieceRole,
+      pieceRole: isPlanStripPiece(selectedPiece) ? "countertop" : selectedPiece.pieceRole,
       edgeTags: selectedPiece.edgeTags
-        ? {
-            ...selectedPiece.edgeTags,
-            splashEdges: [],
-          }
+        ? (() => {
+            const { miterEdgeIndices: _omitMiter, ...restEt } = selectedPiece.edgeTags;
+            return { ...restEt, splashEdges: [] };
+          })()
         : undefined,
     };
     updateDraftWithUndo((d) => ({
@@ -798,10 +866,16 @@ export function LayoutStudioScreen({
       let pieces = d.pieces.filter((p) => p.id !== pid && !splashChildren.has(p.id));
       if (piece?.splashMeta) {
         const parId = piece.splashMeta.parentPieceId;
+        const pei = piece.splashMeta.parentEdgeIndex;
         pieces = pieces.map((p) => {
           if (p.id !== parId) return p;
           const se = (p.edgeTags?.splashEdges ?? []).filter((e) => e.splashPieceId !== pid);
-          return { ...p, edgeTags: { ...p.edgeTags, splashEdges: se } };
+          let edgeTags: LayoutPiece["edgeTags"] = { ...p.edgeTags, splashEdges: se };
+          if (isMiterStripPiece(piece) || piece.splashMeta?.waterfall) {
+            const restM = (p.edgeTags?.miterEdgeIndices ?? []).filter((x) => x !== pei);
+            edgeTags = { ...edgeTags, miterEdgeIndices: restM.length ? restM : undefined };
+          }
+          return { ...p, edgeTags };
         });
       }
       const removeIds = new Set([pid, ...splashChildren]);
@@ -886,13 +960,27 @@ export function LayoutStudioScreen({
     }));
   };
 
+  /** Splash only: tag which plan edge is the 3D hinge / counter contact (Place 3D preview). */
+  const setSplashBottomEdge = (sel: { pieceId: string; edgeIndex: number }) => {
+    updateDraftWithUndo((d) => ({
+      ...d,
+      pieces: d.pieces.map((p) => {
+        if (p.id !== sel.pieceId || !isPlanStripPiece(p) || !p.splashMeta) return p;
+        return {
+          ...p,
+          splashMeta: { ...p.splashMeta, bottomEdgeIndex: sel.edgeIndex },
+        };
+      }),
+    }));
+  };
+
   const confirmSplashForEdge = () => {
     const edge = splashTargetEdge;
     if (!edge) return;
     const h = parseFloat(splashHeightInput);
     if (!Number.isFinite(h) || h <= 0) return;
     const parent = draft.pieces.find((p) => p.id === edge.pieceId);
-    if (!parent || parent.pieceRole === "splash") return;
+    if (!parent || isPlanStripPiece(parent)) return;
     const disp = planDisplayPoints(parent);
     const pts = buildSplashRectanglePoints(disp, edge.edgeIndex, h);
     const ox = parent.planTransform?.x ?? 0;
@@ -904,21 +992,30 @@ export function LayoutStudioScreen({
     const b = ring[(edge.edgeIndex + 1) % n];
     const widthIn = Math.hypot(b.x - a.x, b.y - a.y);
     const splashId = crypto.randomUUID();
+    const stripRole = edgeStripKind === "miter" ? "miter" : "splash";
     const newPiece: LayoutPiece = {
       id: splashId,
-      name: `${parent.name} splash`,
+      name: edgeStripKind === "miter" ? `${parent.name} miter` : `${parent.name} splash`,
       points: canonical,
       sinkCount: 0,
       shapeKind: "rectangle",
       source: "manual",
-      pieceRole: "splash",
+      pieceRole: stripRole,
       splashMeta: {
         parentPieceId: parent.id,
         parentEdgeIndex: edge.edgeIndex,
         heightIn: h,
+        bottomEdgeIndex: 0,
       },
       manualDimensions: { kind: "rectangle", widthIn, depthIn: h },
       planTransform: { x: 0, y: 0 },
+      edgeTags:
+        edgeStripKind === "miter"
+          ? {
+              /** Inner contact edge with parent (mates with parent miter tag). */
+              miterEdgeIndices: [0],
+            }
+          : undefined,
     };
     updateDraftWithUndo((d) => ({
       ...d,
@@ -926,10 +1023,17 @@ export function LayoutStudioScreen({
         ...d.pieces.map((p) => {
           if (p.id !== parent.id) return p;
           const rest = (p.edgeTags?.splashEdges ?? []).filter((e) => e.edgeIndex !== edge.edgeIndex);
+          const miterMerged =
+            edgeStripKind === "miter"
+              ? [...new Set([...(p.edgeTags?.miterEdgeIndices ?? []), edge.edgeIndex])].sort(
+                  (a, b) => a - b
+                )
+              : p.edgeTags?.miterEdgeIndices;
           return {
             ...p,
             edgeTags: {
               ...p.edgeTags,
+              ...(miterMerged?.length ? { miterEdgeIndices: miterMerged } : {}),
               splashEdges: [
                 ...rest,
                 { edgeIndex: edge.edgeIndex, splashPieceId: splashId, heightIn: h },
@@ -954,6 +1058,7 @@ export function LayoutStudioScreen({
     }));
     setSplashModalOpen(false);
     setSplashTargetEdge(null);
+    setEdgeStripKind("splash");
     setSelectedPieceId(splashId);
   };
 
@@ -1206,7 +1311,7 @@ export function LayoutStudioScreen({
             onChange={(e) => updateSelectedPiece({ name: e.target.value })}
           />
         </label>
-        {isBlankWorkspace && selectedPiece.pieceRole !== "splash" ? (
+        {isBlankWorkspace && !isPlanStripPiece(selectedPiece) ? (
           <div className="ls-inspector-sinks">
             <p className="ls-muted ls-sink-hint">
               To add a sink, select a <strong>line (edge)</strong> on the piece, then choose{" "}
@@ -1232,8 +1337,11 @@ export function LayoutStudioScreen({
         ) : null}
         {selectedPiece.splashMeta ? (
           <p className="ls-muted">
-            Splash from parent piece (linked). Height {selectedPiece.splashMeta.heightIn.toFixed(2)}
-            &quot; · edge {selectedPiece.splashMeta.parentEdgeIndex + 1}.
+            {isMiterStripPiece(selectedPiece) ? "Miter" : "Splash"} from parent piece (linked).
+            Height {selectedPiece.splashMeta.heightIn.toFixed(2)}
+            &quot; · parent edge {selectedPiece.splashMeta.parentEdgeIndex + 1}. 3D bottom (hinge): edge{" "}
+            {(selectedPiece.splashMeta.bottomEdgeIndex ?? 0) + 1} — select an edge on the strip and
+            choose <strong>Bottom (3D)</strong> in the edge menu to change it.
           </p>
         ) : null}
         {selectedPiece.manualDimensions?.kind === "rectangle" ? (
@@ -1363,7 +1471,7 @@ export function LayoutStudioScreen({
             type="button"
             className="ls-btn ls-btn-secondary"
             onClick={duplicateSelected}
-            disabled={selectedPiece.pieceRole === "splash"}
+            disabled={isPlanStripPiece(selectedPiece)}
           >
             Duplicate
           </button>
@@ -1635,13 +1743,6 @@ export function LayoutStudioScreen({
                   >
                     {saveStatus === "saving" ? "Saving…" : "Save layout"}
                   </button>
-                  <button
-                    type="button"
-                    className="ls-btn ls-btn-primary"
-                    onClick={() => setLayoutQuoteModalOpen(true)}
-                  >
-                    Layout quote
-                  </button>
                 </div>
               ) : null}
             </div>
@@ -1680,15 +1781,32 @@ export function LayoutStudioScreen({
           ) : null}
           {mode === "quote" ? (
             activeOption ? (
-              <QuotePhaseView
-                job={job}
-                option={activeOption}
-                draft={draft}
-                slabs={layoutSlabs}
-                activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
-                onActiveSlab={(id) => setActiveSlabId(id)}
-                showPieceLabels={showPieceLabels}
-              />
+              <>
+                <QuotePhaseView
+                  job={job}
+                  option={activeOption}
+                  draft={draft}
+                  slabs={layoutSlabs}
+                  activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
+                  onActiveSlab={(id) => setActiveSlabId(id)}
+                  showPieceLabels={showPieceLabels}
+                  quoteSettings={mergedQuoteSettings}
+                  onSaveQuoteSettings={saveLayoutQuoteSettings}
+                  onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
+                  customerExclusions={mergedCustomerExclusions}
+                  onSetCustomerExclusion={setCustomerExclusion}
+                />
+                <div className="ls-canvas-footer ls-quote-export-footer">
+                  <button
+                    type="button"
+                    className="ls-btn ls-btn-primary"
+                    disabled={saveStatus === "saving"}
+                    onClick={() => setLayoutQuoteModalOpen(true)}
+                  >
+                    Export quote
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="ls-phase-empty ls-phase-empty--quote glass-panel">
                 <p className="ls-phase-empty-kicker">Quote</p>
@@ -1895,7 +2013,7 @@ export function LayoutStudioScreen({
                       <IconZoomOut />
                     </button>
                     <span className="ls-plan-toolbar-zoom-pct" aria-live="polite">
-                      {Math.round(blankViewZoom * 100)}%
+                      {blankPlanZoomDisplayPct(blankViewZoom)}%
                     </span>
                     <button
                       type="button"
@@ -1963,8 +2081,9 @@ export function LayoutStudioScreen({
                     }}
                     onSelectFilletEdges={setSelectedFilletEdges}
                     onPiecesChange={onPiecesChange}
-                    onRequestSplashForEdge={(sel) => {
+                    onRequestSplashForEdge={(sel, kind) => {
                       setSplashTargetEdge(sel);
+                      setEdgeStripKind(kind);
                       setSplashHeightInput("4");
                       setSplashModalOpen(true);
                     }}
@@ -1974,6 +2093,7 @@ export function LayoutStudioScreen({
                       setAddSinkModalOpen(true);
                     }}
                     onToggleProfileEdge={toggleProfileEdge}
+                    onSetSplashBottomEdge={setSplashBottomEdge}
                     onPiecesChangeLive={onPiecesChangeLive}
                     onPieceDragStart={pushUndoSnapshot}
                     slabs={layoutSlabs}
@@ -2043,12 +2163,10 @@ export function LayoutStudioScreen({
                       <span className="ls-metric-lbl">sq ft (est.)</span>
                     </div>
                     <div className="ls-metric-inline">
-                      <span className="ls-metric-val">{draft.summary.finishedEdgeLf.toFixed(1)}</span>
-                      <span className="ls-metric-lbl">ft edge (est.)</span>
-                    </div>
-                    <div className="ls-metric-inline">
                       <span className="ls-metric-val">
-                        {(draft.summary.profileEdgeLf ?? 0).toFixed(1)}
+                        {(draft.summary.profileEdgeLf ?? 0) > 0
+                          ? (draft.summary.profileEdgeLf ?? 0).toFixed(1)
+                          : "—"}
                       </span>
                       <span className="ls-metric-lbl">ft profile (est.)</span>
                     </div>
@@ -2176,12 +2294,10 @@ export function LayoutStudioScreen({
                     <span className="ls-metric-lbl">sq ft (est.)</span>
                   </div>
                   <div className="ls-metric-inline">
-                    <span className="ls-metric-val">{draft.summary.finishedEdgeLf.toFixed(1)}</span>
-                    <span className="ls-metric-lbl">ft edge (est.)</span>
-                  </div>
-                  <div className="ls-metric-inline">
                     <span className="ls-metric-val">
-                      {(draft.summary.profileEdgeLf ?? 0).toFixed(1)}
+                      {(draft.summary.profileEdgeLf ?? 0) > 0
+                        ? (draft.summary.profileEdgeLf ?? 0).toFixed(1)
+                        : "—"}
                     </span>
                     <span className="ls-metric-lbl">ft profile (est.)</span>
                   </div>
@@ -2205,7 +2321,7 @@ export function LayoutStudioScreen({
       <ManualRectangleSheet
         open={rectSheetOpen}
         title="New rectangle"
-        nonSplashPieceCount={draft.pieces.filter((p) => p.pieceRole !== "splash").length}
+        nonSplashPieceCount={draft.pieces.filter((p) => !isPlanStripPiece(p)).length}
         staggerIn={pieceStaggerIn}
         onClose={() => setRectSheetOpen(false)}
         onSave={(piece) => commitNewPiece(piece)}
@@ -2213,7 +2329,7 @@ export function LayoutStudioScreen({
       <ManualLShapeSheet
         open={lSheetOpen}
         title="New L-shape"
-        nonSplashPieceCount={draft.pieces.filter((p) => p.pieceRole !== "splash").length}
+        nonSplashPieceCount={draft.pieces.filter((p) => !isPlanStripPiece(p)).length}
         staggerIn={pieceStaggerIn}
         onClose={() => setLSheetOpen(false)}
         onSave={(piece) => commitNewPiece(piece)}
@@ -2235,6 +2351,7 @@ export function LayoutStudioScreen({
           onClick={() => {
             setSplashModalOpen(false);
             setSplashTargetEdge(null);
+            setEdgeStripKind("splash");
           }}
         >
           <div
@@ -2244,11 +2361,18 @@ export function LayoutStudioScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <p id="ls-splash-title" className="ls-card-title">
-              Splash height
+              {edgeStripKind === "miter" ? "Miter strip height" : "Splash height"}
             </p>
             <p className="ls-muted">
-              Enter splash height in inches. A rectangle matching the selected edge length will be placed{" "}
+              Enter height in inches. A rectangle matching the selected edge length will be placed{" "}
               {SPLASH_PLAN_OFFSET_IN}&quot; away from that edge (perpendicular offset in plan view).
+              {edgeStripKind === "miter" ? (
+                <>
+                  {" "}
+                  In the live 3D preview, this miter strip folds <strong>down</strong> from the hinge instead
+                  of up like a backsplash.
+                </>
+              ) : null}
             </p>
             <label className="ls-field">
               Height (in)
@@ -2268,12 +2392,13 @@ export function LayoutStudioScreen({
                 onClick={() => {
                   setSplashModalOpen(false);
                   setSplashTargetEdge(null);
+                  setEdgeStripKind("splash");
                 }}
               >
                 Cancel
               </button>
               <button type="button" className="ls-btn ls-btn-primary" onClick={() => confirmSplashForEdge()}>
-                Add splash
+                {edgeStripKind === "miter" ? "Add miter" : "Add splash"}
               </button>
             </div>
           </div>
@@ -2332,6 +2457,46 @@ export function LayoutStudioScreen({
               </button>
               <button type="button" className="ls-btn ls-btn-primary" onClick={applySlabAutoNest}>
                 Nest pieces
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {autoNestFeedback ? (
+        <div
+          className="ls-modal-backdrop ls-modal-backdrop--auto-nest-feedback"
+          role="presentation"
+          onClick={() => setAutoNestFeedback(null)}
+        >
+          <div
+            className="ls-modal glass-panel ls-modal--auto-nest-feedback"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="ls-auto-nest-feedback-title"
+            aria-describedby="ls-auto-nest-feedback-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="ls-auto-nest-feedback-title" className="ls-card-title">
+              {autoNestFeedback.title}
+            </p>
+            <div id="ls-auto-nest-feedback-desc">
+              <ul className="ls-auto-nest-feedback-list">
+                {autoNestFeedback.lines.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              {autoNestFeedback.footerNote ? (
+                <p className="ls-muted ls-auto-nest-feedback-note">{autoNestFeedback.footerNote}</p>
+              ) : null}
+            </div>
+            <div className="ls-modal-actions">
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                onClick={() => setAutoNestFeedback(null)}
+              >
+                OK
               </button>
             </div>
           </div>
@@ -2427,6 +2592,15 @@ export function LayoutStudioScreen({
           activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
           ownerUserId={ownerUserId}
           showPieceLabels={showPieceLabels}
+        />
+      ) : null}
+
+      {layoutQuoteSettingsOpen && activeOption ? (
+        <LayoutQuoteSettingsModal
+          open={layoutQuoteSettingsOpen}
+          onClose={() => setLayoutQuoteSettingsOpen(false)}
+          initial={mergedQuoteSettings}
+          onSave={saveLayoutQuoteSettings}
         />
       ) : null}
 

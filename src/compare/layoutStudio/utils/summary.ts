@@ -38,6 +38,16 @@ function profileEdgeLengthPx(piece: LayoutPiece, lengths: number[]): number {
   return sum;
 }
 
+function miterEdgeLengthPx(piece: LayoutPiece, lengths: number[]): number {
+  const miter = piece.edgeTags?.miterEdgeIndices;
+  if (!miter?.length) return 0;
+  let sum = 0;
+  for (const i of miter) {
+    if (i >= 0 && i < lengths.length) sum += lengths[i];
+  }
+  return sum;
+}
+
 export function computeLayoutSummary(input: {
   pieces: LayoutPiece[];
   placements: PiecePlacement[];
@@ -49,14 +59,18 @@ export function computeLayoutSummary(input: {
   let areaSqFt = 0;
   let finishedEdgeLf = 0;
   let profileEdgeLf = 0;
+  let miterEdgeLf = 0;
   let sinkCount = 0;
   let splashPieceCount = 0;
   let splashAreaSqFt = 0;
+  let miterPieceCount = 0;
+  let miterAreaSqFt = 0;
 
   const ppi = pixelsPerInch && pixelsPerInch > 0 ? pixelsPerInch : null;
 
   for (const piece of pieces) {
     if (piece.pieceRole === "splash") splashPieceCount += 1;
+    if (piece.pieceRole === "miter") miterPieceCount += 1;
     const placed = piece.sinks?.length ?? 0;
     const legacy = Math.max(0, Math.floor(piece.sinkCount || 0));
     sinkCount += placed > 0 ? placed : legacy;
@@ -70,10 +84,12 @@ export function computeLayoutSummary(input: {
     const pieceSqFt = areaIn2 / 144;
     areaSqFt += pieceSqFt;
     if (piece.pieceRole === "splash") splashAreaSqFt += pieceSqFt;
+    if (piece.pieceRole === "miter") miterAreaSqFt += pieceSqFt;
 
     const lens = pieceHasArcEdges(piece) ? edgeLengthsWithArcsInches(piece) : edgeLengths(ring);
     finishedEdgeLf += finishedEdgeLengthPx(piece, lens) / 12 / ppi;
     profileEdgeLf += profileEdgeLengthPx(piece, lens) / 12 / ppi;
+    miterEdgeLf += miterEdgeLengthPx(piece, lens) / 12 / ppi;
   }
 
   const usedSlabs = new Set<string>();
@@ -101,8 +117,11 @@ export function computeLayoutSummary(input: {
     finishedEdgeLf: Math.round(finishedEdgeLf * 100) / 100,
     sinkCount,
     profileEdgeLf: Math.round(profileEdgeLf * 100) / 100,
+    miterEdgeLf: Math.round(miterEdgeLf * 100) / 100,
     splashPieceCount,
     splashAreaSqFt: Math.round(splashAreaSqFt * 100) / 100,
+    miterPieceCount,
+    miterAreaSqFt: Math.round(miterAreaSqFt * 100) / 100,
     estimatedSlabCount,
     unplacedPieceCount,
   };

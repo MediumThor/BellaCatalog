@@ -1,6 +1,7 @@
 import type { LayoutPiece, LayoutPoint } from "../types";
 import { planDisplayPoints } from "./blankPlanGeometry";
 import { normalizeClosedRing } from "./geometry";
+import { isPlanStripPiece } from "./pieceRoles";
 
 /** Next vertex from last point toward cursor, constrained to horizontal or vertical from last. */
 export function orthoPreviewPoint(last: LayoutPoint, cursor: LayoutPoint): LayoutPoint {
@@ -29,7 +30,7 @@ export function collectOrthoSnapTargets(
 ): LayoutPoint[] {
   const out: LayoutPoint[] = [];
   for (const pc of pieces) {
-    if (pc.pieceRole === "splash") continue;
+    if (isPlanStripPiece(pc)) continue;
     const disp = planDisplayPoints(pc, pieces);
     const ring = normalizeClosedRing(disp);
     for (const q of ring) {

@@ -8,6 +8,7 @@ import {
   pointInPolygon,
   polygonArea,
 } from "./geometry";
+import { isPlanStripPiece } from "./pieceRoles";
 
 const EPS = 1e-6;
 const MIN_SPLIT_AREA = 0.08;
@@ -727,7 +728,7 @@ export function findFlushSnapEdgePair(
 ): { edgeIndexA: number; edgeIndexB: number } | null {
   const a = pieces.find((p) => p.id === pieceIdA);
   const b = pieces.find((p) => p.id === pieceIdB);
-  if (!a || !b || a.pieceRole === "splash" || b.pieceRole === "splash") return null;
+  if (!a || !b || isPlanStripPiece(a) || isPlanStripPiece(b)) return null;
   const worldA = planDisplayPoints(a, pieces);
   const worldB = planDisplayPoints(b, pieces);
   const ringA = normalizeClosedRing(worldA);
@@ -746,7 +747,7 @@ export function findFlushSnapEdgePair(
 
 /** True when at least two countertop pieces share a snap-flush edge (eligible for Join). */
 export function hasFlushSnapJoinCandidate(pieces: LayoutPiece[]): boolean {
-  const counters = pieces.filter((p) => p.pieceRole !== "splash");
+  const counters = pieces.filter((p) => !isPlanStripPiece(p));
   if (counters.length < 2) return false;
   for (let i = 0; i < counters.length; i++) {
     for (let j = i + 1; j < counters.length; j++) {

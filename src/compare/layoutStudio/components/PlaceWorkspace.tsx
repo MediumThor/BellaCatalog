@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
 import { pieceIdsWithSlabPlacementOverlap } from "../utils/placementOverlap";
-import { pieceLetterLabelByPieceId, splashLetterLabelByPieceId } from "../utils/pieceLabels";
+import { edgeStripLetterLabelByPieceId, pieceLetterLabelByPieceId } from "../utils/pieceLabels";
+import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
   mirrorLocalInches,
   piecePolygonInches,
@@ -176,7 +177,7 @@ export function PlaceWorkspace({
   );
 
   const pieceLetterLabelById = useMemo(() => pieceLetterLabelByPieceId(pieces), [pieces]);
-  const splashLetterLabelById = useMemo(() => splashLetterLabelByPieceId(pieces), [pieces]);
+  const stripLetterLabelById = useMemo(() => edgeStripLetterLabelByPieceId(pieces), [pieces]);
 
   /** Slab placement: stable alphabetical order by piece name when drawing pieces. */
   const piecesSortedAlphabetically = useMemo(
@@ -430,9 +431,9 @@ export function PlaceWorkspace({
                   const rotated = transformedPieceInches(mirrorLocalInches(local, pl.mirrored), pl.rotation);
                   const pts = rotated.map((q) => `${pl.x + q.x},${pl.y + q.y}`).join(" ");
                   const sel = piece.id === selectedPieceId;
-                  const isSplash = piece.pieceRole === "splash";
-                  const labelText = isSplash
-                    ? (splashLetterLabelById.get(piece.id) ?? "—")
+                  const isStrip = isPlanStripPiece(piece);
+                  const labelText = isStrip
+                    ? (stripLetterLabelById.get(piece.id) ?? "—")
                     : (pieceLetterLabelById.get(piece.id) ?? piece.name);
                   const xs = rotated.map((q) => q.x);
                   const ys = rotated.map((q) => q.y);
@@ -440,7 +441,7 @@ export function PlaceWorkspace({
                   const bh = Math.max(...ys) - Math.min(...ys);
                   const shortSide = Math.min(bw, bh);
                   const baseFont = Math.min(2.2, Math.max(0.55, shortSide * 0.11));
-                  const fontSize = isSplash
+                  const fontSize = isStrip
                     ? Math.min(3.4, Math.max(1.05, baseFont * 1.65))
                     : baseFont;
                   const longHoriz = bw >= bh;
@@ -466,7 +467,7 @@ export function PlaceWorkspace({
                       }}
                       onPointerDown={(e) => handlePointerDownPiece(piece.id, slab.id, e)}
                     />
-                      {!isSplash && (piece.sinks?.length ?? 0) > 0 ? (
+                      {!isStrip && (piece.sinks?.length ?? 0) > 0 ? (
                         <PieceSinkCutoutsSvg
                           piece={piece}
                           allPieces={pieces}

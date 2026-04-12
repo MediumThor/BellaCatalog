@@ -15,6 +15,7 @@ import {
   shouldFillPieceWithSlabTexture,
 } from "../utils/slabLayoutTexture";
 import { defaultNonSplashPieceName } from "../utils/pieceLabels";
+import { isPlanStripPiece } from "../utils/pieceRoles";
 
 type Props = {
   displayUrl: string | null;
@@ -32,7 +33,7 @@ type Props = {
 };
 
 function nextPieceName(pieces: LayoutPiece[]): string {
-  const n = pieces.filter((p) => p.pieceRole !== "splash").length;
+  const n = pieces.filter((p) => !isPlanStripPiece(p)).length;
   return defaultNonSplashPieceName(n);
 }
 

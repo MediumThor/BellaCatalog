@@ -3,7 +3,15 @@ import {
   middleEdgeIndexIfFlanking,
   vertexIndexFromAdjacentEdges,
 } from "./blankPlanCornerFillet";
-import { centroid, normalizeClosedRing, polygonArea } from "./geometry";
+import {
+  centroid,
+  ensureClosedRing,
+  normalizeClosedRing,
+  pointInPolygon,
+  polygonArea,
+  polygonSignedArea,
+} from "./geometry";
+import { isPlanStripPiece } from "./pieceRoles";
 
 /** Match corner fillet: edges must be ~axis-aligned at the shared vertex. */
 const ORTHO_CONNECT_TOL = 0.18;
@@ -305,7 +313,7 @@ export function removeCornerFilletAtFilletEdge(
   piece: LayoutPiece,
   filletEdgeIndex: number,
 ): { ok: true; piece: LayoutPiece } | { ok: false; reason: string } {
-  if (piece.pieceRole === "splash") {
+  if (isPlanStripPiece(piece)) {
     return { ok: false, reason: "Not available on splash pieces." };
   }
   const ring = normalizeClosedRing(piece.points);
@@ -371,7 +379,7 @@ export function collectFilletEdgesInAxisAlignedRect(
 ): FilletEdgeSelection[] {
   const out: FilletEdgeSelection[] = [];
   for (const pc of pieces) {
-    if (pc.pieceRole === "splash") continue;
+    if (isPlanStripPiece(pc)) continue;
     const circles = getEffectiveEdgeArcCirclesIn(pc);
     const ox = pc.planTransform?.x ?? 0;
     const oy = pc.planTransform?.y ?? 0;
@@ -472,9 +480,8 @@ export function svgCircularArcFragmentFromSagitta(
 }
 
 /**
- * Minor angular sweep from A to B on circle O (|Δθ| ≤ π). Corner fillets are always this short arc
- * along the boundary; choosing by “midpoint nearer centroid” wrongly picks the major arc on large
- * rectangles (270° scoop / inverted notch).
+ * Minor angular sweep from A to B on circle O (|Δθ| ≤ π). Baseline for the two possible arcs
+ * from A to B; the correct boundary arc may be the minor or major depending on winding.
  */
 function circleArcMinorSweepFromAToB(
   O: LayoutPoint,
@@ -493,30 +500,114 @@ function circleArcMinorSweepFromAToB(
   return { delta, Rdraw };
 }
 
+/**
+ * Pick the sweep from A→B on circle O that lies on the polygon boundary (fillet / edge bulge).
+ * When one arc midpoint is inside the polygon and the other is not, the boundary for a normal
+ * ≤180° fillet is always the **minor** arc (the major’s midpoint lies on the wrong side of the
+ * chord). “Prefer the inside midpoint” alone wrongly chose the major sweep on outside corners;
+ * classifying by circle center fixed that but misclassified some inside fillets. So: if the two
+ * midpoint tests disagree, take `dMinor`. Winding / default minor otherwise.
+ */
+function chooseCircleSweepDelta(
+  O: LayoutPoint,
+  A: LayoutPoint,
+  B: LayoutPoint,
+  interiorToward: LayoutPoint,
+  closedRing?: LayoutPoint[] | null,
+): { delta: number; Rdraw: number } | null {
+  const sw = circleArcMinorSweepFromAToB(O, A, B);
+  if (!sw) return null;
+  const { delta: dMinor, Rdraw } = sw;
+  const angA = Math.atan2(A.y - O.y, A.x - O.x);
+  const dAlt = dMinor > 0 ? dMinor - 2 * Math.PI : dMinor + 2 * Math.PI;
+  const mid = (d: number) => ({
+    x: O.x + Rdraw * Math.cos(angA + d / 2),
+    y: O.y + Rdraw * Math.sin(angA + d / 2),
+  });
+  const midMinor = mid(dMinor);
+  const midAlt = mid(dAlt);
+
+  const scale = Math.max(1, Rdraw * Rdraw);
+  const eps = 1e-8 * scale;
+
+  // Unit tangent at A for CCW motion on the circle (increasing θ). Forward along sweep d uses sign(d).
+  const rax = A.x - O.x;
+  const ray = A.y - O.y;
+  const rlen = Math.hypot(rax, ray);
+  const tCcwX = rlen >= 1e-12 ? -ray / rlen : 0;
+  const tCcwY = rlen >= 1e-12 ? rax / rlen : 0;
+  /** Cross(forward, interior−A): >0 ⇒ interior is to the left of forward (CCW polygon convention). */
+  const sweepInteriorScore = (d: number): number => {
+    const s = d > 0 ? 1 : d < 0 ? -1 : 0;
+    const fx = s * tCcwX;
+    const fy = s * tCcwY;
+    const vx = interiorToward.x - A.x;
+    const vy = interiorToward.y - A.y;
+    return fx * vy - fy * vx;
+  };
+
+  if (closedRing && closedRing.length >= 3) {
+    const poly = ensureClosedRing(normalizeClosedRing(closedRing));
+    const nudge = (p: LayoutPoint): LayoutPoint => {
+      const dx = interiorToward.x - p.x;
+      const dy = interiorToward.y - p.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-12) return p;
+      const step = Math.max(1e-6, Rdraw * 1e-4);
+      return { x: p.x + (dx / len) * step, y: p.y + (dy / len) * step };
+    };
+    const inMin = pointInPolygon(nudge(midMinor), poly);
+    const inAlt = pointInPolygon(nudge(midAlt), poly);
+    if (inMin !== inAlt) {
+      return { delta: dMinor, Rdraw };
+    }
+
+    const signedArea = polygonSignedArea(poly);
+    if (Math.abs(signedArea) > 1e-12 * scale) {
+      const ccw = signedArea > 0;
+      const sMin = sweepInteriorScore(dMinor);
+      const sAlt = sweepInteriorScore(dAlt);
+      const matchMin = ccw ? sMin > eps : sMin < -eps;
+      const matchAlt = ccw ? sAlt > eps : sAlt < -eps;
+      if (matchMin !== matchAlt) {
+        return matchMin ? { delta: dMinor, Rdraw } : { delta: dAlt, Rdraw };
+      }
+    }
+  }
+
+  // Minor arc: countertop edge arcs are almost always ≤180° along the boundary. The previous
+  // fallback (midpoint closer to centroid) preferred the major sweep on outside convex fillets.
+  return { delta: dMinor, Rdraw };
+}
+
 function arcLengthInchesFromCircleCenter(
   O: LayoutPoint,
   A: LayoutPoint,
   B: LayoutPoint,
+  interiorToward: LayoutPoint,
+  closedRing?: LayoutPoint[] | null,
 ): number {
-  const sw = circleArcMinorSweepFromAToB(O, A, B);
-  if (!sw) return Math.hypot(B.x - A.x, B.y - A.y);
-  return sw.Rdraw * Math.abs(sw.delta);
+  const ch = chooseCircleSweepDelta(O, A, B, interiorToward, closedRing);
+  if (!ch) return Math.hypot(B.x - A.x, B.y - A.y);
+  return ch.Rdraw * Math.abs(ch.delta);
 }
 
 /**
  * SVG `A` fragment from known circle center (corner fillets). Avoids sagitta → circumcenter
- * reconstruction that can collapse to a straight line.
+ * reconstruction that can collapse to a straight line. Chooses minor vs major arc using
+ * `interiorToward` so the boundary does not cut through the piece.
  */
 export function svgCircularArcFragmentFromCircleCenter(
   O: LayoutPoint,
   _Rnom: number,
   A: LayoutPoint,
   B: LayoutPoint,
-  _interiorToward: LayoutPoint,
+  interiorToward: LayoutPoint,
+  closedRing?: LayoutPoint[] | null,
 ): string | null {
-  const sw = circleArcMinorSweepFromAToB(O, A, B);
-  if (!sw) return null;
-  const { delta, Rdraw } = sw;
+  const ch = chooseCircleSweepDelta(O, A, B, interiorToward, closedRing);
+  if (!ch) return null;
+  const { delta, Rdraw } = ch;
   const largeArc = Math.abs(delta) > Math.PI ? 1 : 0;
   const sweep = delta > 0 ? 1 : 0;
   return `A ${Rdraw} ${Rdraw} 0 ${largeArc} ${sweep} ${B.x} ${B.y}`;
@@ -526,12 +617,13 @@ function sampleArcPointsFromCircleCenter(
   O: LayoutPoint,
   A: LayoutPoint,
   B: LayoutPoint,
-  _interiorToward: LayoutPoint,
+  interiorToward: LayoutPoint,
   segments: number,
+  closedRing?: LayoutPoint[] | null,
 ): LayoutPoint[] {
-  const sw = circleArcMinorSweepFromAToB(O, A, B);
-  if (!sw) return [{ ...A }, { ...B }];
-  const { delta, Rdraw } = sw;
+  const ch = chooseCircleSweepDelta(O, A, B, interiorToward, closedRing);
+  if (!ch) return [{ ...A }, { ...B }];
+  const { delta, Rdraw } = ch;
   const angA = Math.atan2(A.y - O.y, A.x - O.x);
   const n = Math.max(2, Math.floor(segments));
   const out: LayoutPoint[] = [];
@@ -574,6 +666,7 @@ export function sampleArcEdgePointsForStroke(
       B,
       interiorCentroid,
       segmentsAlongArc,
+      ring,
     );
   }
   const h = getEffectiveEdgeArcSagittasIn(piece)[i];
@@ -659,9 +752,10 @@ export function distancePointToCircleArcEdge(
   B: LayoutPoint,
   circle: LayoutArcCircle,
   interiorToward: LayoutPoint,
+  closedRing?: LayoutPoint[] | null,
 ): number {
   const O = { x: circle.cx, y: circle.cy };
-  const samples = sampleArcPointsFromCircleCenter(O, A, B, interiorToward, 12);
+  const samples = sampleArcPointsFromCircleCenter(O, A, B, interiorToward, 12, closedRing);
   let best = Infinity;
   for (let i = 0; i < samples.length - 1; i++) {
     const a = samples[i];
@@ -710,6 +804,7 @@ export function pathDClosedRingWithArcs(
         A,
         B,
         interiorCentroid,
+        r,
       );
       if (arcCmd) {
         parts.push(arcCmd);
@@ -757,6 +852,7 @@ export function flattenPieceOutlineForGeometry(
         B!,
         cen,
         samplesPerArc,
+        ring,
       );
       if (i === 0) out.push(seg[0]!);
       for (let k = 1; k < seg.length; k++) out.push(seg[k]!);
@@ -794,7 +890,7 @@ export function edgeLengthsWithArcsInches(piece: LayoutPiece): number[] {
     const c = circ[i];
     if (c != null && c.r > 1e-9) {
       const O = { x: c.cx, y: c.cy };
-      out.push(arcLengthInchesFromCircleCenter(O, A!, B!));
+      out.push(arcLengthInchesFromCircleCenter(O, A!, B!, cen, ring));
       continue;
     }
     const h = arcs[i];
@@ -816,7 +912,7 @@ export function applyArcSagittaToEdge(
   edgeIndex: number,
   sagittaIn: number,
 ): LayoutPiece | null {
-  if (piece.pieceRole === "splash") return null;
+  if (isPlanStripPiece(piece)) return null;
   const ring = normalizeClosedRing(piece.points);
   const n = ring.length;
   if (n < 3) return null;
@@ -880,7 +976,7 @@ export function clearArcOnEdge(
   piece: LayoutPiece,
   edgeIndex: number,
 ): LayoutPiece | null {
-  if (piece.pieceRole === "splash") return null;
+  if (isPlanStripPiece(piece)) return null;
   const ring = normalizeClosedRing(piece.points);
   const n = ring.length;
   if (n < 2) return null;
@@ -910,7 +1006,7 @@ export function clearArcsAtOrthogonalCorner(
   edgeIndexA: number,
   edgeIndexB: number,
 ): { ok: true; piece: LayoutPiece } | { ok: false; reason: string } {
-  if (piece.pieceRole === "splash") {
+  if (isPlanStripPiece(piece)) {
     return { ok: false, reason: "Not available on splash pieces." };
   }
   const ring = normalizeClosedRing(piece.points);

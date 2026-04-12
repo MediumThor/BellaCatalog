@@ -13,8 +13,8 @@ export interface LayoutPoint {
 
 export type PieceShapeKind = "rectangle" | "lShape" | "polygon";
 
-/** Countertop vs splash strip generated from an edge (blank plan). */
-export type PiecePlanRole = "countertop" | "splash";
+/** Countertop vs edge strips from plan (backsplash vs miter / fold-down). */
+export type PiecePlanRole = "countertop" | "splash" | "miter";
 
 /** Rotation of the manual L-shape in plan view (degrees). */
 export type LShapeOrientationDeg = 0 | 90 | 180 | 270;
@@ -93,14 +93,27 @@ export interface LayoutPiece {
     profileEdgeIndices?: number[];
     /** Parent-side record of splash strips spawned from edges. */
     splashEdges?: Array<{ edgeIndex: number; splashPieceId: string; heightIn: number }>;
+    /**
+     * Plan edge indices tagged as miter joints — quoted as miter LF; drawn dark blue in plan;
+     * 3D preview shears those vertical faces for opposing 45° cuts.
+     */
+    miterEdgeIndices?: number[];
   };
   /** Blank plan: translate canonical `points` in inch space without mutating shape. */
   planTransform?: { x: number; y: number };
   pieceRole?: PiecePlanRole;
+  /** Parent link for backsplash (`splash`) and miter (`miter`) strips spawned from an edge. */
   splashMeta?: {
     parentPieceId: string;
     parentEdgeIndex: number;
     heightIn: number;
+    /** @deprecated Prefer `pieceRole: "miter"`; removed when layouts are re-saved. */
+    waterfall?: boolean;
+    /**
+     * Index of the strip polygon edge that is the hinge / counter contact for 3D (plan edge i → i+1).
+     * Defaults to 0 for strips spawned from a parent edge (inner contact = first rectangle edge).
+     */
+    bottomEdgeIndex?: number;
   };
   shapeKind?: PieceShapeKind;
   source?: "manual" | "imported" | "ai-suggested";
@@ -142,10 +155,16 @@ export interface LayoutSummary {
   sinkCount: number;
   /** Linear feet from edges tagged as profile (explicit quote semantics). */
   profileEdgeLf?: number;
-  /** Number of splash strip pieces (blank-plan splash rectangles). */
+  /** Linear feet from edges tagged as miter joints. */
+  miterEdgeLf?: number;
+  /** Number of backsplash strip pieces. */
   splashPieceCount?: number;
-  /** Combined area of splash strip pieces (est.), sq ft. */
+  /** Combined area of backsplash strips (est.), sq ft. */
   splashAreaSqFt?: number;
+  /** Number of miter strip pieces (fold-down from edge). */
+  miterPieceCount?: number;
+  /** Combined area of miter strips (est.), sq ft. */
+  miterAreaSqFt?: number;
   estimatedSlabCount: number;
   unplacedPieceCount: number;
 }

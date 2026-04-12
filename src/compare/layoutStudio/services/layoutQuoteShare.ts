@@ -81,6 +81,7 @@ export async function createLayoutQuoteShare(input: {
 
   const materialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
   const profileLf = draft.summary.profileEdgeLf ?? 0;
+  const miterLf = draft.summary.miterEdgeLf ?? 0;
 
   const payload: LayoutQuoteSharePayloadV1 = {
     version: 1,
@@ -97,6 +98,7 @@ export async function createLayoutQuoteShare(input: {
       areaSqFt: draft.summary.areaSqFt,
       finishedEdgeLf: draft.summary.finishedEdgeLf,
       profileEdgeLf: profileLf,
+      miterEdgeLf: miterLf,
       estimatedSlabCount: draft.summary.estimatedSlabCount,
       sinkCount: draft.summary.sinkCount,
       splashAreaSqFt: draft.summary.splashAreaSqFt ?? 0,

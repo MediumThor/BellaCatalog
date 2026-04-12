@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import type { JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type {
+  JobComparisonOptionRecord,
+  JobRecord,
+  LayoutQuoteCustomerRowId,
+  LayoutQuoteSettings,
+  MaterialChargeMode,
+} from "../../../types/compareQuote";
 import { formatMoney } from "../../../utils/priceHelpers";
+import { effectiveQuoteSquareFootage } from "../../../utils/quotedPrice";
 import {
-  computeQuotedInstallForCompareOption,
-  effectiveQuoteSquareFootage,
-} from "../../../utils/quotedPrice";
+  computeCommercialLayoutQuote,
+  customerQuoteTotalFromBreakdown,
+} from "../utils/commercialQuote";
 import type { LayoutSlab, SavedLayoutStudioState } from "../types";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
 import { PlaceLayoutPreview3D } from "./PlaceLayoutPreview3D";
@@ -19,6 +26,11 @@ type Props = {
   activeSlabId: string | null;
   onActiveSlab: (id: string) => void;
   showPieceLabels?: boolean;
+  quoteSettings: LayoutQuoteSettings;
+  onSaveQuoteSettings: (next: LayoutQuoteSettings) => void | Promise<void>;
+  onOpenQuoteSettings: () => void;
+  customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
+  onSetCustomerExclusion: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
 };
 
 export function QuotePhaseView({
@@ -29,6 +41,11 @@ export function QuotePhaseView({
   activeSlabId,
   onActiveSlab,
   showPieceLabels = true,
+  quoteSettings,
+  onSaveQuoteSettings,
+  onOpenQuoteSettings,
+  customerExclusions,
+  onSetCustomerExclusion,
 }: Props) {
   const [layoutPreviewModalOpen, setLayoutPreviewModalOpen] = useState(false);
   const [layoutPreviewExpandedMode, setLayoutPreviewExpandedMode] = useState<"2d" | "3d">("2d");
@@ -60,16 +77,57 @@ export function QuotePhaseView({
     draft.summary.areaSqFt > 0
       ? draft.summary.areaSqFt
       : effectiveQuoteSquareFootage(job, option);
-  const quoted = computeQuotedInstallForCompareOption({
-    jobSquareFootage: quoteAreaSqFt,
-    priceUnit: option.priceUnit,
-    catalogLinePrice: option.selectedPriceValue,
-    slabQuantity: option.slabQuantity ?? draft.summary.estimatedSlabCount,
-  });
+  const profileEdgeLf = draft.summary.profileEdgeLf ?? 0;
+  const miterEdgeLf = draft.summary.miterEdgeLf ?? 0;
+  const splashAreaSqFt = draft.summary.splashAreaSqFt ?? 0;
+
+  const countertopSqFt = useMemo(() => {
+    const total = draft.summary.areaSqFt;
+    const splash = draft.summary.splashAreaSqFt ?? 0;
+    const miter = draft.summary.miterAreaSqFt ?? 0;
+    return Math.max(0, total - splash - miter);
+  }, [draft.summary.areaSqFt, draft.summary.splashAreaSqFt, draft.summary.miterAreaSqFt]);
+
+  const commercial = useMemo(
+    () =>
+      computeCommercialLayoutQuote({
+        option,
+        jobSquareFootage: quoteAreaSqFt,
+        countertopSqFt,
+        splashAreaSqFt,
+        sinkCount: draft.summary.sinkCount,
+        profileEdgeLf,
+        miterEdgeLf,
+        slabCount: option.slabQuantity ?? draft.summary.estimatedSlabCount,
+        slabs,
+        settings: quoteSettings,
+      }),
+    [
+      option,
+      quoteAreaSqFt,
+      countertopSqFt,
+      splashAreaSqFt,
+      draft.summary.sinkCount,
+      profileEdgeLf,
+      miterEdgeLf,
+      slabs,
+      quoteSettings,
+    ]
+  );
+
+  const customerTotal = useMemo(() => {
+    if (!commercial) return null;
+    return customerQuoteTotalFromBreakdown(commercial, customerExclusions);
+  }, [commercial, customerExclusions]);
+
+  const customerPerSqft =
+    customerTotal != null && quoteAreaSqFt > 0 ? customerTotal / quoteAreaSqFt : null;
 
   const materialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
-  const profileLf = draft.summary.profileEdgeLf ?? 0;
-  const splashAreaSqFt = draft.summary.splashAreaSqFt ?? 0;
+
+  const setMaterialChargeMode = (mode: MaterialChargeMode) => {
+    void onSaveQuoteSettings({ ...quoteSettings, materialChargeMode: mode });
+  };
 
   const previewWorkspaceKind: "blank" | "source" =
     draft.workspaceKind === "blank" ? "blank" : "source";
@@ -230,50 +288,192 @@ export function QuotePhaseView({
       ) : null}
 
       <div className="ls-quote-summary glass-panel">
-        <p className="ls-card-title">Commercial summary</p>
-        <dl className="ls-quote-dl">
-          <div>
-            <dt>Material / option</dt>
-            <dd>{option.productName}</dd>
+        <div className="ls-quote-summary-head">
+          <div className="ls-quote-summary-head-text">
+            <p className="ls-card-title">Commercial summary</p>
+            <p className="ls-quote-exclude-legend ls-muted">
+              Check a line to exclude it from the customer-facing quote. Dollar lines adjust the installed estimate.
+            </p>
           </div>
-          <div>
-            <dt>Vendor / manufacturer</dt>
-            <dd>{materialLine}</dd>
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary ls-quote-settings-btn"
+            onClick={onOpenQuoteSettings}
+          >
+            Pricing settings
+          </button>
+        </div>
+
+        <div className="ls-quote-material-mode">
+          <div className="ls-quote-material-mode-label">
+            <span className="ls-quote-material-mode-title">Material price</span>
+            <span className="ls-muted ls-quote-material-mode-hint">
+              Applies to catalog material only. Fabrication still uses countertop sq ft ({countertopSqFt.toFixed(1)} est.).
+            </span>
           </div>
-          <div>
-            <dt>Layout area (est.)</dt>
-            <dd>{draft.summary.areaSqFt.toFixed(1)} sq ft</dd>
+          <div
+            className="ls-segmented ls-segmented--quote-material"
+            role="group"
+            aria-label="Material billing basis"
+          >
+            <button
+              type="button"
+              className={quoteSettings.materialChargeMode === "sqft_used" ? "is-active" : ""}
+              onClick={() => setMaterialChargeMode("sqft_used")}
+            >
+              By sq ft used
+            </button>
+            <button
+              type="button"
+              className={quoteSettings.materialChargeMode === "full_slab" ? "is-active" : ""}
+              onClick={() => setMaterialChargeMode("full_slab")}
+            >
+              Full slab
+            </button>
           </div>
-          <div>
-            <dt>Finished / profile edge (est.)</dt>
-            <dd>{draft.summary.finishedEdgeLf.toFixed(1)} lf</dd>
-          </div>
-          {profileLf > 0 ? (
-            <div>
-              <dt>Profile edge (est.)</dt>
-              <dd>{profileLf.toFixed(1)} lf</dd>
-            </div>
+        </div>
+
+        <dl className="ls-quote-dl ls-quote-dl--with-exclude">
+          <QuoteDlRow
+            rowId="materialOption"
+            excluded={customerExclusions.materialOption}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Material / option"
+            dd={option.productName}
+          />
+          <QuoteDlRow
+            rowId="vendorManufacturer"
+            excluded={customerExclusions.vendorManufacturer}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Vendor / manufacturer"
+            dd={materialLine}
+          />
+          <QuoteDlRow
+            rowId="layoutArea"
+            excluded={customerExclusions.layoutArea}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Layout area (est.)"
+            dd={`${draft.summary.areaSqFt.toFixed(1)} sq ft`}
+          />
+          <QuoteDlRow
+            rowId="profileEdge"
+            excluded={customerExclusions.profileEdge}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Profile edge (est.)"
+            dd={profileEdgeLf > 0 ? `${profileEdgeLf.toFixed(1)} lf` : "—"}
+          />
+          <QuoteDlRow
+            rowId="miterEdge"
+            excluded={customerExclusions.miterEdge}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Miter edge (est.)"
+            dd={miterEdgeLf > 0 ? `${miterEdgeLf.toFixed(1)} lf` : "—"}
+          />
+          <QuoteDlRow
+            rowId="slabCount"
+            excluded={customerExclusions.slabCount}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Slab count (est.)"
+            dd={String(draft.summary.estimatedSlabCount)}
+          />
+          <QuoteDlRow
+            rowId="sinks"
+            excluded={customerExclusions.sinks}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Sinks"
+            dd={String(draft.summary.sinkCount)}
+          />
+          <QuoteDlRow
+            rowId="splashArea"
+            excluded={customerExclusions.splashArea}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Splash (est.)"
+            dd={splashAreaSqFt > 0 ? `${splashAreaSqFt.toFixed(1)} sq ft` : "—"}
+          />
+
+          {commercial ? (
+            <>
+              <QuoteDlRow
+                rowId="materialCost"
+                excluded={customerExclusions.materialCost}
+                onExcludeChange={onSetCustomerExclusion}
+                dt={
+                  <>
+                    Material{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({quoteSettings.materialChargeMode === "full_slab" ? "full slab" : "sq ft used"})
+                    </span>
+                  </>
+                }
+                dd={formatMoney(commercial.materialTotal)}
+              />
+              <QuoteDlRow
+                rowId="fabrication"
+                excluded={customerExclusions.fabrication}
+                onExcludeChange={onSetCustomerExclusion}
+                dt={
+                  <>
+                    Fabrication{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({countertopSqFt.toFixed(1)} sq ft × {formatMoney(commercial.fabricationPerSqft)})
+                    </span>
+                  </>
+                }
+                dd={formatMoney(commercial.fabricationTotal)}
+              />
+              <QuoteDlRow
+                rowId="sinkCutouts"
+                excluded={customerExclusions.sinkCutouts}
+                onExcludeChange={onSetCustomerExclusion}
+                dt="Sink cutouts"
+                dd={formatMoney(commercial.sinkAddOnTotal)}
+              />
+              <QuoteDlRow
+                rowId="splashAddOn"
+                excluded={customerExclusions.splashAddOn}
+                onExcludeChange={onSetCustomerExclusion}
+                dt="Splash add-on"
+                dd={formatMoney(commercial.splashAddOnTotal)}
+              />
+              <QuoteDlRow
+                rowId="profileAddOn"
+                excluded={customerExclusions.profileAddOn}
+                onExcludeChange={onSetCustomerExclusion}
+                dt="Profile add-on"
+                dd={formatMoney(commercial.profileAddOnTotal)}
+              />
+              <QuoteDlRow
+                rowId="miterAddOn"
+                excluded={customerExclusions.miterAddOn}
+                onExcludeChange={onSetCustomerExclusion}
+                dt="Miter add-on"
+                dd={formatMoney(commercial.miterAddOnTotal)}
+              />
+            </>
           ) : null}
-          <div>
-            <dt>Slab count (est.)</dt>
-            <dd>{draft.summary.estimatedSlabCount}</dd>
-          </div>
-          <div>
-            <dt>Sinks</dt>
-            <dd>{draft.summary.sinkCount}</dd>
-          </div>
-          <div>
-            <dt>Splash (est.)</dt>
-            <dd>{splashAreaSqFt > 0 ? `${splashAreaSqFt.toFixed(1)} sq ft` : "—"}</dd>
-          </div>
-          <div>
-            <dt>Installed estimate</dt>
-            <dd>{formatMoney(quoted.quotedTotal)}</dd>
-          </div>
-          {quoted.quotedPerSqft != null ? (
-            <div>
-              <dt>Per sq ft (installed)</dt>
-              <dd>{formatMoney(quoted.quotedPerSqft)}</dd>
+
+          <QuoteDlRow
+            rowId="installedEstimate"
+            excluded={customerExclusions.installedEstimate}
+            onExcludeChange={onSetCustomerExclusion}
+            dt="Installed estimate"
+            dd={customerTotal != null ? formatMoney(customerTotal) : "—"}
+          />
+          {customerPerSqft != null ? (
+            <QuoteDlRow
+              rowId="perSqFt"
+              excluded={customerExclusions.perSqFt}
+              onExcludeChange={onSetCustomerExclusion}
+              dt="Per sq ft (layout area)"
+              dd={formatMoney(customerPerSqft)}
+            />
+          ) : null}
+
+          {commercial && customerTotal != null && customerTotal !== commercial.grandTotal ? (
+            <div className="ls-quote-dl-row ls-quote-dl-row--internal">
+              <div className="ls-quote-dl-exclude-spacer" aria-hidden />
+              <dt>Internal total (all lines)</dt>
+              <dd>{formatMoney(commercial.grandTotal)}</dd>
             </div>
           ) : null}
         </dl>
@@ -294,6 +494,51 @@ export function QuotePhaseView({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function CustomerExcludeCheckbox({
+  rowId,
+  excluded,
+  onChange,
+}: {
+  rowId: LayoutQuoteCustomerRowId;
+  excluded: boolean;
+  onChange: (rowId: LayoutQuoteCustomerRowId, next: boolean) => void | Promise<void>;
+}) {
+  return (
+    <label className="ls-quote-exclude" title="Exclude from customer quote">
+      <input
+        type="checkbox"
+        className="ls-quote-exclude-input"
+        checked={excluded}
+        onChange={(e) => void onChange(rowId, e.target.checked)}
+        aria-label="Exclude from customer quote"
+      />
+      <span className="ls-quote-exclude-box" aria-hidden />
+    </label>
+  );
+}
+
+function QuoteDlRow({
+  rowId,
+  excluded,
+  onExcludeChange,
+  dt,
+  dd,
+}: {
+  rowId: LayoutQuoteCustomerRowId;
+  excluded: boolean;
+  onExcludeChange: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
+  dt: ReactNode;
+  dd: ReactNode;
+}) {
+  return (
+    <div className="ls-quote-dl-row">
+      <CustomerExcludeCheckbox rowId={rowId} excluded={excluded} onChange={onExcludeChange} />
+      <dt>{dt}</dt>
+      <dd>{dd}</dd>
     </div>
   );
 }

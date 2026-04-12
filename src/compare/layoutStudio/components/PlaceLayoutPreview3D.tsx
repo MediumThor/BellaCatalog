@@ -1,8 +1,13 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
-import { buildSplashRectanglePoints, planDisplayPoints } from "../utils/blankPlanGeometry";
+import type { LayoutPiece, LayoutPoint, LayoutSlab, PiecePlacement } from "../types";
+import {
+  distancePointToSegment,
+  outwardNormalForEdge,
+  planDisplayPoints,
+} from "../utils/blankPlanGeometry";
+import { isPlanStripPiece, stripFoldsDownFromHinge } from "../utils/pieceRoles";
 import { centroid, normalizeClosedRing } from "../utils/geometry";
 import { allSinkCutoutRingsPlanWorld, coordPerInchForPlan } from "../utils/pieceSinks";
 import { DEFAULT_SLAB_THICKNESS_IN } from "../utils/parseThicknessInches";
@@ -124,30 +129,51 @@ function planCentroidChord(piece: LayoutPiece, allPieces: LayoutPiece[]): { x: n
   return centroid(ring);
 }
 
-/**
- * After standing a splash strip up (rotate plan XY toward vertical), the inner edge (p0–p1 from
- * {@link buildSplashRectanglePoints}, countertop side) should be “down” vs the outer edge: lower
- * world +Y than the outer edge midpoint (contact edge at the bottom of the backsplash).
- */
-function splashRotationXForInnerEdgeDown(piece: LayoutPiece, allPieces: LayoutPiece[]): number {
+/** Midpoint of {@link LayoutPiece.splashMeta}.`bottomEdgeIndex` on this strip (hinge line) in ExtrudeGeometry shape space. */
+function splashBottomEdgePivotInShapeSpace(piece: LayoutPiece, allPieces: LayoutPiece[]): THREE.Vector3 | null {
   const meta = piece.splashMeta;
-  if (!meta) return -Math.PI / 2;
-  const parent = allPieces.find((p) => p.id === meta.parentPieceId);
-  if (!parent) return -Math.PI / 2;
-  const parentDisp = planDisplayPoints(parent, allPieces);
-  const rect = buildSplashRectanglePoints(parentDisp, meta.parentEdgeIndex, meta.heightIn);
-  const [p0, p1, p2, p3] = rect;
-  const innerMid = new THREE.Vector3((p0.x + p1.x) / 2, -(p0.y + p1.y) / 2, 0);
-  const outerMid = new THREE.Vector3((p2.x + p3.x) / 2, -(p2.y + p3.y) / 2, 0);
-  const eNeg = new THREE.Euler(-Math.PI / 2, 0, 0);
-  const ePos = new THREE.Euler(Math.PI / 2, 0, 0);
-  const iyNeg = innerMid.clone().applyEuler(eNeg).y;
-  const oyNeg = outerMid.clone().applyEuler(eNeg).y;
-  const iyPos = innerMid.clone().applyEuler(ePos).y;
-  const oyPos = outerMid.clone().applyEuler(ePos).y;
-  if (iyNeg < oyNeg) return -Math.PI / 2;
-  if (iyPos < oyPos) return Math.PI / 2;
-  return -Math.PI / 2;
+  if (!meta) return null;
+  const ring = normalizeClosedRing(planDisplayPoints(piece, allPieces));
+  const n = ring.length;
+  if (n < 3) return null;
+  const ei = Math.max(0, Math.min(meta.bottomEdgeIndex ?? 0, n - 1));
+  const a = ring[ei]!;
+  const b = ring[(ei + 1) % n]!;
+  return new THREE.Vector3((a.x + b.x) / 2, -(a.y + b.y) / 2, 0);
+}
+
+/**
+ * Stand the edge strip up: rotate ±π/2 around the bottom edge so the strip faces “up” (centroid ends
+ * higher in +Y vs the other sign).
+ */
+function splashStandQuaternion(piece: LayoutPiece, allPieces: LayoutPiece[]): THREE.Quaternion {
+  const meta = piece.splashMeta;
+  const fallback = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  if (!meta) return fallback;
+  const ring = normalizeClosedRing(planDisplayPoints(piece, allPieces));
+  const n = ring.length;
+  if (n < 3) return fallback;
+  const ei = Math.max(0, Math.min(meta.bottomEdgeIndex ?? 0, n - 1));
+  const a = ring[ei]!;
+  const b = ring[(ei + 1) % n]!;
+  const aS = new THREE.Vector3(a.x, -a.y, 0);
+  const bS = new THREE.Vector3(b.x, -b.y, 0);
+  const pivot = new THREE.Vector3().addVectors(aS, bS).multiplyScalar(0.5);
+  const u = new THREE.Vector3().subVectors(bS, aS);
+  const len = u.length();
+  if (len < 1e-9) return fallback;
+  u.divideScalar(len);
+  const c = centroid(ring);
+  const cS = new THREE.Vector3(c.x, -c.y, 0);
+  const rel = new THREE.Vector3().subVectors(cS, pivot);
+  const qPos = new THREE.Quaternion().setFromAxisAngle(u, Math.PI / 2);
+  const qNeg = new THREE.Quaternion().setFromAxisAngle(u, -Math.PI / 2);
+  const yPos = rel.clone().applyQuaternion(qPos).y;
+  const yNeg = rel.clone().applyQuaternion(qNeg).y;
+  const up = yPos >= yNeg ? qPos : qNeg;
+  const down = yPos >= yNeg ? qNeg : qPos;
+  /** Backsplash: fold so centroid moves “up”; miter strip: fold the other way (down). */
+  return stripFoldsDownFromHinge(piece) ? down : up;
 }
 
 /** Outer boundary + sink bowl / faucet holes as inner paths (plan coords, same as 2D preview). */
@@ -215,6 +241,55 @@ function fixLidUVsPlanMapped(
  * so {@link fixLidUVsPlanMapped} stays authoritative on lids; where no “pure side” vertices exist,
  * extrusion’s own side UVs + {@link THREE.MeshStandardMaterial#map} still show grain.
  */
+/**
+ * Shear vertical wall vertices on miter-tagged edges so the top “outer” rim moves inward with height,
+ * approximating opposing 45° cuts at miter joints (plan-normal shear).
+ */
+function applyMiter45ShearToExtrudeGeometry(
+  geom: THREE.BufferGeometry,
+  planRing: { x: number; y: number }[],
+  miterEdgeIndices: readonly number[],
+  extrudeDepth: number,
+): void {
+  if (!miterEdgeIndices.length || extrudeDepth < 1e-6) return;
+  const pos = geom.attributes.position as THREE.BufferAttribute | undefined;
+  if (!pos) return;
+  const nRing = planRing.length;
+  if (nRing < 3) return;
+  const depth = extrudeDepth;
+  /** Top-of-wall offset in plan (inches) — tuned for a visible 45°-style joint in preview. */
+  const miterDelta = depth * 0.5;
+  const epsSeg = Math.max(0.02, depth * 0.004);
+
+  for (const ei of miterEdgeIndices) {
+    if (ei < 0 || ei >= nRing) continue;
+    const a = planRing[ei]!;
+    const b = planRing[(ei + 1) % nRing]!;
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const outPl = outwardNormalForEdge(planRing as LayoutPoint[], ei);
+
+    for (let i = 0; i < pos.count; i++) {
+      const sx = pos.getX(i);
+      const sy = pos.getY(i);
+      const sz = pos.getZ(i);
+      const px = sx;
+      const py = -sy;
+      if (distancePointToSegment({ x: px, y: py }, a, b) > epsSeg) continue;
+      const t = Math.min(1, Math.max(0, sz / depth));
+      if (t < 1e-9) continue;
+      const vx = px - mid.x;
+      const vy = py - mid.y;
+      if (vx * outPl.x + vy * outPl.y <= 1e-6) continue;
+      const ox = -outPl.x * miterDelta * t;
+      const oy = -outPl.y * miterDelta * t;
+      pos.setX(i, sx + ox);
+      pos.setY(i, sy - oy);
+    }
+  }
+  pos.needsUpdate = true;
+  geom.computeVertexNormals();
+}
+
 function fixSideUVsDecorativeGrain(
   geom: THREE.ExtrudeGeometry,
   slabW: number,
@@ -404,15 +479,28 @@ export function PlaceLayoutPreview3D({
       });
       if (!tex) sideMat.map = null;
       const mesh = new THREE.Mesh(geom, [lidMat, sideMat]);
-      if (piece.pieceRole === "splash") {
-        mesh.rotation.x = splashRotationXForInnerEdgeDown(piece, pieces);
+      if (isPlanStripPiece(piece)) {
+        const q = splashStandQuaternion(piece, pieces);
+        mesh.quaternion.copy(q);
+        /** Planar inward (slab thickness into counter); rotate in XY only — do not add R(inward).z or hinge floats above z = counter top. */
+        const pivot = splashBottomEdgePivotInShapeSpace(piece, pieces);
+        const meta = piece.splashMeta;
+        if (pivot && meta) {
+          const ring = normalizeClosedRing(planDisplayPoints(piece, pieces));
+          const ei = Math.max(0, Math.min(meta.bottomEdgeIndex ?? 0, ring.length - 1));
+          const out = outwardNormalForEdge(ring, ei);
+          const tSign = stripFoldsDownFromHinge(piece) ? -1 : 1;
+          const inward = new THREE.Vector3(-out.x * extrudeDepth * tSign, out.y * extrudeDepth * tSign, 0);
+          inward.applyQuaternion(q);
+          mesh.position.set(pivot.x + inward.x, pivot.y + inward.y, extrudeDepth);
+        }
       }
       scene.add(mesh);
       meshes.push(mesh);
       geometries.push(geom);
       materials.push(lidMat, sideMat);
       geom.computeBoundingBox();
-      if (piece.pieceRole === "splash") {
+      if (isPlanStripPiece(piece)) {
         mesh.updateMatrixWorld(true);
         const wb = new THREE.Box3().setFromObject(mesh);
         box.union(wb);
@@ -452,6 +540,12 @@ export function PlaceLayoutPreview3D({
             bevelEnabled: false,
           });
         }
+
+        const miterIdx = piece.edgeTags?.miterEdgeIndices;
+        if (miterIdx?.length) {
+          applyMiter45ShearToExtrudeGeometry(geom, pts, miterIdx, extrudeDepth);
+        }
+
         /** ExtrudeGeometry already computes vertex normals; a second pass blends rim normals and breaks {@link fixLidUVsPlanMapped}. */
 
         const textureM = slabInchesToPlanTextureMatrix({
@@ -462,6 +556,11 @@ export function PlaceLayoutPreview3D({
         });
         fixLidUVsPlanMapped(geom, slab.widthIn, slab.heightIn, textureM);
         fixSideUVsDecorativeGrain(geom, slab.widthIn, slab.heightIn);
+
+        if (isPlanStripPiece(piece)) {
+          const pivot = splashBottomEdgePivotInShapeSpace(piece, pieces);
+          if (pivot) geom.translate(-pivot.x, -pivot.y, 0);
+        }
 
         const tex = await loadTexture(slab.imageUrl);
         if (cancelled) {

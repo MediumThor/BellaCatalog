@@ -14,7 +14,8 @@ import {
   slabTextureRenderParamsTrace,
   shouldFillPieceWithSlabTexture,
 } from "../utils/slabLayoutTexture";
-import { pieceLetterLabelByPieceId, splashLetterLabelByPieceId } from "../utils/pieceLabels";
+import { edgeStripLetterLabelByPieceId, pieceLetterLabelByPieceId } from "../utils/pieceLabels";
+import { isPlanStripPiece } from "../utils/pieceRoles";
 import { clipEdgeStrokeSegmentsForKitchenSinks, coordPerInchForPlan } from "../utils/pieceSinks";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 
@@ -133,7 +134,7 @@ export function PlaceLayoutPreview({
   }, [slabs]);
 
   const pieceLetterLabelById = useMemo(() => pieceLetterLabelByPieceId(pieces), [pieces]);
-  const splashLetterLabelById = useMemo(() => splashLetterLabelByPieceId(pieces), [pieces]);
+  const stripLetterLabelById = useMemo(() => edgeStripLetterLabelByPieceId(pieces), [pieces]);
 
   const traceDims = useMemo(() => {
     let maxX = 0;
@@ -221,7 +222,7 @@ export function PlaceLayoutPreview({
           const placement = placementByPiece.get(piece.id);
           const slab =
             placement?.slabId != null ? slabById.get(placement.slabId) : undefined;
-          const isSplash = piece.pieceRole === "splash";
+          const isStrip = isPlanStripPiece(piece);
           const slabTex =
             placement && slab
               ? resolveSlabTex(workspaceKind, piece, placement, slab, effectivePpi!, pieces)
@@ -235,25 +236,36 @@ export function PlaceLayoutPreview({
 
           const placedMapped = !!slabTex;
           const unplacedNeutral =
-            !isSplash && (!placement || !placement.placed || !placement.slabId || !slabTex);
+            !isStrip && (!placement || !placement.placed || !placement.slabId || !slabTex);
 
           /** When slab texture is clipped in, avoid opaque fill — but keep a transparent fill when clickable so the hit target exists (`fill="none"` does not receive pointer events). */
           const fill = placedMapped
             ? onPieceActivate
               ? "transparent"
               : "none"
-            : isSplash
+            : isStrip
               ? "rgba(150, 185, 220, 0.14)"
               : unplacedNeutral
                 ? "rgba(72, 80, 92, 0.42)"
                 : `rgba(120, 200, 255, ${0.07 + (idx % 5) * 0.02})`;
 
-          const stroke = sel
-            ? "rgba(90, 175, 255, 0.98)"
-            : placedMapped
-              ? "rgba(200, 210, 225, 0.5)"
-              : "rgba(190, 205, 220, 0.42)";
-          const strokeW = sel ? 0.38 : placedMapped ? 0.22 : 0.16;
+          const MITER_PLAN_STROKE = "#0d47a1";
+          const edgeStroke = (ei: number) =>
+            piece.edgeTags?.miterEdgeIndices?.includes(ei)
+              ? MITER_PLAN_STROKE
+              : sel
+                ? "rgba(90, 175, 255, 0.98)"
+                : placedMapped
+                  ? "rgba(200, 210, 225, 0.5)"
+                  : "rgba(190, 205, 220, 0.42)";
+          const edgeStrokeW = (ei: number) =>
+            piece.edgeTags?.miterEdgeIndices?.includes(ei)
+              ? 0.2
+              : sel
+                ? 0.38
+                : placedMapped
+                  ? 0.22
+                  : 0.16;
 
           const xs = ringOpen.map((q) => q.x);
           const ys = ringOpen.map((q) => q.y);
@@ -276,8 +288,8 @@ export function PlaceLayoutPreview({
                   18,
                   Math.min(shortSide * 0.12, Math.min(traceDims.w, traceDims.h) * 0.045)
                 );
-          const labelText = isSplash
-            ? (splashLetterLabelById.get(piece.id) ?? "—")
+          const labelText = isStrip
+            ? (stripLetterLabelById.get(piece.id) ?? "—")
             : (pieceLetterLabelById.get(piece.id) ?? piece.name);
 
           const ringCen = centroid(ringOpen);
@@ -356,14 +368,14 @@ export function PlaceLayoutPreview({
                     y1={s.a.y}
                     x2={s.b.x}
                     y2={s.b.y}
-                    stroke={stroke}
-                    strokeWidth={strokeW}
+                    stroke={edgeStroke(ei)}
+                    strokeWidth={edgeStrokeW(ei)}
                     strokeLinecap="round"
                     style={{ pointerEvents: "none" }}
                   />
                 ));
               })}
-              {piece.pieceRole !== "splash" ? (
+              {!isPlanStripPiece(piece) ? (
                 <PieceSinkCutoutsSvg
                   piece={piece}
                   allPieces={pieces}

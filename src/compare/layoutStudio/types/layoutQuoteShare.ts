@@ -24,6 +24,8 @@ export type LayoutQuoteSharePayloadV1 = {
     areaSqFt: number;
     finishedEdgeLf: number;
     profileEdgeLf: number;
+    /** @optional Older shares before miter LF. */
+    miterEdgeLf?: number;
     estimatedSlabCount: number;
     sinkCount: number;
     /** Total area of splash strip pieces (est.), sq ft. */

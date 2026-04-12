@@ -145,7 +145,10 @@ export function computeSlabAutoNest(input: {
   const slabW = slabWidthIn;
   const slabH = slabHeightIn;
   if (!(slabW > 0) || !(slabH > 0) || !pixelsPerInch || pixelsPerInch <= 0) {
-    return { placements: placements.slice(), warnings: ["Scale or slab size is not available."] };
+    return {
+      placements: placements.slice(),
+      warnings: ["Scale or slab size is not available — nothing was moved."],
+    };
   }
 
   const byId = new Map(placements.map((p) => [p.pieceId, { ...p }]));
@@ -155,7 +158,10 @@ export function computeSlabAutoNest(input: {
   });
 
   if (onSlab.length === 0) {
-    return { placements: placements.map((p) => ({ ...p })), warnings: ["No pieces on this slab."] };
+    return {
+      placements: placements.map((p) => ({ ...p })),
+      warnings: ["No pieces on this slab — nothing to nest."],
+    };
   }
 
   const sorted = [...onSlab].sort(
@@ -180,7 +186,9 @@ export function computeSlabAutoNest(input: {
     if (!b) {
       const poly = worldPolygonAt(piece, pl.x, pl.y, rotation, mirrored, pixelsPerInch, pieces);
       placedPolys.push(poly);
-      warnings.push(`Could not use geometry for “${piece.name}” — left in place.`);
+      warnings.push(
+        `Could not use outline geometry for “${piece.name}” — that piece was left in place.`,
+      );
       continue;
     }
 
@@ -222,7 +230,9 @@ export function computeSlabAutoNest(input: {
     if (!found) {
       const poly = worldPolygonAt(piece, pl.x, pl.y, rotation, mirrored, pixelsPerInch, pieces);
       placedPolys.push(poly);
-      warnings.push(`Could not pack “${piece.name}” with the current spacing — left in place.`);
+      warnings.push(
+        `“${piece.name}” did not fit with the current gap and edge inset — left in place.`,
+      );
       continue;
     }
 
