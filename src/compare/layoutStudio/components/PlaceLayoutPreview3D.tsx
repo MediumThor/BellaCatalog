@@ -1,17 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { MOUSE } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { LayoutPiece, LayoutPoint, LayoutSlab, PiecePlacement } from "../types";
 import {
   distancePointToSegment,
   outwardNormalForEdge,
   planDisplayPoints,
+  planWorldOffset,
 } from "../utils/blankPlanGeometry";
+import { flattenOutlineRingWithArcs, pieceHasArcEdges } from "../utils/blankPlanEdgeArc";
 import { isPlanStripPiece, stripFoldsDownFromHinge } from "../utils/pieceRoles";
 import { centroid, normalizeClosedRing } from "../utils/geometry";
 import { allSinkCutoutRingsPlanWorld, coordPerInchForPlan } from "../utils/pieceSinks";
 import { DEFAULT_SLAB_THICKNESS_IN } from "../utils/parseThicknessInches";
-import { planPointToSlabInches, slabInchesToPlanTextureMatrix } from "../utils/slabLayoutTexture";
+import {
+  planCentroidForTexture,
+  planPointToSlabInches,
+  slabInchesToPlanTextureMatrix,
+} from "../utils/slabLayoutTexture";
 
 /**
  * Optional overrides for the 3D preview scene. Defaults match the pre-styling behavior that
@@ -97,8 +104,18 @@ type PlaceLayoutPreview3DProps = {
   appearance?: Partial<PlaceLayoutPreview3DAppearance>;
 };
 
+type ViewAxis = "x" | "y" | "z";
+
 type ViewControlsApi = {
   resetTopDown: () => void;
+  /** Step orbit ±45° around the given axis (pass from UI state so this works before async scene setup finishes). */
+  stepSelectedAxis: (direction: -1 | 1, axis?: ViewAxis | null) => void;
+  /** Side elevation: camera on −Y, up +Z (plan X horizontal, thickness Z vertical). */
+  setFrontView: () => void;
+  /** Opposite of front: camera on +Y, same up +Z. */
+  setBackView: () => void;
+  /** Oblique 45° between top (plan) and front (elevation). Resets axis orbit. */
+  setIso45View: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
 };
@@ -114,19 +131,12 @@ function polygonSignedArea(pts: { x: number; y: number }[]): number {
 
 /**
  * Chord polygon in plan space — same frame as sink placement / {@link planDisplayPoints}.
- * (Slab placement uses arc-flattened outlines elsewhere; sinks use chord edges + normals, so 3D must match.)
+ * Arc radii are sampled into a polyline for extrusion via {@link flattenOutlineRingWithArcs}.
  */
 function planOutlineRing(piece: LayoutPiece, allPieces: LayoutPiece[]): { x: number; y: number }[] | null {
   const ring = normalizeClosedRing(planDisplayPoints(piece, allPieces));
   if (ring.length < 3) return null;
   return ring.map((p) => ({ x: p.x, y: p.y }));
-}
-
-/** Centroid of chord outline — pairs with {@link planOutlineRing} for slab→plan texture matrix in 3D. */
-function planCentroidChord(piece: LayoutPiece, allPieces: LayoutPiece[]): { x: number; y: number } | null {
-  const ring = normalizeClosedRing(planDisplayPoints(piece, allPieces));
-  if (ring.length < 3) return null;
-  return centroid(ring);
 }
 
 /** Midpoint of {@link LayoutPiece.splashMeta}.`bottomEdgeIndex` on this strip (hinge line) in ExtrudeGeometry shape space. */
@@ -223,6 +233,8 @@ function fixLidUVsPlanMapped(
   const pos = geom.attributes.position as THREE.BufferAttribute;
   const normal = geom.attributes.normal as THREE.BufferAttribute;
   if (!uv || !pos || !normal) return;
+  const tw = Math.max(slabW, 1e-6);
+  const th = Math.max(slabH, 1e-6);
   const eps = 1e-3;
   for (let i = 0; i < pos.count; i++) {
     const nz = normal.getZ(i);
@@ -230,7 +242,10 @@ function fixLidUVsPlanMapped(
     const planX = pos.getX(i);
     const planY = -pos.getY(i);
     const { sx, sy } = planPointToSlabInches(textureM, planX, planY);
-    uv.setXY(i, sx / slabW, 1 - sy / slabH);
+    /** Keep UVs in texture — out-of-range slab inches clamp at the image edge and smear one column. */
+    const sxC = Math.min(Math.max(sx, 0), tw);
+    const syC = Math.min(Math.max(sy, 0), th);
+    uv.setXY(i, sxC / tw, 1 - syC / th);
   }
   uv.needsUpdate = true;
 }
@@ -290,6 +305,7 @@ function applyMiter45ShearToExtrudeGeometry(
   geom.computeVertexNormals();
 }
 
+
 function fixSideUVsDecorativeGrain(
   geom: THREE.ExtrudeGeometry,
   slabW: number,
@@ -327,7 +343,14 @@ export function PlaceLayoutPreview3D({
   appearance: appearanceProp,
 }: PlaceLayoutPreview3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const orbitControlsRef = useRef<OrbitControls | null>(null);
   const viewControlsRef = useRef<ViewControlsApi | null>(null);
+  const [selectedViewAxis, setSelectedViewAxis] = useState<ViewAxis>("z");
+  const [panDragEnabled, setPanDragEnabled] = useState(false);
+  const panDragEnabledRef = useRef(panDragEnabled);
+  panDragEnabledRef.current = panDragEnabled;
+  const selectedAxisRef = useRef<ViewAxis>("z");
+  selectedAxisRef.current = selectedViewAxis;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -361,6 +384,25 @@ export function PlaceLayoutPreview3D({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
+    controls.screenSpacePanning = true;
+    orbitControlsRef.current = controls;
+    {
+      const pan = panDragEnabledRef.current;
+      controls.mouseButtons.LEFT = pan ? MOUSE.PAN : MOUSE.ROTATE;
+      controls.mouseButtons.RIGHT = pan ? MOUSE.ROTATE : MOUSE.PAN;
+    }
+
+    /** Rotates camera offset around `controls.target` after OrbitControls (world axes: X/Y = plan, Z = thickness). */
+    const axisOrbitQuat = new THREE.Quaternion();
+    const _invAxisOrbitQuat = new THREE.Quaternion();
+    const _offsetScratch = new THREE.Vector3();
+    const _fwdScratch = new THREE.Vector3();
+    const _axisDragQuat = new THREE.Quaternion();
+    const worldX = new THREE.Vector3(1, 0, 0);
+    const worldY = new THREE.Vector3(0, 1, 0);
+    const worldZ = new THREE.Vector3(0, 0, 1);
+
+    let maxSceneDimForNudge = 40;
 
     scene.add(new THREE.AmbientLight(appearance.ambientColor, appearance.ambientIntensity));
     scene.add(
@@ -436,25 +478,84 @@ export function PlaceLayoutPreview3D({
       scene.add(p);
     }
 
-    const texLoader = new THREE.TextureLoader();
-    texLoader.crossOrigin = "anonymous";
-
     const textureCache = new Map<string, THREE.Texture>();
-    const loadTexture = (url: string): Promise<THREE.Texture | null> => {
-      if (textureCache.has(url)) return Promise.resolve(textureCache.get(url)!);
-      return new Promise((resolve) => {
-        texLoader.load(
-          url,
-          (tex: THREE.Texture) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-            textureCache.set(url, tex);
-            resolve(tex);
-          },
-          undefined,
-          () => resolve(null)
-        );
+
+    /** Some slab hosts omit CORS on `crossOrigin=anonymous` (WebGL upload fails); retry without. */
+    function loadImageElement(url: string, crossOrigin: "" | "anonymous"): Promise<HTMLImageElement> {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        if (crossOrigin) img.crossOrigin = crossOrigin;
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("image load failed"));
+        img.src = url;
       });
+    }
+
+    const loadTexture = async (url: string): Promise<THREE.Texture | null> => {
+      const cached = textureCache.get(url);
+      if (cached) return cached;
+      let image: HTMLImageElement;
+      try {
+        image = await loadImageElement(url, "anonymous");
+      } catch {
+        try {
+          image = await loadImageElement(url, "");
+        } catch {
+          return null;
+        }
+      }
+      const tex = new THREE.Texture(image);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      tex.needsUpdate = true;
+      textureCache.set(url, tex);
+      return tex;
+    };
+
+    /** Nudge for Z-axis orbit when camera is directly above target; uses `maxSceneDimForNudge` (updated when bounds are known). */
+    const nudgeCameraOffVerticalIfNeeded = () => {
+      const t = controls.target;
+      _offsetScratch.copy(camera.position).sub(t);
+      if (_offsetScratch.lengthSq() < 1e-12) return;
+      const xy = Math.hypot(_offsetScratch.x, _offsetScratch.y);
+      const eps = Math.max(maxSceneDimForNudge * 0.012, 1.5);
+      if (xy < eps) {
+        _offsetScratch.x += eps;
+        camera.position.copy(t).add(_offsetScratch);
+      }
+    };
+
+    const applyAxisOrbitStep = (direction: -1 | 1, axisOverride?: ViewAxis | null) => {
+      const ax = axisOverride ?? selectedAxisRef.current;
+      if (!ax) return;
+      const axisVec = ax === "x" ? worldX : ax === "y" ? worldY : worldZ;
+      if (ax === "z") nudgeCameraOffVerticalIfNeeded();
+      _axisDragQuat.setFromAxisAngle(axisVec, direction * (Math.PI / 4));
+      /**
+       * Keep `camera.position` in sync with `axisOrbitQuat` the same frame. Otherwise the RAF loop
+       * un-rotates with the *new* q while the camera still reflects the *old* q, which corrupts the
+       * orbit offset and makes ±45° steps look like no rotation.
+       */
+      const t = controls.target;
+      _offsetScratch.copy(camera.position).sub(t);
+      _offsetScratch.applyQuaternion(_axisDragQuat);
+      camera.position.copy(t).add(_offsetScratch);
+      axisOrbitQuat.premultiply(_axisDragQuat);
+      axisOrbitQuat.normalize();
+      controls.update();
+    };
+
+    /** Stubs for view presets until bounds/async setup completes; axis stepping works immediately. */
+    viewControlsRef.current = {
+      resetTopDown: () => {},
+      setFrontView: () => {},
+      setBackView: () => {},
+      setIso45View: () => {},
+      zoomIn: () => {},
+      zoomOut: () => {},
+      stepSelectedAxis: applyAxisOrbitStep,
     };
 
     const meshes: THREE.Mesh[] = [];
@@ -463,7 +564,11 @@ export function PlaceLayoutPreview3D({
 
     const box = new THREE.Box3();
 
-    const addPieceMesh = (geom: THREE.ExtrudeGeometry, tex: THREE.Texture | null, piece: LayoutPiece) => {
+    const addPieceMesh = (
+      geom: THREE.ExtrudeGeometry,
+      tex: THREE.Texture | null,
+      piece: LayoutPiece,
+    ): THREE.Mesh => {
       const lidMat = new THREE.MeshStandardMaterial({
         map: tex ?? undefined,
         color: tex ? appearance.texturedLidTint : appearance.fallbackLidColor,
@@ -507,6 +612,7 @@ export function PlaceLayoutPreview3D({
       } else if (geom.boundingBox) {
         box.union(geom.boundingBox);
       }
+      return mesh;
     };
 
     void (async () => {
@@ -519,11 +625,21 @@ export function PlaceLayoutPreview3D({
         const slab = slabById.get(pl.slabId);
         if (!slab || slab.widthIn <= 0 || slab.heightIn <= 0) continue;
 
-        const planCentroid = planCentroidChord(piece, pieces);
+        const planCentroid = planCentroidForTexture(piece, pieces);
         if (!planCentroid) continue;
 
-        const pts = planOutlineRing(piece, pieces);
-        if (!pts || pts.length < 3) continue;
+        const chordPts = planOutlineRing(piece, pieces);
+        if (!chordPts || chordPts.length < 3) continue;
+
+        const off = planWorldOffset(piece, pieces);
+        const arcCenterOff = { x: off.ox, y: off.oy };
+        const chordLayout = chordPts.map((p) => ({ x: p.x, y: p.y }));
+        const pts: { x: number; y: number }[] = pieceHasArcEdges(piece)
+          ? flattenOutlineRingWithArcs(piece, chordLayout, arcCenterOff, 32).map((p) => ({
+              x: p.x,
+              y: p.y,
+            }))
+          : chordPts;
 
         const holeRings = allSinkCutoutRingsPlanWorld(piece, pieces, coordPerInch);
 
@@ -543,7 +659,7 @@ export function PlaceLayoutPreview3D({
 
         const miterIdx = piece.edgeTags?.miterEdgeIndices;
         if (miterIdx?.length) {
-          applyMiter45ShearToExtrudeGeometry(geom, pts, miterIdx, extrudeDepth);
+          applyMiter45ShearToExtrudeGeometry(geom, chordPts, miterIdx, extrudeDepth);
         }
 
         /** ExtrudeGeometry already computes vertex normals; a second pass blends rim normals and breaks {@link fixLidUVsPlanMapped}. */
@@ -598,13 +714,53 @@ export function PlaceLayoutPreview3D({
       const defaultZoomInClicks = 5;
       const topViewDistance = maxDim * 2.5 * Math.pow(zoomInFactor, defaultZoomInClicks);
 
+      const clampCameraPlanes = () => {
+        camera.near = Math.max(maxDim * 0.02, 0.1);
+        camera.far = Math.max(maxDim * 50, 5000);
+        camera.updateProjectionMatrix();
+      };
+
+      const resetAxisOrbit = () => {
+        axisOrbitQuat.identity();
+      };
+
       const resetTopDown = () => {
+        resetAxisOrbit();
         camera.up.set(0, 1, 0);
         camera.position.set(center.x, center.y, center.z + topViewDistance);
         controls.target.copy(center);
-        camera.near = maxDim * 0.02;
-        camera.far = maxDim * 50;
-        camera.updateProjectionMatrix();
+        clampCameraPlanes();
+        controls.update();
+      };
+
+      const setFrontView = () => {
+        resetAxisOrbit();
+        // Elevation from −Y toward +Y: shows the “front” plan face (camera at +Y was −Y-facing / read as back).
+        // World Z = extrusion depth; use Z as screen-up so the view isn’t degenerate (up ∥ view with default Y-up).
+        camera.up.set(0, 0, 1);
+        camera.position.set(center.x, center.y - topViewDistance, center.z);
+        controls.target.copy(center);
+        clampCameraPlanes();
+        controls.update();
+      };
+
+      const setBackView = () => {
+        resetAxisOrbit();
+        camera.up.set(0, 0, 1);
+        camera.position.set(center.x, center.y + topViewDistance, center.z);
+        controls.target.copy(center);
+        clampCameraPlanes();
+        controls.update();
+      };
+
+      const setIso45View = () => {
+        resetAxisOrbit();
+        // Bisect top offset (0,0,+1) and front offset (0,−1,0) → same X as scene; looks between plan and elevation.
+        camera.up.set(0, 1, 0);
+        const dir = new THREE.Vector3(0, -1, 1).normalize();
+        camera.position.copy(center).add(dir.multiplyScalar(topViewDistance));
+        controls.target.copy(center);
+        clampCameraPlanes();
         controls.update();
       };
 
@@ -617,10 +773,16 @@ export function PlaceLayoutPreview3D({
         controls.update();
       };
 
+      maxSceneDimForNudge = maxDim;
+
       resetTopDown();
 
       viewControlsRef.current = {
         resetTopDown,
+        stepSelectedAxis: applyAxisOrbitStep,
+        setFrontView,
+        setBackView,
+        setIso45View,
         zoomIn: () => zoomBy(zoomInFactor),
         zoomOut: () => zoomBy(1 / zoomInFactor),
       };
@@ -641,7 +803,38 @@ export function PlaceLayoutPreview3D({
     let rafId = 0;
     const loop = () => {
       rafId = requestAnimationFrame(loop);
+      const t = controls.target;
+
+      _invAxisOrbitQuat.copy(axisOrbitQuat).invert();
+      _offsetScratch.copy(camera.position).sub(t);
+      _offsetScratch.applyQuaternion(_invAxisOrbitQuat);
+      camera.position.copy(t).add(_offsetScratch);
+
       controls.update();
+
+      _offsetScratch.copy(camera.position).sub(t);
+      _offsetScratch.applyQuaternion(axisOrbitQuat);
+      camera.position.copy(t).add(_offsetScratch);
+      /**
+       * World up for lookAt must stay a **world** axis (do not apply `axisOrbitQuat` to `up`).
+       * For oblique / elevation / 45° views, prefer +Z as the screen-up hint so turntable (Z) orbits
+       * do not introduce roll; for nearly top-down views (eye along ±world Z), use +Y.
+       */
+      _fwdScratch.copy(camera.position).sub(t);
+      const dist = _fwdScratch.length();
+      if (dist > 1e-9) {
+        _fwdScratch.multiplyScalar(1 / dist);
+        const az = Math.abs(_fwdScratch.z);
+        if (az > 0.88) {
+          camera.up.set(0, 1, 0);
+        } else {
+          camera.up.set(0, 0, 1);
+        }
+      } else {
+        camera.up.set(0, 1, 0);
+      }
+      camera.lookAt(t);
+
       renderer.render(scene, camera);
     };
     loop();
@@ -649,6 +842,7 @@ export function PlaceLayoutPreview3D({
     return () => {
       cancelled = true;
       viewControlsRef.current = null;
+      orbitControlsRef.current = null;
       cancelAnimationFrame(rafId);
       ro.disconnect();
       controls.dispose();
@@ -664,7 +858,27 @@ export function PlaceLayoutPreview3D({
         container.removeChild(renderer.domElement);
       }
     };
-  }, [pieces, placements, slabs, pixelsPerInch, slabThicknessInches, workspaceKind, appearanceProp]);
+  }, [
+    pieces,
+    placements,
+    slabs,
+    pixelsPerInch,
+    slabThicknessInches,
+    workspaceKind,
+    appearanceProp,
+  ]);
+
+  useEffect(() => {
+    const c = orbitControlsRef.current;
+    if (!c) return;
+    if (panDragEnabled) {
+      c.mouseButtons.LEFT = MOUSE.PAN;
+      c.mouseButtons.RIGHT = MOUSE.ROTATE;
+    } else {
+      c.mouseButtons.LEFT = MOUSE.ROTATE;
+      c.mouseButtons.RIGHT = MOUSE.PAN;
+    }
+  }, [panDragEnabled]);
 
   if (!pixelsPerInch || pixelsPerInch <= 0) {
     return (
@@ -676,15 +890,113 @@ export function PlaceLayoutPreview3D({
 
   return (
     <div className="ls-place-layout-preview-3d-wrap">
-      <div ref={containerRef} className="ls-place-layout-preview-3d" />
+      <div
+        ref={containerRef}
+        className="ls-place-layout-preview-3d"
+        title="Choose X, Y, or Z on the toolbar, then use ← → to rotate the view ±45° around that world axis (Z = slab thickness)."
+      />
       <div className="ls-place-layout-preview-3d-controls" role="toolbar" aria-label="3D view controls">
         <button
           type="button"
-          className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn"
-          onClick={() => viewControlsRef.current?.resetTopDown()}
-          title="Plan view from above"
+          className={
+            panDragEnabled
+              ? "ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-axis-pill ls-place-layout-preview-3d-axis-pill--active"
+              : "ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-axis-pill"
+          }
+          aria-pressed={panDragEnabled}
+          onClick={() => setPanDragEnabled((v) => !v)}
+          title={
+            panDragEnabled
+              ? "Left-drag pans the view; right-drag orbits. Click to use left-drag for orbit."
+              : "Click to use left-drag for pan; right-drag orbits."
+          }
         >
-          Top view
+          Pan
+        </button>
+        <div
+          className="ls-place-layout-preview-3d-view-col"
+          role="group"
+          aria-label="Top, back, and front views"
+        >
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn"
+            onClick={() => viewControlsRef.current?.setBackView()}
+            title="Back elevation (opposite side from Front)"
+          >
+            Back
+          </button>
+          <div
+            className="ls-place-layout-preview-3d-view-row"
+            role="group"
+            aria-label="Top view"
+          >
+            <button
+              type="button"
+              className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn"
+              onClick={() => viewControlsRef.current?.resetTopDown()}
+              title="Plan view from above"
+            >
+              Top
+            </button>
+          </div>
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn"
+            onClick={() => viewControlsRef.current?.setFrontView()}
+            title="Front elevation (side view)"
+          >
+            Front
+          </button>
+        </div>
+        <div
+          className="ls-place-layout-preview-3d-axis-rot"
+          role="group"
+          aria-label="Rotate around world axis"
+        >
+          <span className="ls-place-layout-preview-3d-axis-rot-lbl">Axis</span>
+          {(["x", "y", "z"] as const).map((ax) => (
+            <button
+              key={ax}
+              type="button"
+              className={
+                selectedViewAxis === ax
+                  ? "ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-axis-pill ls-place-layout-preview-3d-axis-pill--active"
+                  : "ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-axis-pill"
+              }
+              onClick={() => setSelectedViewAxis(ax)}
+              aria-pressed={selectedViewAxis === ax}
+              title={`Rotate around ${ax.toUpperCase()} (world axis)`}
+            >
+              {ax.toUpperCase()}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-control-btn--icon"
+            onClick={() => viewControlsRef.current?.stepSelectedAxis(-1, selectedViewAxis)}
+            title={`Rotate −45° around ${selectedViewAxis.toUpperCase()}`}
+            aria-label={`Rotate 45 degrees negative around ${selectedViewAxis.toUpperCase()} axis`}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn ls-place-layout-preview-3d-control-btn--icon"
+            onClick={() => viewControlsRef.current?.stepSelectedAxis(1, selectedViewAxis)}
+            title={`Rotate +45° around ${selectedViewAxis.toUpperCase()}`}
+            aria-label={`Rotate 45 degrees positive around ${selectedViewAxis.toUpperCase()} axis`}
+          >
+            →
+          </button>
+        </div>
+        <button
+          type="button"
+          className="ls-btn ls-btn-secondary ls-place-layout-preview-3d-control-btn"
+          onClick={() => viewControlsRef.current?.setIso45View()}
+          title="45° oblique view (between top plan and front elevation)"
+        >
+          45°
         </button>
         <button
           type="button"

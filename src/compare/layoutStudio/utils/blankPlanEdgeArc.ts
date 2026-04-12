@@ -652,7 +652,10 @@ export function sampleArcEdgePointsForStroke(
   ring: LayoutPoint[],
   interiorCentroid: LayoutPoint,
   segmentsAlongArc = 24,
+  arcCenterOffset?: { x: number; y: number } | null,
 ): LayoutPoint[] {
+  const ox = arcCenterOffset?.x ?? 0;
+  const oy = arcCenterOffset?.y ?? 0;
   const n = ring.length;
   if (n < 2) return [];
   const i = ((edgeIndex % n) + n) % n;
@@ -661,7 +664,7 @@ export function sampleArcEdgePointsForStroke(
   const circ = getEffectiveEdgeArcCirclesIn(piece)[i];
   if (circ != null && circ.r > 1e-9) {
     return sampleArcPointsFromCircleCenter(
-      { x: circ.cx, y: circ.cy },
+      { x: circ.cx + ox, y: circ.cy + oy },
       A,
       B,
       interiorCentroid,
@@ -781,7 +784,14 @@ export function pathDClosedRingWithArcs(
   sagittas: (number | null)[] | undefined,
   interiorCentroid: LayoutPoint,
   circles?: (LayoutArcCircle | null)[] | null,
+  /**
+   * `edgeArcCircleIn` centers are piece-local; when `ring` is in plan display space, pass the same
+   * world offset as `flattenOutlineRingWithArcs` (e.g. `planWorldOffset` from blankPlanGeometry).
+   */
+  arcCenterOffset?: { x: number; y: number } | null,
 ): string {
+  const ox = arcCenterOffset?.x ?? 0;
+  const oy = arcCenterOffset?.y ?? 0;
   const r = normalizeClosedRing(ring);
   const n = r.length;
   if (n < 2) return "";
@@ -797,7 +807,7 @@ export function pathDClosedRingWithArcs(
     if (i === 0) parts.push(`M ${A.x} ${A.y}`);
     const c = circ[i];
     if (c != null && c.r > 1e-9) {
-      const O = { x: c.cx, y: c.cy };
+      const O = { x: c.cx + ox, y: c.cy + oy };
       const arcCmd = svgCircularArcFragmentFromCircleCenter(
         O,
         c.r,
@@ -829,30 +839,41 @@ export function pathDClosedRingWithArcs(
   return parts.join(" ");
 }
 
-export function flattenPieceOutlineForGeometry(
+/**
+ * Flatten arc edges to a polyline. `ring` must match the coordinate system of `A`/`B` vertices
+ * (e.g. piece `points` or plan-display ring). Circle centers in `piece.edgeArcCircleIn` are in
+ * piece-local space — add `arcCenterOffset` so they align with `ring` (e.g. `planWorldOffset`
+ * when `ring` comes from `planDisplayPoints`).
+ */
+export function flattenOutlineRingWithArcs(
   piece: LayoutPiece,
+  ring: LayoutPoint[],
+  arcCenterOffset: LayoutPoint,
   samplesPerArc = 20,
 ): LayoutPoint[] {
-  const ring = normalizeClosedRing(piece.points);
-  const n = ring.length;
-  if (n < 3) return ring;
+  const r = normalizeClosedRing(ring);
+  const n = r.length;
+  if (n < 3) return r;
   const arcs = getEffectiveEdgeArcSagittasIn(piece);
   const circ = getEffectiveEdgeArcCirclesIn(piece);
-  const cen = centroid(ring);
+  const cen = centroid(r);
   const out: LayoutPoint[] = [];
   for (let i = 0; i < n; i++) {
-    const A = ring[i];
-    const B = ring[(i + 1) % n];
+    const A = r[i]!;
+    const B = r[(i + 1) % n]!;
     const c = circ[i];
     if (c != null && c.r > 1e-9) {
-      const O = { x: c.cx, y: c.cy };
+      const O = {
+        x: c.cx + arcCenterOffset.x,
+        y: c.cy + arcCenterOffset.y,
+      };
       const seg = sampleArcPointsFromCircleCenter(
         O,
-        A!,
-        B!,
+        A,
+        B,
         cen,
         samplesPerArc,
-        ring,
+        r,
       );
       if (i === 0) out.push(seg[0]!);
       for (let k = 1; k < seg.length; k++) out.push(seg[k]!);
@@ -860,15 +881,28 @@ export function flattenPieceOutlineForGeometry(
     }
     const h = arcs[i];
     if (h == null || Math.abs(h) < 1e-9) {
-      if (i === 0) out.push({ ...A! });
-      out.push({ ...B! });
+      if (i === 0) out.push({ ...A });
+      out.push({ ...B });
     } else {
-      const seg = sampleArcPoints(A!, B!, h, cen, samplesPerArc);
+      const seg = sampleArcPoints(A, B, h, cen, samplesPerArc);
       if (i === 0) out.push(seg[0]!);
       for (let k = 1; k < seg.length; k++) out.push(seg[k]!);
     }
   }
   return normalizeClosedRing(out);
+}
+
+export function flattenPieceOutlineForGeometry(
+  piece: LayoutPiece,
+  samplesPerArc = 20,
+): LayoutPoint[] {
+  const ring = normalizeClosedRing(piece.points);
+  return flattenOutlineRingWithArcs(
+    piece,
+    ring,
+    { x: 0, y: 0 },
+    samplesPerArc,
+  );
 }
 
 export function polygonAreaWithArcEdges(piece: LayoutPiece): number {

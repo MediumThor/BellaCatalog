@@ -7,7 +7,7 @@ import {
   pieceHasArcEdges,
   sampleArcEdgePointsForStroke,
 } from "../utils/blankPlanEdgeArc";
-import { planDisplayPoints } from "../utils/blankPlanGeometry";
+import { planDisplayPoints, planWorldOffset } from "../utils/blankPlanGeometry";
 import { centroid, ensureClosedRing, normalizeClosedRing } from "../utils/geometry";
 import {
   slabTextureRenderParams,
@@ -77,11 +77,13 @@ function piecePathD(piece: LayoutPiece, workspaceKind: "blank" | "source", allPi
   const ringOpen = normalizeClosedRing(disp);
   const ringCen = centroid(ringOpen);
   if (pieceHasArcEdges(piece)) {
+    const { ox, oy } = planWorldOffset(piece, allPieces);
     return pathDClosedRingWithArcs(
       ringOpen,
       getEffectiveEdgeArcSagittasIn(piece),
       ringCen,
       getEffectiveEdgeArcCirclesIn(piece),
+      { x: ox, y: oy },
     );
   }
   const pts = ensureClosedRing(ringOpen);
@@ -293,6 +295,7 @@ export function PlaceLayoutPreview({
             : (pieceLetterLabelById.get(piece.id) ?? piece.name);
 
           const ringCen = centroid(ringOpen);
+          const { ox: arcOx, oy: arcOy } = planWorldOffset(piece, pieces);
 
           return (
             <g key={piece.id}>
@@ -348,6 +351,7 @@ export function PlaceLayoutPreview({
                   ringOpen,
                   ringCen,
                   28,
+                  { x: arcOx, y: arcOy },
                 );
                 const segsOut: { a: LayoutPoint; b: LayoutPoint }[] = [];
                 for (let k = 0; k < arcPts.length - 1; k++) {

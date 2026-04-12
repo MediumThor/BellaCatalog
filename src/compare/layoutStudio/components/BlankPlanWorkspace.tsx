@@ -19,6 +19,7 @@ import type {
 } from "../types";
 import {
   planDisplayPoints,
+  planWorldOffset,
   distancePointToSegment,
   tryRemoveDraftPolylinePoint,
 } from "../utils/blankPlanGeometry";
@@ -2479,6 +2480,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               const disp = planDisplayPoints(piece, pieces);
               const ringOpen = normalizeClosedRing(disp);
               const ringCen = centroid(ringOpen);
+              const arcCenterOff = planWorldOffset(piece, pieces);
               const edgeSagittasStroke = getEffectiveEdgeArcSagittasIn(piece);
               const edgeCirclesStroke = getEffectiveEdgeArcCirclesIn(piece);
               /** Kitchen sinks clip edge strokes into segments; keep polyline there. */
@@ -2492,6 +2494,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     edgeSagittasStroke,
                     ringCen,
                     edgeCirclesStroke,
+                    { x: arcCenterOff.ox, y: arcCenterOff.oy },
                   )
                 : ensureClosedRing(ringOpen)
                     .map((q, i) => `${i === 0 ? "M" : "L"} ${q.x} ${q.y}`)
@@ -2608,7 +2611,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       arcC != null &&
                       arcC.r > 1e-9
                         ? svgCircularArcFragmentFromCircleCenter(
-                            { x: arcC.cx, y: arcC.cy },
+                            {
+                              x: arcC.cx + arcCenterOff.ox,
+                              y: arcC.cy + arcCenterOff.oy,
+                            },
                             arcC.r,
                             a,
                             b,
@@ -2653,6 +2659,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       ringOpen,
                       ringCen,
                       28,
+                      { x: arcCenterOff.ox, y: arcCenterOff.oy },
                     );
                     const segs: { a: LayoutPoint; b: LayoutPoint }[] = [];
                     for (let k = 0; k < arcPts.length - 1; k++) {
@@ -2805,6 +2812,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   const ring = normalizeClosedRing(disp);
                   const n = ring.length;
                   const ringCen = centroid(ring);
+                  const arcCenterOff = planWorldOffset(piece, pieces);
                   const edgeSagittas = getEffectiveEdgeArcSagittasIn(piece);
                   const edgeCircles = getEffectiveEdgeArcCirclesIn(piece);
                   const prof = profileSet(piece);
@@ -2927,7 +2935,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     const arcFragFromCircle =
                       arcC != null && arcC.r > 1e-9
                         ? svgCircularArcFragmentFromCircleCenter(
-                            { x: arcC.cx, y: arcC.cy },
+                            {
+                              x: arcC.cx + arcCenterOff.ox,
+                              y: arcC.cy + arcCenterOff.oy,
+                            },
                             arcC.r,
                             a!,
                             b!,

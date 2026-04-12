@@ -190,6 +190,8 @@ export function LayoutStudioScreen({
   const [addSinkEdge, setAddSinkEdge] = useState<{ pieceId: string; edgeIndex: number } | null>(null);
   /** Slab placement vs live preview: stacked (default) or side-by-side. */
   const [placeSplitView, setPlaceSplitView] = useState(true);
+  /** Layout tab: constrain slab piece drags to horizontal or vertical only. */
+  const [placeOrthoMove, setPlaceOrthoMove] = useState(false);
   /** Place phase: confirm before removing a duplicate slab instance. */
   const [removeSlabConfirmId, setRemoveSlabConfirmId] = useState<string | null>(null);
   /** Auto nest pieces on the active slab (min gap inches). */
@@ -2180,14 +2182,25 @@ export function LayoutStudioScreen({
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className={`ls-btn ls-btn-secondary ls-place-layout-toggle${placeSplitView ? " is-active" : ""}`}
-                  onClick={() => setPlaceSplitView((v) => !v)}
-                  title="Place slab view and live preview stacked or side by side"
-                >
-                  {placeSplitView ? "Stacked layout" : "Side-by-side layout"}
-                </button>
+                <div className="ls-place-split-toolbar-actions">
+                  <button
+                    type="button"
+                    className={`ls-btn ls-btn-secondary ls-place-layout-toggle${placeOrthoMove ? " is-active" : ""}`}
+                    aria-pressed={placeOrthoMove}
+                    onClick={() => setPlaceOrthoMove((v) => !v)}
+                    title="Ortho — drag pieces only horizontally or vertically on the slab"
+                  >
+                    Ortho
+                  </button>
+                  <button
+                    type="button"
+                    className={`ls-btn ls-btn-secondary ls-place-layout-toggle${placeSplitView ? " is-active" : ""}`}
+                    onClick={() => setPlaceSplitView((v) => !v)}
+                    title="Place slab view and live preview stacked or side by side"
+                  >
+                    {placeSplitView ? "Stacked layout" : "Side-by-side layout"}
+                  </button>
+                </div>
               </div>
               <div className={`ls-place-dual${placeSplitView ? " ls-place-dual--side" : ""}`}>
                 <div className="ls-place-region">
@@ -2217,6 +2230,7 @@ export function LayoutStudioScreen({
                     onAddSlab={addSlabClone}
                     addSlabDisabled={layoutSlabs.length >= MAX_LAYOUT_SLABS}
                     addSlabTitle={`Duplicate slab material (${layoutSlabs.length}/${MAX_LAYOUT_SLABS})`}
+                    orthoMove={placeOrthoMove}
                   />
                 </div>
                 <div className="ls-place-region ls-place-region--preview">

@@ -101,7 +101,14 @@ type Props = {
   onAddSlab?: () => void;
   addSlabDisabled?: boolean;
   addSlabTitle?: string;
+  /**
+   * When true, dragging a piece on the slab moves only horizontally or vertically (axis locks after a short drag).
+   */
+  orthoMove?: boolean;
 };
+
+/** Pixels of pointer travel before ortho mode picks horizontal vs vertical. */
+const PLACEMENT_ORTHO_LOCK_PX = 4;
 
 export function PlaceWorkspace({
   slabs,
@@ -128,10 +135,13 @@ export function PlaceWorkspace({
   onAddSlab,
   addSlabDisabled = false,
   addSlabTitle,
+  orthoMove = false,
 }: Props) {
   const svgRefs = useRef<Map<string, SVGSVGElement | null>>(new Map());
   /** Last slab used during an active drag (handles gaps between slab cards). */
   const lastDragSlabRef = useRef<string | null>(null);
+  /** Ortho drag: lock pointer to screen X or Y after initial movement (matches sink drag on plan). */
+  const placementOrthoAxisRef = useRef<"x" | "y" | null>(null);
   const [drag, setDrag] = useState<{
     pieceId: string;
     slabId: string;
@@ -246,6 +256,7 @@ export function PlaceWorkspace({
     if (!pointerInSlab) return;
     onSelectPiece(pieceId);
     onPlacementInteractionStart?.();
+    placementOrthoAxisRef.current = null;
     (ev.target as Element).setPointerCapture(ev.pointerId);
     lastDragSlabRef.current = slabId;
     setDrag({
@@ -260,14 +271,28 @@ export function PlaceWorkspace({
   const handlePointerMove = useCallback(
     (ev: React.PointerEvent) => {
       if (!drag) return;
+      let clientX = ev.clientX;
+      let clientY = ev.clientY;
+      if (orthoMove) {
+        const dx = ev.clientX - drag.startClient.x;
+        const dy = ev.clientY - drag.startClient.y;
+        if (placementOrthoAxisRef.current === null) {
+          if (Math.hypot(dx, dy) >= PLACEMENT_ORTHO_LOCK_PX) {
+            placementOrthoAxisRef.current =
+              Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+          }
+        }
+        if (placementOrthoAxisRef.current === "x") clientY = drag.startClient.y;
+        else if (placementOrthoAxisRef.current === "y") clientX = drag.startClient.x;
+      }
       const targetSlabId =
-        resolveSlabUnderPointer(ev.clientX, ev.clientY) ??
+        resolveSlabUnderPointer(clientX, clientY) ??
         lastDragSlabRef.current ??
         drag.startPlacement.slabId;
       if (!targetSlabId) return;
       const slab = slabs.find((s) => s.id === targetSlabId);
       if (!slab) return;
-      const p = clientToSlab(targetSlabId, ev.clientX, ev.clientY);
+      const p = clientToSlab(targetSlabId, clientX, clientY);
       if (!p) return;
       lastDragSlabRef.current = targetSlabId;
       updatePlacement(drag.pieceId, {
@@ -277,7 +302,7 @@ export function PlaceWorkspace({
         placed: true,
       });
     },
-    [drag, resolveSlabUnderPointer, slabs, clientToSlab, updatePlacement]
+    [drag, orthoMove, resolveSlabUnderPointer, slabs, clientToSlab, updatePlacement]
   );
 
   const handleEndDrag = useCallback(() => {
@@ -299,6 +324,7 @@ export function PlaceWorkspace({
     }
     setDrag(null);
     lastDragSlabRef.current = null;
+    placementOrthoAxisRef.current = null;
   }, [pieces, pixelsPerInch, onPlacementChange, readOnly]);
 
   useEffect(() => {

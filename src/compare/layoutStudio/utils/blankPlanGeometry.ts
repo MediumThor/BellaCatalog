@@ -9,14 +9,14 @@ import { centroid, ensureClosedRing, normalizeClosedRing, pointInPolygon, rotate
 export const SPLASH_PLAN_OFFSET_IN = 1.5;
 
 /**
- * Plan-space translation for blank workspace (canonical `points` stay fixed).
- * Splash strips are stored in the parent piece’s local coordinates; include the parent’s
- * `planTransform` so they stay aligned when the countertop is moved.
+ * Translation from piece-local plan coords to displayed plan coords (same as applied in
+ * {@link planDisplayPoints}). Use when arc circle centers (piece-local) must align with a
+ * display ring.
  */
-export function planDisplayPoints(
+export function planWorldOffset(
   piece: LayoutPiece,
-  allPieces?: readonly LayoutPiece[]
-): LayoutPoint[] {
+  allPieces?: readonly LayoutPiece[],
+): { ox: number; oy: number } {
   let ox = piece.planTransform?.x ?? 0;
   let oy = piece.planTransform?.y ?? 0;
   if (piece.splashMeta?.parentPieceId && allPieces) {
@@ -26,6 +26,19 @@ export function planDisplayPoints(
       oy += parent.planTransform?.y ?? 0;
     }
   }
+  return { ox, oy };
+}
+
+/**
+ * Plan-space translation for blank workspace (canonical `points` stay fixed).
+ * Splash strips are stored in the parent piece’s local coordinates; include the parent’s
+ * `planTransform` so they stay aligned when the countertop is moved.
+ */
+export function planDisplayPoints(
+  piece: LayoutPiece,
+  allPieces?: readonly LayoutPiece[],
+): LayoutPoint[] {
+  const { ox, oy } = planWorldOffset(piece, allPieces);
   return piece.points.map((p) => ({ x: p.x + ox, y: p.y + oy }));
 }
 
