@@ -1,0 +1,33 @@
+node_modules
+dist
+.DS_Store
+*.log
+.env
+.env.*
+.env.local
+.venv
+scripts/_*.txt
+
+# Large source documents / exports (keep out of git)
+Catalogs/
+Integra/
+*.pdf
+*.docx
+*.xlsx
+*.zip
+
+# Generated datasets
+data/generated/
+
+# Avoid committing bulky scraped images / debug artifacts
+public/vendor-assets/
+scripts/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Big local data exports / scratch
+bella_stone_wholesale_catalog_data.json
+listOfSlabs*.csv
+
+# Script debug/output folders (regenerated)
+scripts/**/out/

@@ -1,0 +1,5 @@
+# Vadara / Viatera / Corian PDF paths in build_catalog.py need pdfplumber.
+# Install: python -m pip install -r scripts/requirements.txt
+# If you get Permission denied on Windows, use: python -m pip install --user -r scripts/requirements.txt
+pymupdf>=1.24.0
+pdfplumber>=0.11.0

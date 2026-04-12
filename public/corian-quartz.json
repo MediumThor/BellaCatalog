@@ -1,0 +1,2908 @@
+{
+  "catalog": {
+    "items": [
+      {
+        "id": "corian-web:calacatta-medallion",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#calacatta-medallion",
+        "productName": "Calacatta Medallion",
+        "displayName": "Calacatta Medallion",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1361",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/pattern-calacatta-medallion-a09e8.jpg?1726232380",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#calacatta-medallion",
+        "notes": "A classic Calacatta look with intricate gold veining over a bright, crisp white background creates a truly luxurious and elegant aesthetic.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "calacatta-medallion",
+          "apiId": 1361,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#calacatta-medallion",
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:estate-quartzite",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#estate-quartzite",
+        "productName": "Estate Quartzite",
+        "displayName": "Estate Quartzite",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1362",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/pattern-estate-quartzite-f9129.jpg?1726232382",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#estate-quartzite",
+        "notes": "A stunning quartzite look with multidirectional blue and brown veins over a cool, white and gray background that brings an elegance to any space.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "estate-quartzite",
+          "apiId": 1362,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#estate-quartzite",
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:smoked-quartzite",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#smoked-quartzite",
+        "productName": "Smoked Quartzite",
+        "displayName": "Smoked Quartzite",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1363",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/pattern-smoked-quartzite-16bc7.jpg?1726232382",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#smoked-quartzite",
+        "notes": "A beautiful quartzite look with dark and light gray omni-directional veins over a gray background evokes a sense of depth.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "smoked-quartzite",
+          "apiId": 1363,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#smoked-quartzite",
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:hushed-gray",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#hushed-gray",
+        "productName": "Hushed Gray",
+        "displayName": "Hushed Gray",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1349",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 18.5,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 21,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-hushed-gray-486ea.jpg?1726232384",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#hushed-gray",
+        "notes": "A medium shade of gray flecked with particles. Its neutral tone is a perfect coordinating color.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "hushed-gray",
+          "apiId": 1349,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#hushed-gray",
+          "dimensionRaw": "63'' x 120''",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:london-royal",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#london-royal",
+        "productName": "London Royal",
+        "displayName": "London Royal",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1342",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-london-royal-c7741.jpg?1726232528",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#london-royal",
+        "notes": "A subtle gray background with tone on tone coloring, and a mix of light and dark swirls. It’s a beautiful aesthetic for any space that requires an elegant and timeless look.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "london-royal",
+          "apiId": 1342,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#london-royal",
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:quiet-white",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#quiet-white",
+        "productName": "Quiet White",
+        "displayName": "Quiet White",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1348",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 18.5,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 21,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-quiet-white-803a1.jpg?1726232564",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#quiet-white",
+        "notes": "A white with slight warmth and light particulates.  It coordinates beautifully with many colors and wood stains.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "quiet-white",
+          "apiId": 1348,
+          "detailUrlFromApi": true,
+          "detailFieldRaw": "https://www.corianquartz.com/-experience-the-new-aesthetics-of-corian-quartz-#quiet-white",
+          "dimensionRaw": "63'' x 120''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:london-abbey",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#london-abbey",
+        "productName": "London Abbey",
+        "displayName": "London Abbey",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1338",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-london-abbey-3110b.jpg?1726232602",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#london-abbey",
+        "notes": "Light gray veins flow through the white background for a subtle take on marble looks.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "london-abbey",
+          "apiId": 1338,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:alabaster-terrazzo",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#alabaster-terrazzo",
+        "productName": "Alabaster Terrazzo",
+        "displayName": "Alabaster Terrazzo",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1327",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-alabaster-terrazzo-5a476.jpg?1726232602",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#alabaster-terrazzo",
+        "notes": "An exciting, Mid-century inspired style in light warm-gray with the twist of translucent particles.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "alabaster-terrazzo",
+          "apiId": 1327,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:beige-royale",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#beige-royale",
+        "productName": "Beige Royale",
+        "displayName": "Beige Royale",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1329",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-beige-royale-460be.jpg?1726232604",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#beige-royale",
+        "notes": "Warm and sophisticated, with subtle beige veining, a modern classic coordinates with any design style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "beige-royale",
+          "apiId": 1329,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:black-goldstone",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#black-goldstone",
+        "productName": "Black Goldstone",
+        "displayName": "Black Goldstone",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1330",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-black-goldstone-2b4e5.jpg?1726232640",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#black-goldstone",
+        "notes": "Black with gold veins casts an elegant and rich look for any design style.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.804Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.804Z",
+        "rawSourceFields": {
+          "apiKey": "black-goldstone",
+          "apiId": 1330,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:tahitian-sand",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#tahitian-sand",
+        "productName": "Tahitian Sand",
+        "displayName": "Tahitian Sand",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1336",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-tahitian-sand-cc2ee.jpg?1726232640",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#tahitian-sand",
+        "notes": "Dense and rich, gleaming and timeless, pure black creates high-end drama and style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "tahitian-sand",
+          "apiId": 1336,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:arabesque-perla",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#arabesque-perla",
+        "productName": "Arabesque Perla",
+        "displayName": "Arabesque Perla",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1296",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-arabesque-perla-df6d9.jpg?1726232642",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#arabesque-perla",
+        "notes": "A style chameleon designed to be a modern, off-white expression of traditional design, its subtle veins add a sense of softness.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "arabesque-perla",
+          "apiId": 1296,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:ashen-gray",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#ashen-gray",
+        "productName": "Ashen Gray",
+        "displayName": "Ashen Gray",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1328",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-ashen-gray-25b4b.jpg?1726232642",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#ashen-gray",
+        "notes": "Subtle veins add depth and movement for a subdued look in this mix of cool greys and transitional style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "ashen-gray",
+          "apiId": 1328,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:bianco-dolomite",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#bianco-dolomite",
+        "productName": "Bianco Dolomite",
+        "displayName": "Bianco Dolomite",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1187",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-bianco-dolomite-c265b.jpg?1726232678",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#bianco-dolomite",
+        "notes": "A white background coursing with gray veins creates a look inspired by majestic European mountains.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "bianco-dolomite",
+          "apiId": 1187,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:bianco-marmor",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#bianco-marmor",
+        "productName": "Bianco Marmor",
+        "displayName": "Bianco Marmor",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1224",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-bianco-marmor-79208.jpg?1726232820",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#bianco-marmor",
+        "notes": "Random warm-hued veins  in a white background create a look that is sumptuous and natural.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "bianco-marmor",
+          "apiId": 1224,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:bianco-pur",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#bianco-pur",
+        "productName": "Bianco Pur",
+        "displayName": "Bianco Pur",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1225",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-bianco-pur-2f733.jpg?1726232858",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#bianco-pur",
+        "notes": "Sharp and refreshing, this bright white offers the perfect look of modern simplicity to enhance any space.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "bianco-pur",
+          "apiId": 1225,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:blue-carrara",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#blue-carrara",
+        "productName": "Blue Carrara",
+        "displayName": "Blue Carrara",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1091",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-blue-carrara-a2209.jpg?1726232928",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#blue-carrara",
+        "notes": "Blue veins dance in white for a sense of freshness and fun.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "blue-carrara",
+          "apiId": 1091,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:calacatta-natura",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-natura",
+        "productName": "Calacatta Natura",
+        "displayName": "Calacatta Natura",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1093",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-calacatta-natura-b488b.jpg?1726232966",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-natura",
+        "notes": "Elegant veins in neutral hues of gray and beige on a creamy background create a  statement look to enhance any decor.Elegant veins in neutral hues of gray and beige on a creamy background create a  statement look to enhance any decor.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "calacatta-natura",
+          "apiId": 1093,
+          "detailUrlFromApi": false,
+          "detailFieldRaw": "63'' x 126''|55,13",
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": true,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "E"
+        }
+      },
+      {
+        "id": "corian-web:calacatta-novello",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-novello",
+        "productName": "Calacatta Novello",
+        "displayName": "Calacatta Novello",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1288",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-calacatta-novello-5af49.jpg?1726233108",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-novello",
+        "notes": "Bold veins in gray and beige on a white background create a dramatic style and timeless appeal.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "calacatta-novello",
+          "apiId": 1288,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:calacatta-villa",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-villa",
+        "productName": "Calacatta Villa",
+        "displayName": "Calacatta Villa",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1297",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-calacatta-villa-66e47.jpg?1726233108",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#calacatta-villa",
+        "notes": "A sense of ease  is offered with warm-hued  veins flowing through the creamy beige background.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "calacatta-villa",
+          "apiId": 1297,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:carbon-cement",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#carbon-cement",
+        "productName": "Carbon Cement",
+        "displayName": "Carbon Cement",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Matte",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1331",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-carbon-cement-844f6.jpg?1726233108",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#carbon-cement",
+        "notes": "This deep, matte charcoal hue makes a bold and unique statement of industrial style and modern visual strength.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "carbon-cement",
+          "apiId": 1331,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "matte",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:cloud-white",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#cloud-white",
+        "productName": "Cloud White",
+        "displayName": "Cloud White",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1097",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-cloud-white-c8ed2.jpg?1726233110",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#cloud-white",
+        "notes": "Barely there particles are suspended in a white background  for a refreshing sense of design.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "cloud-white",
+          "apiId": 1097,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:coarse-carrara",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#coarse-carrara",
+        "productName": "Coarse Carrara",
+        "displayName": "Coarse Carrara",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1099",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-coarse-carrara-e2131.jpg?1726233110",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#coarse-carrara",
+        "notes": "Classically simple and endlessly stylish, gray and white convey a timeless touch.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "coarse-carrara",
+          "apiId": 1099,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:coarse-pepper",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#coarse-pepper",
+        "productName": "Coarse Pepper",
+        "displayName": "Coarse Pepper",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1102",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-coarse-pepper-7b771.jpg?1726233110",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#coarse-pepper",
+        "notes": "Dark taupe with sporadic white veins creates a modern interpretation of warmth for design.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "coarse-pepper",
+          "apiId": 1102,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 63\" x 126\"|52,5 and 55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S/E"
+        }
+      },
+      {
+        "id": "corian-web:concrete-carrara",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#concrete-carrara",
+        "productName": "Concrete Carrara",
+        "displayName": "Concrete Carrara",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1103",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-concrete-carrara-63ab0.jpg?1726233112",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#concrete-carrara",
+        "notes": "A marble look with an industrial twist, the grey surface and white veins redefine a classic look for contemporary design.A marble look with an industrial twist, the grey surface and white veins redefine a classic look for contemporary design.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "concrete-carrara",
+          "apiId": 1103,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:dove-grey",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#dove-grey",
+        "productName": "Dove Grey",
+        "displayName": "Dove Grey",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1107",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-dove-grey-a8008.jpg?1726233112",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#dove-grey",
+        "notes": "A mid-range gray, softly infused with like-colored elements creates a quiet design surface.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "dove-grey",
+          "apiId": 1107,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:ethereal-white",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#ethereal-white",
+        "productName": "Ethereal White",
+        "displayName": "Ethereal White",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1298",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-ethereal-white-b7e44.jpg?1726233286",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#ethereal-white",
+        "notes": "Subtle veins course through the white surface to evoke light and freshness.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "ethereal-white",
+          "apiId": 1298,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:geo-grigio",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#geo-grigio",
+        "productName": "Geo Grigio",
+        "displayName": "Geo Grigio",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1226",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-geo-grigio-3238f.jpg?1726233358",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#geo-grigio",
+        "notes": "Subtle veining floats within a gray background for an ethereal aesthetic.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "geo-grigio",
+          "apiId": 1226,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:graphite",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#graphite",
+        "productName": "Graphite",
+        "displayName": "Graphite",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1110",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-graphite-9b578.jpg?1726233536",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#graphite",
+        "notes": "A strong statement of gray, it is an aesthetic the exudes confidence and stability.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "graphite",
+          "apiId": 1110,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:grigione",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#grigione",
+        "productName": "Grigione",
+        "displayName": "Grigione",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1112",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-grigione-1be24.jpg?1726233608",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#grigione",
+        "notes": "Monochromatic dark veins and elements merge with the dark gray background for visual interest and discreet  power.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "grigione",
+          "apiId": 1112,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:indigo-swirl",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#indigo-swirl",
+        "productName": "Indigo Swirl",
+        "displayName": "Indigo Swirl",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1114",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-indigo-swirl-1376d.jpg?1726233644",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#indigo-swirl",
+        "notes": "True  blue with monochromatic particles and light veins to  add depth for a look that transcends its classic color.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "indigo-swirl",
+          "apiId": 1114,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:ironstone",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#ironstone",
+        "productName": "Ironstone",
+        "displayName": "Ironstone",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Matte",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1333",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-ironstone-b104a.jpg?1726233716",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#ironstone",
+        "notes": "A matte, dark, warm neutral gray, with subdued white veins, creates a new look of ease and warmth for any design style.A matte, dark, warm neutral gray, with subdued white veins, creates a new look of ease and warmth for any design style.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "ironstone",
+          "apiId": 1333,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "matte",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:marble-mist",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#marble-mist",
+        "productName": "Marble Mist",
+        "displayName": "Marble Mist",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1118",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-marble-mist-bec60.jpg?1726233860",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#marble-mist",
+        "notes": "Light gray is enhanced with particles and veins for an aesthetic with endless possibilities.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "marble-mist",
+          "apiId": 1118,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:neutral-cement",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#neutral-cement",
+        "productName": "Neutral Cement",
+        "displayName": "Neutral Cement",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Matte",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1334",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-neutral-cement-1821d.jpg?1726233896",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#neutral-cement",
+        "notes": "Experience effortless industrial design in a light, matte beige color that crosses design boundaries.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "neutral-cement",
+          "apiId": 1334,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "matte",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:neve",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#neve",
+        "productName": "Neve",
+        "displayName": "Neve",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1123",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-neve-db609.jpg?1726234002",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#neve",
+        "notes": "A whisper of veining marks the light gray aesthetic to add a cool note to design spaces.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "neve",
+          "apiId": 1123,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "J/E"
+        }
+      },
+      {
+        "id": "corian-web:night-soapstone",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#night-soapstone",
+        "productName": "Night Soapstone",
+        "displayName": "Night Soapstone",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Matte",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1332",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-night-soapstone-4348c.jpg?1726235322",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#night-soapstone",
+        "notes": "Black and white  elegantly converge in a matte finish to suggest Soapstone, with the ease of quartz.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "night-soapstone",
+          "apiId": 1332,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "matte",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:oyster-grigio",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#oyster-grigio",
+        "productName": "Oyster Grigio",
+        "displayName": "Oyster Grigio",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1227",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-oyster-grigio-fd132.jpg?1726234288",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#oyster-grigio",
+        "notes": "Contrasting light and dark veins move within the light beige surface creating a unique look that transcends  traditional definition.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "oyster-grigio",
+          "apiId": 1227,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:pearl-stone",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#pearl-stone",
+        "productName": "Pearl Stone",
+        "displayName": "Pearl Stone",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1193",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-pearl-stone-70450.jpg?1726234324",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#pearl-stone",
+        "notes": "Beige and gray come together in a beige background as the elements balance warm and cool, in an aesthetic that adds style to any application",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "pearl-stone",
+          "apiId": 1193,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:portoro",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#portoro",
+        "productName": "Portoro",
+        "displayName": "Portoro",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1129",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-portoro-ecb49.jpg?1726234358",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#portoro",
+        "notes": "A refined, dark gray background, shot through with narrow white veins, makes an aesthetic statement with a subtle touch.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "portoro",
+          "apiId": 1129,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false
+        }
+      },
+      {
+        "id": "corian-web:slate-geo",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#slate-geo",
+        "productName": "Slate Geo",
+        "displayName": "Slate Geo",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "",
+        "tierOrGroup": "",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1228",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-slate-geo-5a820.jpg?1726234466",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#slate-geo",
+        "notes": "Quiet veining adds dimensionality to a deep gray aesthetic that enhances any design style.",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "slate-geo",
+          "apiId": 1228,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on"
+        }
+      },
+      {
+        "id": "corian-web:snow-flurry",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#snow-flurry",
+        "productName": "Snow Flurry",
+        "displayName": "Snow Flurry",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1134",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-snow-flurry-2a56d.jpg?1726234572",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#snow-flurry",
+        "notes": "Minute grains dance throughout the crisp, white surface and create a light and practical touch of style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "snow-flurry",
+          "apiId": 1134,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:snow-white",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#snow-white",
+        "productName": "Snow White",
+        "displayName": "Snow White",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 2",
+        "tierOrGroup": "Group 2",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "130 x 65",
+        "sizes": [
+          "130 x 65"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1135",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 2 — 2cm per sq ft",
+            "price": 29.53,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 2 — 3cm per sq ft",
+            "price": 33.6,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-snow-white-a5895.jpg?1726234750",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#snow-white",
+        "notes": "Lightly touched by particles, the white background  suggests simple pleasures and easy style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "snow-white",
+          "apiId": 1135,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "65'' x 130''|58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 9,
+          "sizesCodeFromPdf": "J"
+        }
+      },
+      {
+        "id": "corian-web:stratus-white",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#stratus-white",
+        "productName": "Stratus White",
+        "displayName": "Stratus White",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1139",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-stratus-white-76937.jpg?1726234858",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#stratus-white",
+        "notes": "Subtle and bold  elements come together in crisp white  for a look that can be classic, modern, or rustic.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "stratus-white",
+          "apiId": 1139,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:valente-pearl",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#valente-pearl",
+        "productName": "Valente Pearl",
+        "displayName": "Valente Pearl",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1142",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-valente-pearl-f21ab.jpg?1726234858",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#valente-pearl",
+        "notes": "High energy veins create a canvas for beige and ivory to combine into high-style design.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "valente-pearl",
+          "apiId": 1142,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "E"
+        }
+      },
+      {
+        "id": "corian-web:snowdrift",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#snowdrift",
+        "productName": "Snowdrift",
+        "displayName": "Snowdrift",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1136",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-snowdrift-32c14.jpg?1726235000",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#snowdrift",
+        "notes": "The white background is animated with multi-sized particles for a look of energized design.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "snowdrift",
+          "apiId": 1136,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:storm-grey",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#storm-grey",
+        "productName": "Storm Grey",
+        "displayName": "Storm Grey",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1138",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-storm-grey-0e399.jpg?1726235180",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#storm-grey",
+        "notes": "Tone-on-tone elements add simple design touches to the dark grey background for elegant and timeless style.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "storm-grey",
+          "apiId": 1138,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120'' and 65\" x 130\"|52,5 and 58,68",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": "on",
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S/J"
+        }
+      },
+      {
+        "id": "corian-web:venetia-cream",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#venetia-cream",
+        "productName": "Venetia Cream",
+        "displayName": "Venetia Cream",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 0",
+        "tierOrGroup": "Group 0",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished, Leathered",
+        "size": "120 x 63",
+        "sizes": [
+          "120 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1229",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 0 — 2cm per sq ft",
+            "price": 25.86,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 0 — 3cm per sq ft",
+            "price": 29.39,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-venetia-cream-2-7d232.jpg?1726235178",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#venetia-cream",
+        "notes": "A classic ivory-cream aesthetic with a light touch for traditional and modern looks.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "venetia-cream",
+          "apiId": 1229,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 120''|52,5",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished,leathered",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 8,
+          "sizesCodeFromPdf": "S"
+        }
+      },
+      {
+        "id": "corian-web:versilia-grigio",
+        "vendor": "Hallmark Building Supplies",
+        "manufacturer": "Corian Quartz",
+        "sourceFile": "corian-quartz-web",
+        "sourceType": "catalog_detail_page",
+        "sourceUrl": "https://www.corianquartz.com/index.php?fsc#versilia-grigio",
+        "productName": "Versilia Grigio",
+        "displayName": "Versilia Grigio",
+        "material": "Quartz",
+        "category": "Quartz",
+        "collection": "Group 4",
+        "tierOrGroup": "Group 4",
+        "thickness": "2cm, 3cm",
+        "finish": "Polished",
+        "size": "126 x 63",
+        "sizes": [
+          "126 x 63"
+        ],
+        "sku": "",
+        "vendorItemNumber": "1144",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "Group 4 — 2cm per sq ft",
+            "price": 38.33,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "Group 4 — 3cm per sq ft",
+            "price": 43.8,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          }
+        ],
+        "imageUrl": "https://www.tools.corianquartz.com/local/cache-vignettes/L400xH400/corianquartz-versilia-grigio-3f485.jpg?1726235250",
+        "galleryImages": [],
+        "productPageUrl": "https://www.corianquartz.com/index.php?fsc#versilia-grigio",
+        "notes": "Streaming through a white background, powerful grey veins mingle with lighter veins, nuanced with blue, for a daring and modern aesthetic.",
+        "freightInfo": "Stock status varies by warehouse; verify ST status in PDF/MyAccount.",
+        "availabilityFlags": [
+          "stocked",
+          "stocked-2cm",
+          "stocked-3cm"
+        ],
+        "tags": [
+          "corian-quartz",
+          "hallmark",
+          "quartz"
+        ],
+        "lastSeenAt": "2026-04-08T16:54:18.805Z",
+        "lastImageSyncAt": "2026-04-08T16:54:18.805Z",
+        "rawSourceFields": {
+          "apiKey": "versilia-grigio",
+          "apiId": 1144,
+          "detailUrlFromApi": false,
+          "dimensionRaw": "63'' x 126''|55,13",
+          "dimensionFromDetailField": false,
+          "thicknessRaw": "2cm,3cm",
+          "finishRaw": "polished",
+          "parseWarnings": [],
+          "jumbo": false,
+          "hallmarkPricePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+          "hallmarkPricePage": 11,
+          "sizesCodeFromPdf": "E"
+        }
+      }
+    ],
+    "importWarnings": []
+  },
+  "meta": {
+    "supplier": "Corian Quartz (Hallmark)",
+    "source": "tools.corianquartz.com color-tool JSON",
+    "startedAt": "2026-04-08T16:54:18.251Z",
+    "finishedAt": "2026-04-08T16:54:18.805Z",
+    "discoveredCount": 48,
+    "scrapedCount": 48,
+    "failedCount": 0,
+    "warningsCount": 0,
+    "downloadedImages": 0,
+    "outputFile": "public/corian-quartz.json",
+    "hallmarkPriceMerge": {
+      "ok": true,
+      "sourcePdf": "CorianQuartzPriceList Hallmark 4.3.26.pdf",
+      "matched": 30,
+      "catalogItemCount": 48,
+      "pdfColorCount": 30,
+      "finishedAt": "2026-04-08T20:32:21.507Z"
+    }
+  }
+}

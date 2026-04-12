@@ -1,0 +1,4175 @@
+{
+  "catalog": {
+    "items": [
+      {
+        "id": "hanstone-quartz-antello",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Antello",
+        "productPageUrl": "https://hyundailncusa.com/colors/Antello",
+        "productName": "Antello",
+        "displayName": "Antello",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "LO804",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/antello/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/antello/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/antello/gallery-02.png",
+          "/vendor-assets/hanstone-quartz/antello/gallery-03.png",
+          "/vendor-assets/hanstone-quartz/antello/gallery-04.png",
+          "/vendor-assets/hanstone-quartz/antello/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/antello/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/antello/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/antello/gallery-08.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "Antello",
+          "gridNameLine": "Antello - LO804",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 9,
+          "gridImageCount": 7,
+          "pdpImageCount": 8,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:10:50.859Z"
+      },
+      {
+        "id": "hanstone-quartz-aurelia",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/aurelia",
+        "productPageUrl": "https://hyundailncusa.com/colors/aurelia",
+        "productName": "Aurelia",
+        "displayName": "Aurelia",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM + COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "CA821",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM + COLLECTION � 2cm per sq ft",
+            "price": 24.98,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM + COLLECTION � 3cm per sq ft",
+            "price": 27.57,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1617.8,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1465.93,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/aurelia/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/aurelia/gallery-07.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "aurelia",
+          "gridNameLine": "Aurelia - CA821",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM",
+          "imageCount": 8,
+          "gridImageCount": 5,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM + COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:10:48.756Z"
+      },
+      {
+        "id": "hanstone-quartz-avora",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Avora",
+        "productPageUrl": "https://hyundailncusa.com/colors/Avora",
+        "productName": "Avora",
+        "displayName": "Avora",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG802",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "/vendor-assets/hanstone-quartz/avora/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/avora/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/avora/gallery-21.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "Avora",
+          "gridNameLine": "Avora - BG802",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT",
+            "finish": "POLISHED",
+            "colorPalette": "WARM"
+          },
+          "pattern": "MOVEMENT",
+          "colorPalette": "WARM",
+          "imageCount": 22,
+          "gridImageCount": 19,
+          "pdpImageCount": 21,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true
+        },
+        "lastImageSyncAt": "2026-04-10T16:10:57.595Z"
+      },
+      {
+        "id": "hanstone-quartz-calacatta-gravo",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Calacatta-Gravo",
+        "productPageUrl": "https://hyundailncusa.com/colors/Calacatta-Gravo",
+        "productName": "Calacatta Gravo",
+        "displayName": "Calacatta Gravo",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG801",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [],
+        "imageUrl": "/vendor-assets/hanstone-quartz/calacatta-gravo/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gravo/gallery-11.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "",
+        "availabilityFlags": [],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "Calacatta-Gravo",
+          "gridNameLine": "Calacatta Gravo - BG801",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 12,
+          "gridImageCount": 9,
+          "pdpImageCount": 11,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true
+        },
+        "lastImageSyncAt": "2026-04-10T16:10:57.795Z"
+      },
+      {
+        "id": "hanstone-quartz-calacatta-mont",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/calacatta-mont",
+        "productPageUrl": "https://hyundailncusa.com/colors/calacatta-mont",
+        "productName": "Calacatta Mont",
+        "displayName": "Calacatta Mont",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM + COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG817",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM + COLLECTION � 2cm per sq ft",
+            "price": 24.98,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM + COLLECTION � 3cm per sq ft",
+            "price": 27.57,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1617.8,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1465.93,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/calacatta-mont/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-01.png",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-mont/gallery-09.png"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "calacatta-mont",
+          "gridNameLine": "Calacatta Mont - BG817",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM",
+          "imageCount": 10,
+          "gridImageCount": 5,
+          "pdpImageCount": 8,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM + COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:10:53.500Z"
+      },
+      {
+        "id": "hanstone-quartz-cremosa",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Cremosa",
+        "productPageUrl": "https://hyundailncusa.com/colors/Cremosa",
+        "productName": "Cremosa",
+        "displayName": "Cremosa",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED, LEATHER",
+        "size": "130 x 65",
+        "sku": "K5408",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/cremosa/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/cremosa/gallery-14.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "Cremosa",
+          "gridNameLine": "Cremosa - K5408",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED, LEATHER",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 15,
+          "gridImageCount": 6,
+          "pdpImageCount": 14,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:03.412Z"
+      },
+      {
+        "id": "hanstone-quartz-eden",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/eden",
+        "productPageUrl": "https://hyundailncusa.com/colors/eden",
+        "productName": "Eden",
+        "displayName": "Eden",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "SK503",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/eden/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/eden/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-06.png",
+          "/vendor-assets/hanstone-quartz/eden/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/eden/gallery-14.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "eden",
+          "gridNameLine": "Eden - SK503",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "MOVEMENT",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 15,
+          "gridImageCount": 12,
+          "pdpImageCount": 12,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:04.579Z"
+      },
+      {
+        "id": "hanstone-quartz-elba-white",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/elba-white",
+        "productPageUrl": "https://hyundailncusa.com/colors/elba-white",
+        "productName": "Elba White",
+        "displayName": "Elba White",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PLATINUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "K5401",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PLATINUM COLLECTION � 2cm per sq ft",
+            "price": 29.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PLATINUM COLLECTION � 3cm per sq ft",
+            "price": 33.83,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1985.06,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1703.4,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/elba-white/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-08.png",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/elba-white/gallery-11.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.183Z",
+        "rawSourceFields": {
+          "slug": "elba-white",
+          "gridNameLine": "Elba White - K5401",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WHITE",
+          "imageCount": 12,
+          "gridImageCount": 9,
+          "pdpImageCount": 11,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PLATINUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:02.644Z"
+      },
+      {
+        "id": "hanstone-quartz-le-blanc",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/le-blanc",
+        "productPageUrl": "https://hyundailncusa.com/colors/le-blanc",
+        "productName": "Le Blanc",
+        "displayName": "Le Blanc",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PLATINUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "K5402",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PLATINUM COLLECTION � 2cm per sq ft",
+            "price": 29.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PLATINUM COLLECTION � 3cm per sq ft",
+            "price": 33.83,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1985.06,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1703.4,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/le-blanc/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/le-blanc/gallery-23.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "le-blanc",
+          "gridNameLine": "Le Blanc - K5402",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM",
+          "imageCount": 24,
+          "gridImageCount": 16,
+          "pdpImageCount": 23,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PLATINUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:10.442Z"
+      },
+      {
+        "id": "hanstone-quartz-markina",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Markina",
+        "productPageUrl": "https://hyundailncusa.com/colors/Markina",
+        "productName": "Markina",
+        "displayName": "Markina",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED, LEATHER",
+        "size": "130 x 65",
+        "sku": "LO805",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/markina/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/markina/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/markina/gallery-13.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "Markina",
+          "gridNameLine": "Markina - LO805",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED, LEATHER",
+            "colorPalette": "BLACK"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "BLACK",
+          "imageCount": 14,
+          "gridImageCount": 6,
+          "pdpImageCount": 13,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:13.572Z"
+      },
+      {
+        "id": "hanstone-quartz-matterhorn",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/matterhorn",
+        "productPageUrl": "https://hyundailncusa.com/colors/matterhorn",
+        "productName": "Matterhorn",
+        "displayName": "Matterhorn",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PLATINUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "K5403",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PLATINUM COLLECTION � 2cm per sq ft",
+            "price": 29.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PLATINUM COLLECTION � 3cm per sq ft",
+            "price": 33.83,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1985.06,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1703.4,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/matterhorn/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-23.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-24.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-25.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-26.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-27.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-28.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-29.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-30.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-31.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-32.jpg",
+          "/vendor-assets/hanstone-quartz/matterhorn/gallery-33.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "matterhorn",
+          "gridNameLine": "Matterhorn - K5403",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "GREY, WHITE, WARM",
+          "imageCount": 34,
+          "gridImageCount": 28,
+          "pdpImageCount": 32,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PLATINUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:07.912Z"
+      },
+      {
+        "id": "hanstone-quartz-ridge",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/ridge",
+        "productPageUrl": "https://hyundailncusa.com/colors/ridge",
+        "productName": "Ridge",
+        "displayName": "Ridge",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV516",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/ridge/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/ridge/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/ridge/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/ridge/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/ridge/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/ridge/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/ridge/gallery-06.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "ridge",
+          "gridNameLine": "Ridge - MV516",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WARM",
+          "imageCount": 7,
+          "gridImageCount": 1,
+          "pdpImageCount": 6,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:09.244Z"
+      },
+      {
+        "id": "hanstone-quartz-royale-blanc",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/royale-blanc",
+        "productPageUrl": "https://hyundailncusa.com/colors/royale-blanc",
+        "productName": "Royale Blanc",
+        "displayName": "Royale Blanc",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BA205",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/royale-blanc/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-23.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-24.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-25.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-26.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-27.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-28.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-29.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-30.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-31.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-32.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-33.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-34.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-35.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-36.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-37.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-38.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-39.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-40.jpg",
+          "/vendor-assets/hanstone-quartz/royale-blanc/gallery-41.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "royale-blanc",
+          "gridNameLine": "Royale Blanc - BA205",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")  |  STANDARD (55\" X 120\")",
+            "pattern": "MONOTONE",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE"
+          },
+          "pattern": "MONOTONE",
+          "colorPalette": "WHITE",
+          "imageCount": 42,
+          "gridImageCount": 9,
+          "pdpImageCount": 33,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:12.412Z"
+      },
+      {
+        "id": "hanstone-quartz-tahitian-cream",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Tahitian-Cream",
+        "productPageUrl": "https://hyundailncusa.com/colors/Tahitian-Cream",
+        "productName": "Tahitian Cream",
+        "displayName": "Tahitian Cream",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PLATINUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED, LEATHER",
+        "size": "130 x 65",
+        "sku": "K5407",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PLATINUM COLLECTION � 2cm per sq ft",
+            "price": 29.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PLATINUM COLLECTION � 3cm per sq ft",
+            "price": 33.83,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1985.06,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1703.4,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/tahitian-cream/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-04.png",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/tahitian-cream/gallery-12.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "Tahitian-Cream",
+          "gridNameLine": "Tahitian Cream - K5407",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED, LEATHER",
+            "colorPalette": "WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WARM",
+          "imageCount": 13,
+          "gridImageCount": 6,
+          "pdpImageCount": 12,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PLATINUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:16.701Z"
+      },
+      {
+        "id": "hanstone-quartz-whistler gold",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Whistler%20Gold",
+        "productPageUrl": "https://hyundailncusa.com/colors/Whistler%20Gold",
+        "productName": "Whistler Gold",
+        "displayName": "Whistler Gold",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BA253",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/whistler gold/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/whistler gold/gallery-09.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "Whistler Gold",
+          "gridNameLine": "Whistler Gold - BA253",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 10,
+          "gridImageCount": 7,
+          "pdpImageCount": 9,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:16.018Z"
+      },
+      {
+        "id": "hanstone-quartz-tranquility",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/tranquility",
+        "productPageUrl": "https://hyundailncusa.com/colors/tranquility",
+        "productName": "Tranquility",
+        "displayName": "Tranquility",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RU613",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/tranquility/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-23.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-24.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-25.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-26.jpg",
+          "/vendor-assets/hanstone-quartz/tranquility/gallery-27.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "tranquility",
+          "gridNameLine": "Tranquility - RU613",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 28,
+          "gridImageCount": 2,
+          "pdpImageCount": 26,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:18.460Z"
+      },
+      {
+        "id": "hanstone-quartz-calacatta-extra",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/calacatta-extra",
+        "productPageUrl": "https://hyundailncusa.com/colors/calacatta-extra",
+        "productName": "Calacatta Extra",
+        "displayName": "Calacatta Extra",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM + COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG884",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM + COLLECTION � 2cm per sq ft",
+            "price": 24.98,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM + COLLECTION � 3cm per sq ft",
+            "price": 27.57,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1617.8,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1465.93,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/calacatta-extra/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-01.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-12.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-15.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-16.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-17.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-18.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-19.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-20.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-21.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-22.png",
+          "/vendor-assets/hanstone-quartz/calacatta-extra/gallery-23.png"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "calacatta-extra",
+          "gridNameLine": "Calacatta Extra - BG884",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM, COOL",
+          "imageCount": 24,
+          "gridImageCount": 15,
+          "pdpImageCount": 21,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM + COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:22.294Z"
+      },
+      {
+        "id": "hanstone-quartz-chantilly",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/chantilly",
+        "productPageUrl": "https://hyundailncusa.com/colors/chantilly",
+        "productName": "Chantilly",
+        "displayName": "Chantilly",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM + COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG873",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM + COLLECTION � 2cm per sq ft",
+            "price": 24.98,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM + COLLECTION � 3cm per sq ft",
+            "price": 27.57,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1617.8,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1465.93,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/chantilly/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-13.png",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-23.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-24.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-25.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-26.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-27.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-28.jpg",
+          "/vendor-assets/hanstone-quartz/chantilly/gallery-29.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "chantilly",
+          "gridNameLine": "Chantilly - BG873",
+          "stats": {
+            "slabSize": "JUMBO (65 X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, COOL",
+          "imageCount": 30,
+          "gridImageCount": 2,
+          "pdpImageCount": 28,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM + COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:20.387Z"
+      },
+      {
+        "id": "hanstone-quartz-strato",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/strato",
+        "productPageUrl": "https://hyundailncusa.com/colors/strato",
+        "productName": "Strato",
+        "displayName": "Strato",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "CA701",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM COLLECTION � 2cm per sq ft",
+            "price": 22.48,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM COLLECTION � 3cm per sq ft",
+            "price": 24.81,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1455.95,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1319.05,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/strato/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/strato/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/strato/gallery-22.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "strato",
+          "gridNameLine": "Strato - CA701",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 23,
+          "gridImageCount": 2,
+          "pdpImageCount": 21,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:22.612Z"
+      },
+      {
+        "id": "hanstone-quartz-drift",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/drift",
+        "productPageUrl": "https://hyundailncusa.com/colors/drift",
+        "productName": "Drift",
+        "displayName": "Drift",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BA271",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/drift/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/drift/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/drift/gallery-12.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "drift",
+          "gridNameLine": "Drift - BA271",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "UNIFORM, MONOTONE",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM, COOL"
+          },
+          "pattern": "UNIFORM, MONOTONE",
+          "colorPalette": "WHITE, WARM, COOL",
+          "imageCount": 13,
+          "gridImageCount": 2,
+          "pdpImageCount": 11,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:21.668Z"
+      },
+      {
+        "id": "hanstone-quartz-italian-waves",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/italian-waves",
+        "productPageUrl": "https://hyundailncusa.com/colors/italian-waves",
+        "productName": "Italian Waves",
+        "displayName": "Italian Waves",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RU701",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/italian-waves/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/italian-waves/gallery-16.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "italian-waves",
+          "gridNameLine": "Italian Waves - RU701",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, COOL"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "GREY, WHITE, COOL",
+          "imageCount": 17,
+          "gridImageCount": 2,
+          "pdpImageCount": 15,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:22.717Z"
+      },
+      {
+        "id": "hanstone-quartz-paros",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/paros",
+        "productPageUrl": "https://hyundailncusa.com/colors/paros",
+        "productName": "Paros",
+        "displayName": "Paros",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV548",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/paros/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/paros/gallery-01.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-02.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-03.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-04.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-05.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-06.png",
+          "/vendor-assets/hanstone-quartz/paros/gallery-07.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "paros",
+          "gridNameLine": "Paros - MV548",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, COOL"
+          },
+          "pattern": "MOVEMENT",
+          "colorPalette": "GREY, WHITE, COOL",
+          "imageCount": 8,
+          "gridImageCount": 2,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:26.039Z"
+      },
+      {
+        "id": "hanstone-quartz-specchio-white",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/specchio-white",
+        "productPageUrl": "https://hyundailncusa.com/colors/specchio-white",
+        "productName": "Specchio White",
+        "displayName": "Specchio White",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "CT402",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/specchio-white/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/specchio-white/gallery-08.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "specchio-white",
+          "gridNameLine": "Specchio White - CT402",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "UNIFORM, MONOTONE",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE"
+          },
+          "pattern": "UNIFORM, MONOTONE",
+          "colorPalette": "WHITE",
+          "imageCount": 9,
+          "gridImageCount": 2,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:23.840Z"
+      },
+      {
+        "id": "hanstone-quartz-whistler white speckled - warm veined polished quartz finishing",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/Whistler%20White%20Speckled%20-%20Warm%20Veined%20Polished%20Quartz%20Finishing",
+        "productPageUrl": "https://hyundailncusa.com/colors/Whistler%20White%20Speckled%20-%20Warm%20Veined%20Polished%20Quartz%20Finishing",
+        "productName": "Whistler",
+        "displayName": "Whistler",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BA252",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-01.png",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-03.png",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-08.png",
+          "/vendor-assets/hanstone-quartz/whistler white speckled - warm veined polished quartz finishing/gallery-09.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "Whistler White Speckled - Warm Veined Polished Quartz Finishing",
+          "gridNameLine": "Whistler - BA252",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM",
+          "imageCount": 10,
+          "gridImageCount": 2,
+          "pdpImageCount": 8,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:23.591Z"
+      },
+      {
+        "id": "hanstone-quartz-tofino",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/tofino",
+        "productPageUrl": "https://hyundailncusa.com/colors/tofino",
+        "productName": "Tofino",
+        "displayName": "Tofino",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "CL119",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/tofino/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/tofino/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/tofino/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/tofino/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/tofino/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/tofino/gallery-05.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "tofino",
+          "gridNameLine": "Tofino - CL119",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "UNIFORM, MONOTONE",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "UNIFORM, MONOTONE",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 6,
+          "gridImageCount": 2,
+          "pdpImageCount": 4,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:24.018Z"
+      },
+      {
+        "id": "hanstone-quartz-soho",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/soho",
+        "productPageUrl": "https://hyundailncusa.com/colors/soho",
+        "productName": "Soho",
+        "displayName": "Soho",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG872",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM COLLECTION � 2cm per sq ft",
+            "price": 22.48,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM COLLECTION � 3cm per sq ft",
+            "price": 24.81,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1455.95,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1319.05,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/soho/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/soho/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/soho/gallery-10.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "soho",
+          "gridNameLine": "Soho - BG872",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WARM",
+          "imageCount": 11,
+          "gridImageCount": 2,
+          "pdpImageCount": 9,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:24.485Z"
+      },
+      {
+        "id": "hanstone-quartz-calacatta-gold",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/calacatta-gold",
+        "productPageUrl": "https://hyundailncusa.com/colors/calacatta-gold",
+        "productName": "Calacatta Gold",
+        "displayName": "Calacatta Gold",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG812",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/calacatta-gold/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-04.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-05.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-06.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-07.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-08.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-10.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-14.png",
+          "/vendor-assets/hanstone-quartz/calacatta-gold/gallery-15.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "calacatta-gold",
+          "gridNameLine": "Calacatta Gold - BG812",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM, COOL",
+          "imageCount": 16,
+          "gridImageCount": 2,
+          "pdpImageCount": 14,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:25.874Z"
+      },
+      {
+        "id": "hanstone-quartz-montauk",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/montauk",
+        "productPageUrl": "https://hyundailncusa.com/colors/montauk",
+        "productName": "Montauk",
+        "displayName": "Montauk",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM + COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG871",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM + COLLECTION � 2cm per sq ft",
+            "price": 24.98,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM + COLLECTION � 3cm per sq ft",
+            "price": 27.57,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1617.8,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1465.93,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/montauk/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/montauk/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-19.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-20.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-21.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-22.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-23.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-24.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-25.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-26.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-27.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-28.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-29.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-30.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-31.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-32.jpg",
+          "/vendor-assets/hanstone-quartz/montauk/gallery-33.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "montauk",
+          "gridNameLine": "Montauk - BG871",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MONOTONE, MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WHITE, WARM"
+          },
+          "pattern": "MONOTONE, MOVEMENT, VEINED",
+          "colorPalette": "WHITE, WARM",
+          "imageCount": 34,
+          "gridImageCount": 2,
+          "pdpImageCount": 32,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM + COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:26.564Z"
+      },
+      {
+        "id": "hanstone-quartz-calacatta-venato",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/calacatta-venato",
+        "productPageUrl": "https://hyundailncusa.com/colors/calacatta-venato",
+        "productName": "Calacatta Venato",
+        "displayName": "Calacatta Venato",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "BG883",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/calacatta-venato/hero.png",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-01.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-02.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-05.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-06.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-07.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-09.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-10.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-11.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-12.png",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/calacatta-venato/gallery-14.png"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "calacatta-venato",
+          "gridNameLine": "Calacatta Venato - BG883",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, WHITE, WARM, COOL",
+          "imageCount": 15,
+          "gridImageCount": 6,
+          "pdpImageCount": 10,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:29.265Z"
+      },
+      {
+        "id": "hanstone-quartz-aspen",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/aspen",
+        "productPageUrl": "https://hyundailncusa.com/colors/aspen",
+        "productName": "Aspen",
+        "displayName": "Aspen",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RU601",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/aspen/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/aspen/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/aspen/gallery-14.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "aspen",
+          "gridNameLine": "Aspen - RU601",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": ""
+          },
+          "pattern": "VEINED",
+          "colorPalette": "",
+          "imageCount": 15,
+          "gridImageCount": 2,
+          "pdpImageCount": 13,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:28.422Z"
+      },
+      {
+        "id": "hanstone-quartz-coast",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/coast",
+        "productPageUrl": "https://hyundailncusa.com/colors/coast",
+        "productName": "Coast",
+        "displayName": "Coast",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "RIVER WASHED",
+        "size": "130 x 65",
+        "sku": "MV514",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/coast/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/coast/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-16.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-17.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-18.jpg",
+          "/vendor-assets/hanstone-quartz/coast/gallery-19.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "coast",
+          "gridNameLine": "Coast - MV514",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "RIVER WASHED",
+            "colorPalette": "WARM, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WARM, COOL",
+          "imageCount": 20,
+          "gridImageCount": 2,
+          "pdpImageCount": 18,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:28.255Z"
+      },
+      {
+        "id": "hanstone-quartz-oceana",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/oceana",
+        "productPageUrl": "https://hyundailncusa.com/colors/oceana",
+        "productName": "Oceana",
+        "displayName": "Oceana",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV529",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM COLLECTION � 2cm per sq ft",
+            "price": 22.48,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM COLLECTION � 3cm per sq ft",
+            "price": 24.81,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1455.95,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1319.05,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/oceana/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/oceana/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/oceana/gallery-11.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "oceana",
+          "gridNameLine": "Oceana - MV529",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT",
+            "finish": "POLISHED",
+            "colorPalette": "WARM"
+          },
+          "pattern": "MOVEMENT",
+          "colorPalette": "WARM",
+          "imageCount": 12,
+          "gridImageCount": 2,
+          "pdpImageCount": 10,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:28.884Z"
+      },
+      {
+        "id": "hanstone-quartz-fusion",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/fusion",
+        "productPageUrl": "https://hyundailncusa.com/colors/fusion",
+        "productName": "Fusion",
+        "displayName": "Fusion",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV623",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/fusion/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/fusion/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/fusion/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/fusion/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/fusion/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/fusion/gallery-05.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "fusion",
+          "gridNameLine": "Fusion - MV623",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, COOL"
+          },
+          "pattern": "MOVEMENT",
+          "colorPalette": "GREY, WHITE, COOL",
+          "imageCount": 6,
+          "gridImageCount": 2,
+          "pdpImageCount": 4,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:28.649Z"
+      },
+      {
+        "id": "hanstone-quartz-rocky-shores",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/rocky-shores",
+        "productPageUrl": "https://hyundailncusa.com/colors/rocky-shores",
+        "productName": "Rocky Shores",
+        "displayName": "Rocky Shores",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RS463",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/rocky-shores/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/rocky-shores/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/rocky-shores/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/rocky-shores/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/rocky-shores/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/rocky-shores/gallery-05.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "rocky-shores",
+          "gridNameLine": "Rocky Shores - RS463",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "UNIFORM",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, WHITE, WARM, COOL"
+          },
+          "pattern": "UNIFORM",
+          "colorPalette": "GREY, WHITE, WARM, COOL",
+          "imageCount": 6,
+          "gridImageCount": 2,
+          "pdpImageCount": 4,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:29.236Z"
+      },
+      {
+        "id": "hanstone-quartz-aura",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/aura",
+        "productPageUrl": "https://hyundailncusa.com/colors/aura",
+        "productName": "Aura",
+        "displayName": "Aura",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "PREMIUM COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV531",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "PREMIUM COLLECTION � 2cm per sq ft",
+            "price": 22.48,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "PREMIUM COLLECTION � 3cm per sq ft",
+            "price": 24.81,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1455.95,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1319.05,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/aura/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/aura/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/aura/gallery-11.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "aura",
+          "gridNameLine": "Aura - MV531",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "WARM"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "WARM",
+          "imageCount": 12,
+          "gridImageCount": 2,
+          "pdpImageCount": 10,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "PREMIUM COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:30.478Z"
+      },
+      {
+        "id": "hanstone-quartz-metropolitan",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/metropolitan",
+        "productPageUrl": "https://hyundailncusa.com/colors/metropolitan",
+        "productName": "Metropolitan",
+        "displayName": "Metropolitan",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION | IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RU611",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/metropolitan/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-07.png",
+          "/vendor-assets/hanstone-quartz/metropolitan/gallery-08.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "metropolitan",
+          "gridNameLine": "Metropolitan - RU611",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MONOTONE, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, COOL"
+          },
+          "pattern": "MONOTONE, VEINED",
+          "colorPalette": "GREY, COOL",
+          "imageCount": 9,
+          "gridImageCount": 2,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:30.497Z"
+      },
+      {
+        "id": "hanstone-quartz-artisan-grey",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/artisan-grey",
+        "productPageUrl": "https://hyundailncusa.com/colors/artisan-grey",
+        "productName": "Artisan Grey",
+        "displayName": "Artisan Grey",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "LEATHER",
+        "size": "130 x 65",
+        "sku": "RC104",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/artisan-grey/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/artisan-grey/gallery-07.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "artisan-grey",
+          "gridNameLine": "Artisan Grey - RC104",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MONOTONE",
+            "finish": "LEATHER",
+            "colorPalette": "GREY"
+          },
+          "pattern": "MONOTONE",
+          "colorPalette": "GREY",
+          "imageCount": 8,
+          "gridImageCount": 3,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:29.829Z"
+      },
+      {
+        "id": "hanstone-quartz-uptown-grey",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/uptown-grey",
+        "productPageUrl": "https://hyundailncusa.com/colors/uptown-grey",
+        "productName": "Uptown Grey",
+        "displayName": "Uptown Grey",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION | IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RU609",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/uptown-grey/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-06.png",
+          "/vendor-assets/hanstone-quartz/uptown-grey/gallery-07.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "uptown-grey",
+          "gridNameLine": "Uptown Grey - RU609",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MONOTONE, VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, COOL"
+          },
+          "pattern": "MONOTONE, VEINED",
+          "colorPalette": "GREY, COOL",
+          "imageCount": 8,
+          "gridImageCount": 2,
+          "pdpImageCount": 6,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:30.279Z"
+      },
+      {
+        "id": "hanstone-quartz-leaden",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/leaden",
+        "productPageUrl": "https://hyundailncusa.com/colors/leaden",
+        "productName": "Leaden",
+        "displayName": "Leaden",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "CC104",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/leaden/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/leaden/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/leaden/gallery-07.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "leaden",
+          "gridNameLine": "Leaden - CC104",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MONOTONE",
+            "finish": "POLISHED",
+            "colorPalette": "GREY, COOL"
+          },
+          "pattern": "MONOTONE",
+          "colorPalette": "GREY, COOL",
+          "imageCount": 8,
+          "gridImageCount": 2,
+          "pdpImageCount": 6,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:30.696Z"
+      },
+      {
+        "id": "hanstone-quartz-blackburn",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/blackburn",
+        "productPageUrl": "https://hyundailncusa.com/colors/blackburn",
+        "productName": "Blackburn",
+        "displayName": "Blackburn",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "VALUE COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "RS401",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "VALUE COLLECTION � 2cm per sq ft",
+            "price": 12.36,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "VALUE COLLECTION � 3cm per sq ft",
+            "price": 14.64,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 859.16,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 725.13,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/blackburn/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/blackburn/gallery-08.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "blackburn",
+          "gridNameLine": "Blackburn - RS401",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "UNIFORM",
+            "finish": "POLISHED",
+            "colorPalette": "BLACK, GREY, COOL"
+          },
+          "pattern": "UNIFORM",
+          "colorPalette": "BLACK, GREY, COOL",
+          "imageCount": 9,
+          "gridImageCount": 2,
+          "pdpImageCount": 7,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "VALUE COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:31.100Z"
+      },
+      {
+        "id": "hanstone-quartz-storm",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/storm",
+        "productPageUrl": "https://hyundailncusa.com/colors/storm",
+        "productName": "Storm",
+        "displayName": "Storm",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "IMAGINATION COLLECTION",
+        "thickness": "",
+        "finish": "RIVER WASHED",
+        "size": "130 x 65",
+        "sku": "MV513",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "IMAGINATION COLLECTION � 2cm per sq ft",
+            "price": 19.68,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "IMAGINATION COLLECTION � 3cm per sq ft",
+            "price": 21.65,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1270.57,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 1155.06,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/storm/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/storm/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/storm/gallery-13.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "storm",
+          "gridNameLine": "Storm - MV513",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "MOVEMENT, VEINED",
+            "finish": "RIVER WASHED",
+            "colorPalette": "GREY, COOL"
+          },
+          "pattern": "MOVEMENT, VEINED",
+          "colorPalette": "GREY, COOL",
+          "imageCount": 16,
+          "gridImageCount": 3,
+          "pdpImageCount": 13,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imageDownloadErrors": [
+            {
+              "url": "https://hyundailncusa.com/uploads/products/hanstone/storm/3919-e-49th-st_077.jpg",
+              "file": "gallery-02.jpg",
+              "message": "HTTP 404"
+            },
+            {
+              "url": "https://hyundailncusa.com/uploads/products/hanstone/storm/3919-e-49th-st_078.jpg",
+              "file": "gallery-02.jpg",
+              "message": "HTTP 404"
+            }
+          ],
+          "remoteImageUrls": {
+            "imageUrl": "https://hyundailncusa.com/uploads/products/hanstone/Storm_Full_Slab.jpg",
+            "galleryImages": [
+              "https://hyundailncusa.com/uploads/products/hanstone/Storm_Swatch_616.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/3919-e-49th-st_077.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/3919-e-49th-st_078.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/Storm_Swatch.jpg",
+              "https://hyundailncusa.com/uploads/gallery/hanstone/storm/storm-restaurant-dining-area.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-6.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-5.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-2.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-4.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-1.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm-and-coast-3_full-interior_kitchen-2.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm_full-interior_kitchen.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm_flat-lay_spinach.jpeg",
+              "https://hyundailncusa.com/uploads/products/hanstone/storm/storm_hero.jpg",
+              "https://hyundailncusa.com/uploads/products/hanstone/Storm_Topdown_Final_Web.jpg"
+            ]
+          },
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "IMAGINATION COLLECTION"
+        }
+      },
+      {
+        "id": "hanstone-quartz-silhouette",
+        "vendor": "HanStone Quartz",
+        "manufacturer": "Hyundai L&C USA",
+        "sourceFile": "hanstone-sync",
+        "sourceType": "hyundai_lnc_color_search_plus_pdp",
+        "sourceUrl": "https://hyundailncusa.com/colors/silhouette",
+        "productPageUrl": "https://hyundailncusa.com/colors/silhouette",
+        "productName": "Silhouette",
+        "displayName": "Silhouette",
+        "material": "Quartz",
+        "category": "Surfacing",
+        "collection": "HanStone Quartz",
+        "tierOrGroup": "DESIGNER COLLECTION",
+        "thickness": "",
+        "finish": "POLISHED",
+        "size": "130 x 65",
+        "sku": "MV628",
+        "vendorItemNumber": "",
+        "bundleNumber": "",
+        "priceEntries": [
+          {
+            "label": "DESIGNER COLLECTION � 2cm per sq ft",
+            "price": 15.03,
+            "unit": "sqft",
+            "thickness": "2 cm"
+          },
+          {
+            "label": "DESIGNER COLLECTION � 3cm per sq ft",
+            "price": 17.89,
+            "unit": "sqft",
+            "thickness": "3 cm"
+          },
+          {
+            "label": "Jumbo slab 65�130 � 3cm (list)",
+            "price": 1049.54,
+            "unit": "slab",
+            "thickness": "3 cm",
+            "size": "65\" � 130\""
+          },
+          {
+            "label": "Jumbo slab 65�130 � 2cm (list)",
+            "price": 881.98,
+            "unit": "slab",
+            "thickness": "2 cm",
+            "size": "65\" � 130\""
+          }
+        ],
+        "imageUrl": "/vendor-assets/hanstone-quartz/silhouette/hero.jpg",
+        "galleryImages": [
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-01.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-02.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-03.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-04.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-05.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-06.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-07.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-08.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-09.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-10.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-11.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-12.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-13.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-14.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-15.jpg",
+          "/vendor-assets/hanstone-quartz/silhouette/gallery-16.jpg"
+        ],
+        "notes": "Hyundai LNC USA HanStone color pages (no wholesale pricing). Primary image: PDP “Full Slab” graphic when present; otherwise best-effort stone/swatch heuristic. Gallery: grid + PDP assets (similar-colors excluded).",
+        "freightInfo": "See PDF freight table for IL/WI.",
+        "availabilityFlags": [
+          "regional"
+        ],
+        "tags": [
+          "hanstone",
+          "quartz",
+          "hyundai-lnc"
+        ],
+        "lastSeenAt": "2026-04-10T16:10:41.184Z",
+        "rawSourceFields": {
+          "slug": "silhouette",
+          "gridNameLine": "Silhouette - MV628",
+          "stats": {
+            "slabSize": "JUMBO (65\" X 130\")",
+            "pattern": "VEINED",
+            "finish": "POLISHED",
+            "colorPalette": "BLACK"
+          },
+          "pattern": "VEINED",
+          "colorPalette": "BLACK",
+          "imageCount": 17,
+          "gridImageCount": 2,
+          "pdpImageCount": 15,
+          "primaryImageSource": "full_slab",
+          "parseWarnings": [],
+          "imagesDownloaded": true,
+          "hanstonePricePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+          "hanstonePdfCollections": "DESIGNER COLLECTION"
+        },
+        "lastImageSyncAt": "2026-04-10T16:11:31.475Z"
+      }
+    ],
+    "importWarnings": []
+  },
+  "meta": {
+    "supplier": "HanStone Quartz",
+    "source": "POST https://hyundailncusa.com/ajax/index.php?action=color_search (filters[brand][]=hanstone-quartz) + GET /colors/{slug}; primary slab photo is the PDP image above the “Full Slab” label (with fallbacks), plus grid + other PDP uploads for gallery (similar-colors excluded)",
+    "indexUrl": "https://hyundailncusa.com/colors?brand%5B%5D=hanstone-quartz",
+    "startedAt": "2026-04-10T16:10:39.849Z",
+    "finishedAt": "2026-04-10T16:11:33.743Z",
+    "rowCount": 42,
+    "detailFailureCount": 0,
+    "warningsCount": 0,
+    "outputFile": "public/hanstone-quartz.json",
+    "imagesDir": "public/vendor-assets/hanstone-quartz/",
+    "downloadImages": true,
+    "imageDownload": {
+      "totalBytes": 1795535802,
+      "filesOk": 635,
+      "filesFail": 2
+    },
+    "note": "Unofficial AJAX usage; Hyundai LNC may change PHP actions or HTML without notice. PDP `<p class=\"stats\">` drives size/finish. `imageUrl` prefers the PDP “Full Slab” slab photo (`extractFullSlabImageUrl`); `galleryImages` lists remaining unique assets from grid + PDP. Run with `--downloadImages=1` (default) to save files under `public/vendor-assets/hanstone-quartz/<slug>/` and point JSON at `/vendor-assets/...`.",
+    "hanstonePriceMerge": {
+      "ok": true,
+      "sourcePdf": "2025 HanStone Pricing MW IL_WI (002).pdf",
+      "matched": 40,
+      "catalogItemCount": 42,
+      "pdfColorCount": 54,
+      "finishedAt": "2026-04-10T16:11:33.927Z"
+    }
+  }
+}

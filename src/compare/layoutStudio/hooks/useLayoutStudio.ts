@@ -1,0 +1,141 @@
+import { useCallback, useEffect, useState } from "react";
+import type { JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
+import { createDefaultLayoutState } from "../constants";
+import {
+  hydrateMergedLayoutState,
+  persistLayoutDraft,
+  recomputeDraftSummary,
+} from "../services/persistLayout";
+import type { SavedLayoutStudioState } from "../types";
+import { captureLayoutPreview } from "../utils/previewCapture";
+import { ensurePlacementsForPieces } from "../utils/placements";
+import { slabsForOption } from "../utils/slabDimensions";
+import { useResolvedLayoutSlabs } from "./useResolvedLayoutSlabs";
+
+export type LayoutSaveStatus = "idle" | "saving" | "saved" | "error";
+
+type Params = {
+  job: JobRecord | null;
+  jobId: string | undefined;
+  option: JobComparisonOptionRecord | null;
+  optionId: string | undefined;
+};
+
+export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
+  const [draft, setDraft] = useState<SavedLayoutStudioState>(() => createDefaultLayoutState());
+  const layoutSlabs = useResolvedLayoutSlabs(option, draft.slabClones);
+  const [saveStatus, setSaveStatus] = useState<LayoutSaveStatus>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const planSig = job?.layoutStudioPlan ? JSON.stringify(job.layoutStudioPlan) : "";
+  const optionPlacementSig = option
+    ? JSON.stringify(option.layoutStudioPlacement ?? null)
+    : "";
+  const legacyOptionSig = option?.layoutStudio ? JSON.stringify(option.layoutStudio) : "";
+
+  useEffect(() => {
+    if (!jobId || !job) {
+      setDraft(createDefaultLayoutState());
+      return;
+    }
+    setDraft(hydrateMergedLayoutState(job, option ?? null));
+    setSaveStatus("idle");
+    setSaveError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid resetting on every job snapshot reference; rely on serialized plan/option payloads
+  }, [jobId, option?.id, planSig, optionPlacementSig, legacyOptionSig]);
+
+  /** Recompute summary when resolved slab dimensions change (e.g. photo aspect loaded). */
+  useEffect(() => {
+    if (!jobId || !job) return;
+    setDraft((d) => recomputeDraftSummary(d, option ?? null, layoutSlabs));
+  }, [jobId, job, option, layoutSlabs]);
+
+  const updateDraft = useCallback(
+    (fn: (d: SavedLayoutStudioState) => SavedLayoutStudioState) => {
+      setDraft((d) => {
+        const next = fn(d);
+        return recomputeDraftSummary(next, option ?? null, layoutSlabs);
+      });
+    },
+    [option, layoutSlabs]
+  );
+
+  const replaceDraft = useCallback(
+    (next: SavedLayoutStudioState) => {
+      setDraft(recomputeDraftSummary(next, option ?? null, layoutSlabs));
+    },
+    [option, layoutSlabs]
+  );
+
+  const buildPreviewBlob = useCallback(async (d: SavedLayoutStudioState): Promise<Blob | null> => {
+    if (!option) return null;
+    const slabs = layoutSlabs.length > 0 ? layoutSlabs : slabsForOption(option);
+    const ppi = d.calibration.pixelsPerInch;
+    if (!slabs[0] || !ppi) return null;
+    return captureLayoutPreview({
+      slab: slabs[0],
+      pieces: d.pieces,
+      placements: ensurePlacementsForPieces(d.pieces, d.placements),
+      pixelsPerInch: ppi,
+    });
+  }, [layoutSlabs, option]);
+
+  /** Pass `draftOverride` when persisting state that is not yet committed to React state (e.g. same-tick tab switch). */
+  const save = useCallback(
+    async (draftOverride?: SavedLayoutStudioState): Promise<boolean> => {
+      if (!job || !jobId) return false;
+      const toPersist = draftOverride ?? draft;
+      setSaveStatus("saving");
+      setSaveError(null);
+      try {
+        const previewBlob = await buildPreviewBlob(toPersist);
+        const saved = await persistLayoutDraft(jobId, job, optionId, option ?? null, toPersist, {
+          previewBlob,
+          layoutSlabs,
+        });
+        replaceDraft(recomputeDraftSummary(saved, option ?? null, layoutSlabs));
+        setSaveStatus("saved");
+        window.setTimeout(() => setSaveStatus("idle"), 2200);
+        return true;
+      } catch (e) {
+        setSaveStatus("error");
+        setSaveError(e instanceof Error ? e.message : "Could not save layout.");
+        return false;
+      }
+    },
+    [buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]
+  );
+
+  const saveQuotePhase = useCallback(async (): Promise<boolean> => {
+    if (!job || !jobId || !option || !optionId) return false;
+    setSaveStatus("saving");
+    setSaveError(null);
+    try {
+      const previewBlob = await buildPreviewBlob(draft);
+      const saved = await persistLayoutDraft(jobId, job, optionId, option, draft, {
+        previewBlob,
+        quotePromotion: true,
+        layoutSlabs,
+      });
+      replaceDraft(recomputeDraftSummary(saved, option, layoutSlabs));
+      setSaveStatus("saved");
+      window.setTimeout(() => setSaveStatus("idle"), 2200);
+      return true;
+    } catch (e) {
+      setSaveStatus("error");
+      setSaveError(e instanceof Error ? e.message : "Could not save layout.");
+      return false;
+    }
+  }, [buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]);
+
+  return {
+    draft,
+    setDraft: replaceDraft,
+    updateDraft,
+    save,
+    saveQuotePhase,
+    saveStatus,
+    saveError,
+    layoutSlabs,
+  };
+}

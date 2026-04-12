@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /customers/{customerId} {
+      allow read: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+    }
+
+    match /jobs/{jobId} {
+      allow read: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+    }
+
+    match /jobComparisonOptions/{optionId} {
+      allow read: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+    }
+
+    /** User profile (display name, etc.) — each user may only read/write their own doc. */
+    match /users/{userId} {
+      allow read, create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    /**
+     * Read-only layout quote snapshots for customer share links (QR / URL).
+     * Writes are owner-only; reads are public so unauthenticated recipients can open the page.
+     */
+    match /layoutQuoteShares/{shareId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

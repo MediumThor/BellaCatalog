@@ -1,0 +1,6 @@
+{
+  "_comment": "Map normalized live-inventory names -> normalized catalog names. Keys and values should be pre-normalized (lowercase, collapsed whitespace).",
+  "calacatta borghini": "calacatta borghini",
+  "bianca frost jumbo": "bianca frost jumbo"
+}
+
