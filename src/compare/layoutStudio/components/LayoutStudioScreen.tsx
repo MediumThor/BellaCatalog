@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type {
-  CustomerRecord,
-  JobComparisonOptionRecord,
-  JobRecord,
-  LayoutQuoteCustomerRowId,
-  LayoutQuoteSettings,
+import {
+  customerDisplayName,
+  type CustomerRecord,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+  type LayoutQuoteCustomerRowId,
+  type LayoutQuoteSettings,
 } from "../../../types/compareQuote";
 import { updateJob } from "../../../services/compareQuoteFirestore";
 import { createDefaultLayoutState } from "../constants";
-import { uploadJobLayoutSource } from "../services/layoutStorage";
+import { uploadJobLayoutSource, uploadJobLayoutSourcePreviewPng } from "../services/layoutStorage";
 import { useLayoutStudio } from "../hooks/useLayoutStudio";
 import type {
   FaucetEvenHoleBias,
@@ -67,7 +68,12 @@ import { QuotePhaseView } from "./QuotePhaseView";
 import { LayoutQuoteSettingsModal } from "./LayoutQuoteSettingsModal";
 import { mergeCustomerExclusions, mergeLayoutQuoteSettings } from "../utils/commercialQuote";
 import { StudioEntryHub } from "./StudioEntryHub";
-import { TraceWorkspace } from "./TraceWorkspace";
+import {
+  TraceWorkspace,
+  TRACE_VIEW_ZOOM_MAX,
+  TRACE_VIEW_ZOOM_MIN,
+  traceViewZoomDisplayPct,
+} from "./TraceWorkspace";
 import {
   IconDimensions,
   IconPieceLabels,
@@ -98,16 +104,20 @@ import "../layoutStudio.css";
 type Props = {
   job: JobRecord;
   customer: CustomerRecord | null;
+  activeAreaId?: string | null;
+  activeAreaName?: string | null;
   options: JobComparisonOptionRecord[];
   activeOption: JobComparisonOptionRecord | null;
   onOptionChange: (optionId: string) => void;
   ownerUserId: string;
-  onBack: () => void;
+  onBack: () => void | Promise<void>;
 };
 
 export function LayoutStudioScreen({
   job,
   customer,
+  activeAreaId,
+  activeAreaName,
   options,
   activeOption,
   onOptionChange,
@@ -119,6 +129,7 @@ export function LayoutStudioScreen({
     useLayoutStudio({
       job,
       jobId: job.id,
+      areaId: activeAreaId ?? null,
       option: activeOption,
       optionId,
     });
@@ -147,6 +158,8 @@ export function LayoutStudioScreen({
   }, [optionId, layoutSlabIdsKey, layoutSlabs]);
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationStep, setCalibrationStep] = useState<"idle" | "a" | "b">("idle");
+  const [calibrationPopupOpen, setCalibrationPopupOpen] = useState(false);
+  const [calibrationPopupPos, setCalibrationPopupPos] = useState({ x: 13, y: 13 });
   const [distanceInput, setDistanceInput] = useState("");
   const [distanceUnit, setDistanceUnit] = useState<"in" | "ft" | "mm" | "cm">("in");
   const [uploading, setUploading] = useState(false);
@@ -210,11 +223,39 @@ export function LayoutStudioScreen({
   const onBlankViewZoomChange = useCallback((z: number) => {
     setBlankViewZoom(z);
   }, []);
+  const [traceViewZoom, setTraceViewZoom] = useState(1);
+  const onTraceViewZoomChange = useCallback((z: number) => {
+    setTraceViewZoom(z);
+  }, []);
+  const stepTraceZoomIn = useCallback(
+    () => setTraceViewZoom((z) => Math.min(TRACE_VIEW_ZOOM_MAX, z < 1 ? z + 0.5 : z * 2)),
+    []
+  );
+  const stepTraceZoomOut = useCallback(
+    () => setTraceViewZoom((z) => Math.max(TRACE_VIEW_ZOOM_MIN, z > 1 ? z / 2 : z - 0.5)),
+    []
+  );
+  const [traceResetViewTick, setTraceResetViewTick] = useState(0);
+  const [traceZoomToSelectedTick, setTraceZoomToSelectedTick] = useState(0);
+  const calibrationPopupDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
   const [planBoxZoomActive, setPlanBoxZoomActive] = useState(false);
   /** Blank plan: overlay full-screen drawing (toolbar + canvas + inspector). */
   const [planCanvasExpanded, setPlanCanvasExpanded] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const entryUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingDuplicateFitRef = useRef(false);
+
+  const handleBack = useCallback(async () => {
+    const ok = await save(draftRef.current);
+    if (!ok) return;
+    await onBack();
+  }, [onBack, save]);
 
   const selectMaterialOption = useCallback(
     async (nextId: string) => {
@@ -258,8 +299,9 @@ export function LayoutStudioScreen({
     [job.id, mergedCustomerExclusions]
   );
 
-  const displayUrl = draft.source?.fileUrl ?? null;
-  const isPdfSource = draft.source?.kind === "pdf";
+  const displayUrl =
+    draft.source?.kind === "pdf" ? draft.source.previewImageUrl ?? draft.source.fileUrl : draft.source?.fileUrl ?? null;
+  const isPdfSource = draft.source?.kind === "pdf" && !draft.source?.previewImageUrl;
   const isBlankWorkspace = workspaceKind === "blank";
 
   const startBlankLayout = () => {
@@ -423,6 +465,16 @@ export function LayoutStudioScreen({
     setPlanFitAllPiecesTick((t) => t + 1);
   }, [isBlankWorkspace, mode, draft.pieces.length]);
 
+  useLayoutEffect(() => {
+    if (!pendingDuplicateFitRef.current) return;
+    if (!isBlankWorkspace || mode !== "trace") {
+      pendingDuplicateFitRef.current = false;
+      return;
+    }
+    pendingDuplicateFitRef.current = false;
+    blankPlanRef.current?.fitAllPiecesInView();
+  }, [draft.pieces.length, isBlankWorkspace, mode]);
+
   useEffect(() => {
     if (mode !== "place") setLayoutPreviewModalOpen(false);
   }, [mode]);
@@ -558,6 +610,22 @@ export function LayoutStudioScreen({
     },
     [updateDraftWithUndo]
   );
+
+  const beginCalibration = useCallback(() => {
+    setCalibrationPopupOpen(true);
+    setCalibrationMode(true);
+    setCalibrationStep("a");
+    updateDraftWithUndo((d) => ({
+      ...d,
+      calibration: {
+        ...d.calibration,
+        pointA: null,
+        pointB: null,
+        isCalibrated: false,
+        pixelsPerInch: null,
+      },
+    }));
+  }, [updateDraftWithUndo]);
 
   const onPlacementsChange = useCallback(
     (placements: PiecePlacement[]) => {
@@ -817,12 +885,13 @@ export function LayoutStudioScreen({
   const duplicateSelected = () => {
     if (!selectedPiece) return;
     const nid = crypto.randomUUID();
-    const offset = isBlankWorkspace ? 6 : 24;
-    const copy: LayoutPiece = {
+    const offsetStep = isBlankWorkspace ? 6 : 24;
+    const baseTransform = selectedPiece.planTransform ?? { x: 0, y: 0 };
+    const baseCopy: LayoutPiece = {
       ...selectedPiece,
       id: nid,
       name: `${selectedPiece.name} copy`,
-      points: selectedPiece.points.map((q) => ({ x: q.x + offset, y: q.y + offset })),
+      points: selectedPiece.points.map((q) => ({ ...q })),
       sinks: selectedPiece.sinks?.map((s) => ({ ...s, id: crypto.randomUUID() })),
       manualDimensions: selectedPiece.manualDimensions
         ? selectedPiece.manualDimensions.kind === "rectangle"
@@ -837,7 +906,23 @@ export function LayoutStudioScreen({
             return { ...restEt, splashEdges: [] };
           })()
         : undefined,
+      planTransform: { ...baseTransform },
     };
+    let copy = baseCopy;
+    for (let step = 1; step <= 24; step += 1) {
+      const candidate: LayoutPiece = {
+        ...baseCopy,
+        planTransform: {
+          x: baseTransform.x + offsetStep * step,
+          y: baseTransform.y + offsetStep * step,
+        },
+      };
+      if (!anyPiecesOverlap([...draft.pieces, candidate])) {
+        copy = candidate;
+        break;
+      }
+      copy = candidate;
+    }
     updateDraftWithUndo((d) => ({
       ...d,
       pieces: [...d.pieces, copy],
@@ -855,6 +940,10 @@ export function LayoutStudioScreen({
       ],
     }));
     setSelectedPieceId(nid);
+    if (isBlankWorkspace) {
+      pendingDuplicateFitRef.current = true;
+      setPlanFitAllPiecesTick((t) => t + 1);
+    }
   };
 
   const deleteSelected = () => {
@@ -938,7 +1027,7 @@ export function LayoutStudioScreen({
   }, [selectedPieceId, updateDraftWithUndo]);
 
   const rotateSelectedPlanPiece = (deltaDeg: number) => {
-    if (!selectedPieceId || !isBlankWorkspace) return;
+    if (!selectedPieceId) return;
     const id = selectedPieceId;
     updateDraftWithUndo((d) => ({
       ...d,
@@ -1085,7 +1174,8 @@ export function LayoutStudioScreen({
       setRedoStack([]);
 
       if (kind === "pdf") {
-        const { width, height } = await renderPdfFileFirstPageToDataUrl(file, 2);
+        const { pngBlob, width, height } = await renderPdfFileFirstPageToDataUrl(file, 2);
+        const { downloadUrl: previewImageUrl } = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, pngBlob);
         updateDraft((d) => ({
           ...d,
           workspaceKind: "source",
@@ -1095,6 +1185,7 @@ export function LayoutStudioScreen({
           source: {
             kind: "pdf",
             fileUrl: downloadUrl,
+            previewImageUrl,
             fileName: file.name,
             uploadedAt,
             sourceWidthPx: width,
@@ -1149,6 +1240,7 @@ export function LayoutStudioScreen({
           img.src = o;
         });
       }
+      setCalibrationPopupOpen(true);
       setCalibrationMode(true);
       setCalibrationStep("a");
     } catch (err) {
@@ -1194,7 +1286,53 @@ export function LayoutStudioScreen({
         pixelsPerInch: ppi,
       },
     }));
+    setCalibrationPopupOpen(false);
+    setCalibrationMode(false);
+    setCalibrationStep("idle");
   };
+
+  const closeCalibrationPopup = useCallback(() => {
+    setCalibrationPopupOpen(false);
+    setCalibrationMode(false);
+    setCalibrationStep("idle");
+  }, []);
+
+  useEffect(() => {
+    if (!calibrationPopupOpen) return;
+    setCalibrationPopupPos({ x: 13, y: 13 });
+  }, [calibrationPopupOpen, planCanvasExpanded]);
+
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      const drag = calibrationPopupDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      setCalibrationPopupPos({
+        x: Math.max(8, drag.originX + (e.clientX - drag.startX)),
+        y: Math.max(8, drag.originY + (e.clientY - drag.startY)),
+      });
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const drag = calibrationPopupDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      calibrationPopupDragRef.current = null;
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
+  const beginCalibrationPopupDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    calibrationPopupDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: calibrationPopupPos.x,
+      originY: calibrationPopupPos.y,
+    };
+  }, [calibrationPopupPos.x, calibrationPopupPos.y]);
 
   const placementForSelected = draft.placements.find((p) => p.pieceId === selectedPieceId);
   const canRotatePlacementOnSlab = !!(
@@ -1257,10 +1395,10 @@ export function LayoutStudioScreen({
   }, [isBlankWorkspace, mode, tool, updateDraftWithUndo]);
 
   useEffect(() => {
-    if (mode !== "trace" || !isBlankWorkspace) {
+    if (mode !== "trace") {
       setPlanCanvasExpanded(false);
     }
-  }, [mode, isBlankWorkspace]);
+  }, [mode]);
 
   useEffect(() => {
     if (!planCanvasExpanded) {
@@ -1290,20 +1428,20 @@ export function LayoutStudioScreen({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [planCanvasExpanded]);
 
-  const showLayoutRail = mode === "trace" && !isBlankWorkspace;
+  const showLayoutRail = false;
 
   /** Header kicker: customer name · job name (replaces “Layout Studio · …” on every phase). */
   const layoutStudioJobContextKicker = useMemo(() => {
     const jobLabel = job.name.trim() || "Job";
     if (!customer) return jobLabel;
-    const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim();
+    const customerName = customerDisplayName(customer);
     if (!customerName) return jobLabel;
     return `${customerName} · ${jobLabel}`;
   }, [customer, job.name]);
 
   const tracePieceInspectorPanel =
     selectedPiece && mode === "trace" ? (
-      <div className="ls-inspector ls-inspector--beside-canvas glass-panel">
+      <div className="ls-inspector ls-inspector--overlay-canvas glass-panel">
         <p className="ls-card-title">Piece details</p>
         <label className="ls-field">
           Name
@@ -1484,6 +1622,142 @@ export function LayoutStudioScreen({
       </div>
     ) : null;
 
+  const traceCalibrationPopup =
+    mode === "trace" && !isBlankWorkspace && calibrationPopupOpen ? (
+      <div
+        className="ls-calibration-popup glass-panel"
+        role="dialog"
+        aria-label="Set plan scale"
+        style={{ left: calibrationPopupPos.x, top: calibrationPopupPos.y }}
+      >
+        <div className="ls-calibration-popup-head">
+          <div
+            className="ls-calibration-popup-handle"
+            onPointerDown={beginCalibrationPopupDrag}
+            title="Drag scale popup"
+          >
+            <p className="ls-card-title">Set scale</p>
+            <p className="ls-muted ls-calibration-popup-sub">
+              Pick two points on the plan, then enter the real-world distance for that segment.
+            </p>
+          </div>
+          <button type="button" className="ls-btn ls-btn-ghost" onClick={closeCalibrationPopup}>
+            Close
+          </button>
+        </div>
+        {calibrationMode ? (
+          <p className="ls-hint">
+            {calibrationStep === "a" && "Click the first point on your plan."}
+            {calibrationStep === "b" && "Click the second point on your plan."}
+          </p>
+        ) : null}
+        {draft.calibration.pointA && draft.calibration.pointB && !draft.calibration.isCalibrated ? (
+          <p className="ls-hint">Enter the real-world distance for that segment.</p>
+        ) : null}
+        {draft.calibration.pointA && draft.calibration.pointB ? (
+          <div className="ls-calibration-popup-fields">
+            <label className="ls-field">
+              Distance
+              <input
+                className="ls-input"
+                type="number"
+                min={0.01}
+                step={0.01}
+                value={distanceInput}
+                onChange={(e) => setDistanceInput(e.target.value)}
+              />
+            </label>
+            <label className="ls-field">
+              Unit
+              <select
+                className="ls-input"
+                value={distanceUnit}
+                onChange={(e) => setDistanceUnit(e.target.value as "in" | "ft" | "mm" | "cm")}
+              >
+                <option value="in">in</option>
+                <option value="ft">ft</option>
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+              </select>
+            </label>
+            <div className="ls-calibration-popup-actions">
+              <button type="button" className="ls-btn ls-btn-secondary" onClick={beginCalibration}>
+                Pick points again
+              </button>
+              <button type="button" className="ls-btn ls-btn-primary" onClick={applyCalibration}>
+                Apply scale
+              </button>
+            </div>
+            <p className="ls-muted ls-calibration-popup-metrics">
+              Segment length:{" "}
+              {`${Math.hypot(
+                draft.calibration.pointB.x - draft.calibration.pointA.x,
+                draft.calibration.pointB.y - draft.calibration.pointA.y
+              ).toFixed(1)} px`}
+              {draft.calibration.pixelsPerInch ? ` · ${draft.calibration.pixelsPerInch.toFixed(2)} px/in` : ""}
+            </p>
+          </div>
+        ) : (
+          <div className="ls-calibration-popup-actions">
+            <button type="button" className="ls-btn ls-btn-secondary" onClick={beginCalibration}>
+              Start picking points
+            </button>
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  const renderPhaseToolbar = (className = "ls-phase-toggle-wrap glass-panel") => (
+    <div className={className}>
+      <div className="ls-segmented ls-segmented--3 ls-segmented--canvas" role="tablist" aria-label="Layout Studio phase">
+        <button
+          type="button"
+          className={mode === "trace" ? "is-active" : ""}
+          disabled={saveStatus === "saving"}
+          onClick={() => handleModeChange("trace")}
+        >
+          Plan
+        </button>
+        <button
+          type="button"
+          className={mode === "place" ? "is-active" : ""}
+          disabled={saveStatus === "saving"}
+          onClick={() => handleModeChange("place")}
+        >
+          Layout
+        </button>
+        <button
+          type="button"
+          className={mode === "quote" ? "is-active" : ""}
+          disabled={saveStatus === "saving"}
+          onClick={() => handleModeChange("quote")}
+        >
+          Quote
+        </button>
+      </div>
+      {mode === "quote" ? (
+        <div className="ls-phase-quote-actions">
+          <button
+            type="button"
+            className="ls-btn ls-btn-secondary"
+            disabled={saveStatus === "saving"}
+            onClick={() => void save(draftRef.current)}
+          >
+            {saveStatus === "saving" ? "Saving…" : "Save layout"}
+          </button>
+          <button
+            type="button"
+            className="ls-btn ls-btn-primary"
+            disabled={!activeOption}
+            onClick={() => setLayoutQuoteModalOpen(true)}
+          >
+            Export quote
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div
       className={`ls-root${layoutQuoteModalOpen && activeOption ? " ls-root--layout-quote-modal" : ""}${
@@ -1492,14 +1766,14 @@ export function LayoutStudioScreen({
     >
       <header className="ls-header glass-panel">
         <div className="ls-header-top">
-          <button type="button" className="ls-back" onClick={onBack}>
+          <button type="button" className="ls-back" onClick={() => void handleBack()} disabled={saveStatus === "saving"}>
             ← Back
           </button>
           <div className="ls-header-titles">
             <p className="ls-kicker">{layoutStudioJobContextKicker}</p>
             {mode === "quote" ? (
               <>
-                <h1 className="ls-title">Shared kitchen plan</h1>
+                <h1 className="ls-title">{activeAreaName ? `${activeAreaName} layout` : "Shared kitchen plan"}</h1>
                 <p className="ls-sub">
                   {activeOption ? (
                     <>
@@ -1611,6 +1885,7 @@ export function LayoutStudioScreen({
                     ["rect", "Rectangle"],
                     ["lShape", "L-shape"],
                     ["polygon", "Polygon"],
+                    ["orthoDraw", "Ortho draw"],
                   ] as const
                 ).map(([id, label]) => (
                   <button
@@ -1631,20 +1906,7 @@ export function LayoutStudioScreen({
                 <button
                   type="button"
                   className="ls-btn ls-btn-secondary"
-                  onClick={() => {
-                    setCalibrationMode(true);
-                    setCalibrationStep("a");
-                    updateDraftWithUndo((d) => ({
-                      ...d,
-                      calibration: {
-                        ...d.calibration,
-                        pointA: null,
-                        pointB: null,
-                        isCalibrated: false,
-                        pixelsPerInch: null,
-                      },
-                    }));
-                  }}
+                  onClick={beginCalibration}
                 >
                   Set scale
                 </button>
@@ -1707,48 +1969,7 @@ export function LayoutStudioScreen({
         ) : null}
 
         <div className="ls-canvas-column">
-          {!planCanvasExpanded ? (
-            <div className="ls-phase-toggle-wrap glass-panel">
-              <div className="ls-segmented ls-segmented--3 ls-segmented--canvas" role="tablist" aria-label="Layout Studio phase">
-                <button
-                  type="button"
-                  className={mode === "trace" ? "is-active" : ""}
-                  disabled={saveStatus === "saving"}
-                  onClick={() => handleModeChange("trace")}
-                >
-                  Plan
-                </button>
-                <button
-                  type="button"
-                  className={mode === "place" ? "is-active" : ""}
-                  disabled={saveStatus === "saving"}
-                  onClick={() => handleModeChange("place")}
-                >
-                  Layout
-                </button>
-                <button
-                  type="button"
-                  className={mode === "quote" ? "is-active" : ""}
-                  disabled={saveStatus === "saving"}
-                  onClick={() => handleModeChange("quote")}
-                >
-                  Quote
-                </button>
-              </div>
-              {mode === "quote" ? (
-                <div className="ls-phase-quote-actions">
-                  <button
-                    type="button"
-                    className="ls-btn ls-btn-secondary"
-                    disabled={saveStatus === "saving"}
-                    onClick={() => void save(draftRef.current)}
-                  >
-                    {saveStatus === "saving" ? "Saving…" : "Save layout"}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {!planCanvasExpanded ? renderPhaseToolbar() : null}
           <section
             className={`ls-canvas-shell glass-panel${
               mode === "place" || mode === "quote" ? " ls-canvas-shell--tall" : ""
@@ -1768,18 +1989,6 @@ export function LayoutStudioScreen({
                 if (f) void handleUpload(f);
               }}
             />
-          ) : null}
-          {mode === "trace" && !showEntryHub && !isBlankWorkspace ? (
-            <div className="ls-trace-plan-toolbar" role="toolbar" aria-label="Plan source">
-              <label
-                className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
-                htmlFor="ls-main-upload"
-                title="Upload PDF or image plan"
-                aria-label="Upload PDF or image plan"
-              >
-                <span>{uploading ? "Uploading…" : "PDF"}</span>
-              </label>
-            </div>
           ) : null}
           {mode === "quote" ? (
             activeOption ? (
@@ -1878,7 +2087,13 @@ export function LayoutStudioScreen({
                         type="button"
                         className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === id ? " is-active" : ""}`}
                         aria-pressed={tool === id}
-                        onClick={() => setTool(id)}
+                        onClick={() => {
+                          if (id === "orthoDraw" && tool === "orthoDraw") {
+                            blankPlanRef.current?.cancelOrthoDraw();
+                            return;
+                          }
+                          setTool(id);
+                        }}
                         title={label}
                         aria-label={label}
                       >
@@ -2113,16 +2328,264 @@ export function LayoutStudioScreen({
                     >
                       {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
                     </button>
+                    {tracePieceInspectorPanel}
                   </div>
-                  {!planCanvasExpanded ? tracePieceInspectorPanel : null}
                 </div>
               </div>
             ) : (
+              <div
+                className={`ls-plan-blank-shell${planCanvasExpanded ? " ls-plan-blank-shell--fullscreen" : ""}`}
+                role={planCanvasExpanded ? "dialog" : undefined}
+                aria-modal={planCanvasExpanded ? true : undefined}
+                aria-label={planCanvasExpanded ? "Plan canvas — full screen" : undefined}
+              >
               <div className="ls-trace-canvas-with-inspector">
-                <div className="ls-trace-canvas-main">
+                <div className="ls-trace-canvas-main ls-trace-canvas-main--plan-host">
+                  <div className="ls-plan-toolbar" role="toolbar" aria-label="Plan canvas tools">
+                    <div className="ls-plan-toolbar-group">
+                      <label
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
+                        htmlFor="ls-main-upload"
+                        title="Upload PDF or image plan"
+                        aria-label="Upload PDF or image plan"
+                      >
+                        <span>{uploading ? "Uploading…" : "PDF"}</span>
+                      </label>
+                    </div>
+                    <span className="ls-plan-toolbar-divider" aria-hidden />
+                    <div className="ls-plan-toolbar-group" role="group" aria-label="Add piece">
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={() => setTool("rect")}
+                        title="Rectangle — width & depth"
+                        aria-label="Add rectangle — width and depth"
+                      >
+                        <IconToolRect />
+                      </button>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={() => setTool("lShape")}
+                        title="L-shape — legs & depth"
+                        aria-label="Add L-shape — legs and depth"
+                      >
+                        <IconToolLShape />
+                      </button>
+                    </div>
+                    <div className="ls-plan-toolbar-section" role="group" aria-label="Trace tools">
+                      {(
+                        [
+                          ["select", IconSelectCursor, "Select"],
+                          ["rect", IconToolRect, "Rectangle (drag)"],
+                          ["lShape", IconToolLShape, "L-shape (drag)"],
+                          ["polygon", IconToolPolygon, "Polygon"],
+                          ["orthoDraw", IconToolOrtho, "Ortho draw"],
+                          ["snapLines", IconToolSnapLines, "Snap lines"],
+                        ] as const
+                      ).map(([id, Icon, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === id ? " is-active" : ""}`}
+                          aria-pressed={tool === id}
+                          onClick={() => {
+                            if (id === "orthoDraw" && tool === "orthoDraw") {
+                              setTool("select");
+                              return;
+                            }
+                            setTool(id);
+                          }}
+                          title={label}
+                          aria-label={label}
+                        >
+                          <Icon />
+                        </button>
+                      ))}
+                      <div className="ls-plan-toolbar-group ls-plan-toolbar-group--seam-join">
+                        <button
+                          type="button"
+                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "join" ? " is-active" : ""}`}
+                          aria-pressed={tool === "join"}
+                          disabled={!joinAvailable}
+                          onClick={() => {
+                            if (!joinAvailable) return;
+                            setTool((t) => (t === "join" ? "select" : "join"));
+                          }}
+                          title={
+                            joinAvailable
+                              ? "Join — merge along one flush edge (full or L-shape; click piece 1, then piece 2)"
+                              : "Join — snap two pieces flush with Snap lines first"
+                          }
+                          aria-label="Join pieces"
+                        >
+                          <IconToolJoin />
+                        </button>
+                        <button
+                          type="button"
+                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "cornerRadius" ? " is-active" : ""}`}
+                          aria-pressed={tool === "cornerRadius"}
+                          onClick={() => setTool((t) => (t === "cornerRadius" ? "select" : "cornerRadius"))}
+                          title="Corner radius — choose radius, then two adjacent edges (convex or inside corners)"
+                          aria-label="Corner radius"
+                        >
+                          <IconToolCornerRadius />
+                        </button>
+                        <button
+                          type="button"
+                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "connectCorner" ? " is-active" : ""}`}
+                          aria-pressed={tool === "connectCorner"}
+                          onClick={() => setTool((t) => (t === "connectCorner" ? "select" : "connectCorner"))}
+                          title="Connect — remove edge arcs at a 90° corner (click one edge, then the adjacent edge)"
+                          aria-label="Connect corner — remove arcs"
+                        >
+                          <IconToolConnectCorner />
+                        </button>
+                      </div>
+                    </div>
+                    <span className="ls-plan-toolbar-divider" aria-hidden />
+                    <div className="ls-plan-toolbar-group">
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        disabled={undoStack.length === 0}
+                        onClick={() => undo()}
+                        title="Undo"
+                        aria-label="Undo"
+                      >
+                        <IconUndo />
+                      </button>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        disabled={redoStack.length === 0}
+                        onClick={() => redo()}
+                        title="Redo"
+                        aria-label="Redo"
+                      >
+                        <IconRedo />
+                      </button>
+                    </div>
+                    <div className="ls-plan-toolbar-group">
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${showEdgeDimensions ? " is-active" : ""}`}
+                        aria-pressed={showEdgeDimensions}
+                        onClick={() => setShowEdgeDimensions((v) => !v)}
+                        title="Edge dimensions (123)"
+                        aria-label="Edge dimensions"
+                      >
+                        <IconDimensions />
+                      </button>
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${showPieceLabels ? " is-active" : ""}`}
+                        aria-pressed={showPieceLabels}
+                        onClick={() => setShowPieceLabels((v) => !v)}
+                        title="Piece labels (text)"
+                        aria-label="Piece labels"
+                      >
+                        <IconPieceLabels />
+                      </button>
+                    </div>
+                    {selectedPieceId ? (
+                      <div className="ls-plan-toolbar-group" role="group" aria-label="Rotate selected piece">
+                        <button
+                          type="button"
+                          className="ls-plan-toolbar-btn"
+                          onClick={() => rotateSelectedPlanPiece(-90)}
+                          title="Rotate 90° counter-clockwise"
+                          aria-label="Rotate 90 degrees counter-clockwise"
+                        >
+                          <IconRotateCCW />
+                        </button>
+                        <button
+                          type="button"
+                          className="ls-plan-toolbar-btn"
+                          onClick={() => rotateSelectedPlanPiece(90)}
+                          title="Rotate 90° clockwise"
+                          aria-label="Rotate 90 degrees clockwise"
+                        >
+                          <IconRotateCW />
+                        </button>
+                      </div>
+                    ) : null}
+                    <span className="ls-plan-toolbar-spacer" aria-hidden />
+                    <div className="ls-plan-toolbar-group ls-plan-toolbar-group--zoom" role="group" aria-label="Zoom view">
+                      <span className="ls-plan-toolbar-zoom-heading">Zoom</span>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={stepTraceZoomOut}
+                        disabled={traceViewZoom <= TRACE_VIEW_ZOOM_MIN}
+                        title="Zoom out"
+                        aria-label="Zoom out"
+                      >
+                        <IconZoomOut />
+                      </button>
+                      <span className="ls-plan-toolbar-zoom-pct" aria-live="polite">
+                        {traceViewZoomDisplayPct(traceViewZoom)}%
+                      </span>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={stepTraceZoomIn}
+                        disabled={traceViewZoom >= TRACE_VIEW_ZOOM_MAX}
+                        title="Zoom in"
+                        aria-label="Zoom in"
+                      >
+                        <IconZoomIn />
+                      </button>
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${planBoxZoomActive ? " is-active" : ""}`}
+                        aria-pressed={planBoxZoomActive}
+                        title="Drag a box on the plan to zoom to that area"
+                        aria-label="Zoom box — drag to frame area"
+                        onClick={() => setPlanBoxZoomActive((v) => !v)}
+                      >
+                        <IconZoomMarquee />
+                      </button>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        disabled={!selectedPieceId}
+                        title={selectedPieceId ? "Fit the selected piece in view" : "Select a piece first"}
+                        aria-label="Zoom to selected piece"
+                        onClick={() => setTraceZoomToSelectedTick((t) => t + 1)}
+                      >
+                        <IconZoomFitSelection />
+                      </button>
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        title="Reset view — show the full plan"
+                        aria-label="Reset view — show full plan"
+                        onClick={() => {
+                          setTraceViewZoom(1);
+                          setPlanBoxZoomActive(false);
+                          setTraceResetViewTick((t) => t + 1);
+                        }}
+                      >
+                        <IconZoomResetView />
+                      </button>
+                    </div>
+                    <span className="ls-plan-toolbar-divider" aria-hidden />
+                    <span className="ls-plan-toolbar-zoom-heading" aria-live="polite">
+                      {draft.calibration.isCalibrated ? "Scale set" : "Scale needed"}
+                    </span>
+                    <button type="button" className="ls-btn ls-btn-secondary" onClick={beginCalibration}>
+                      Set scale
+                    </button>
+                  </div>
                   <TraceWorkspace
                     displayUrl={displayUrl}
                     isPdfSource={isPdfSource}
+                    fitPageToWidth={!planCanvasExpanded}
+                    viewZoom={traceViewZoom}
+                    boxZoomMode={planBoxZoomActive}
+                    resetViewSignal={traceResetViewTick}
+                    zoomToSelectedSignal={traceZoomToSelectedTick}
                     calibration={draft.calibration}
                     calibrationMode={calibrationMode}
                     onCalibrationPoint={onCalibrationPoint}
@@ -2133,9 +2596,22 @@ export function LayoutStudioScreen({
                     onPiecesChange={onPiecesChange}
                     slabs={layoutSlabs}
                     placements={draft.placements}
+                    onViewZoomChange={onTraceViewZoomChange}
+                    onBoxZoomModeChange={setPlanBoxZoomActive}
                   />
+                  <button
+                    type="button"
+                    className="ls-plan-canvas-expand-fab"
+                    onClick={() => setPlanCanvasExpanded((v) => !v)}
+                    title={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
+                    aria-label={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
+                  >
+                    {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
+                  </button>
+                  {traceCalibrationPopup}
+                  {tracePieceInspectorPanel}
                 </div>
-                {!planCanvasExpanded ? tracePieceInspectorPanel : null}
+              </div>
               </div>
             )
           ) : !activeOption ? (

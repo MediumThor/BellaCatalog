@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AddressAutocompleteInput } from "../components/AddressAutocompleteInput";
+import { formatPhoneInput } from "../utils/phone";
 
 export type CustomerFormValues = {
+  businessName: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -11,6 +13,7 @@ export type CustomerFormValues = {
 };
 
 export const emptyCustomerFormValues: CustomerFormValues = {
+  businessName: "",
   firstName: "",
   lastName: "",
   phone: "",
@@ -70,8 +73,18 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
           </p>
         ) : null}
         <div className="compare-form-grid">
+          <label className="form-label compare-form-span-2">
+            Business name
+            <input
+              className="form-input"
+              value={values.businessName}
+              onChange={(e) => update({ businessName: e.target.value })}
+              autoComplete="organization"
+              placeholder="Optional business or company name"
+            />
+          </label>
           <label className="form-label">
-            First name *
+            First name
             <input
               className="form-input"
               value={values.firstName}
@@ -80,7 +93,7 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
             />
           </label>
           <label className="form-label">
-            Last name *
+            Last name
             <input
               className="form-input"
               value={values.lastName}
@@ -89,16 +102,16 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
             />
           </label>
           <label className="form-label">
-            Phone *
+            Phone
             <input
               className="form-input"
               value={values.phone}
-              onChange={(e) => update({ phone: e.target.value })}
+              onChange={(e) => update({ phone: formatPhoneInput(e.target.value) })}
               autoComplete="tel"
             />
           </label>
           <label className="form-label">
-            Email *
+            Email
             <input
               className="form-input"
               type="email"
@@ -137,12 +150,14 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
             disabled={saving}
             onClick={async () => {
               setError(null);
-              if (!values.firstName.trim() || !values.lastName.trim()) {
-                setError("First and last name are required.");
+              const hasBusiness = Boolean(values.businessName.trim());
+              const hasPersonName = Boolean(values.firstName.trim() && values.lastName.trim());
+              if (!hasBusiness && !hasPersonName) {
+                setError("Enter a business name, or both first and last name.");
                 return;
               }
-              if (!values.phone.trim() || !values.email.trim() || !values.address.trim()) {
-                setError("Phone, email, and address are required.");
+              if (!values.address.trim()) {
+                setError("Address is required.");
                 return;
               }
               setSaving(true);

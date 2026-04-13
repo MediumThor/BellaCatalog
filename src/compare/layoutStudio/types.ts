@@ -182,6 +182,8 @@ export interface SavedLayoutCalibration {
 export interface SavedLayoutSource {
   kind: LayoutSourceKind;
   fileUrl: string;
+  /** PDF uploads also persist a rendered first-page preview for tracing + calibration. */
+  previewImageUrl?: string;
   fileName: string;
   uploadedAt: string;
   sourceWidthPx?: number;

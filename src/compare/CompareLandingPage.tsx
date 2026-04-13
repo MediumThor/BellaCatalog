@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { createCustomer, subscribeCustomers } from "../services/compareQuoteFirestore";
-import type { CustomerRecord } from "../types/compareQuote";
+import { customerContactSummary, customerDisplayName, type CustomerRecord } from "../types/compareQuote";
 import { CreateCustomerModal, type CustomerFormValues } from "./CreateCustomerModal";
 
 export function CompareLandingPage() {
@@ -98,9 +98,9 @@ export function CompareLandingPage() {
                     onClick={() => setDrawerOpen(false)}
                   >
                     <span className="compare-drawer__name">
-                      {c.firstName} {c.lastName}
+                      {customerDisplayName(c)}
                     </span>
-                    <span className="compare-drawer__meta">{c.phone}</span>
+                    <span className="compare-drawer__meta">{customerContactSummary(c, "No contact info")}</span>
                   </Link>
                 </li>
               ))}
@@ -115,6 +115,7 @@ export function CompareLandingPage() {
         onSubmit={async (values: CustomerFormValues) => {
           if (!user?.uid) throw new Error("Not signed in");
           await createCustomer(user.uid, {
+            businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),
             lastName: values.lastName.trim(),
             phone: values.phone.trim(),

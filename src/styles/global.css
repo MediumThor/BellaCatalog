@@ -3477,6 +3477,12 @@ a.compare-customer-contact__item:hover {
   transform: translateY(0);
 }
 
+.floating-compare-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+  transform: none;
+}
+
 .floating-compare-btn__inner {
   display: inline-flex;
   align-items: center;
@@ -3497,6 +3503,21 @@ a.compare-customer-contact__item:hover {
   background: rgba(201, 162, 39, 0.22);
   color: #f0e6c8;
   border: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+.floating-compare-btn--success {
+  border-color: rgba(79, 192, 110, 0.38);
+  background: linear-gradient(145deg, rgba(40, 110, 62, 0.96) 0%, rgba(20, 76, 41, 0.98) 100%);
+}
+
+.floating-compare-btn--success:hover {
+  border-color: rgba(104, 216, 136, 0.52);
+}
+
+.floating-compare-btn--success .floating-compare-btn__count {
+  background: rgba(138, 255, 170, 0.18);
+  color: #dcffe5;
+  border-color: rgba(138, 255, 170, 0.28);
 }
 
 .compare-onboard-backdrop {

@@ -26,6 +26,10 @@ createRoot(el).render(
           <Route path="/share/layout-quote/:shareId" element={<PublicLayoutQuotePage />} />
           <Route element={<RequireAuth />}>
             <Route path="/" element={<App />} />
+            <Route path="/layout" element={<CompareShell />}>
+              <Route index element={<LayoutStudioPage />} />
+              <Route path="jobs/:jobId" element={<LayoutStudioPage />} />
+            </Route>
             <Route path="/compare" element={<CompareShell />}>
               <Route index element={<CompareLandingPage />} />
               <Route path="customers/:customerId" element={<CustomerDetailPage />} />

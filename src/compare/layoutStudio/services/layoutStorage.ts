@@ -27,6 +27,19 @@ export async function uploadJobLayoutSource(
   return { downloadUrl, storagePath };
 }
 
+export async function uploadJobLayoutSourcePreviewPng(
+  ownerUserId: string,
+  jobId: string,
+  blob: Blob
+): Promise<{ downloadUrl: string; storagePath: string }> {
+  const safeName = `preview-${Date.now()}.png`;
+  const storagePath = `layout-sources/${ownerUserId}/jobs/${jobId}/${safeName}`;
+  const r = ref(firebaseStorage, storagePath);
+  await uploadBytes(r, blob, { contentType: "image/png" });
+  const downloadUrl = await getDownloadURL(r);
+  return { downloadUrl, storagePath };
+}
+
 /** @deprecated Legacy path — prefer uploadJobLayoutSource */
 export async function uploadLayoutSource(
   ownerUserId: string,

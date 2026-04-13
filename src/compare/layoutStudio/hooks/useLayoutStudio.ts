@@ -17,19 +17,22 @@ export type LayoutSaveStatus = "idle" | "saving" | "saved" | "error";
 type Params = {
   job: JobRecord | null;
   jobId: string | undefined;
+  areaId?: string | null;
   option: JobComparisonOptionRecord | null;
   optionId: string | undefined;
 };
 
-export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
+export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params) {
   const [draft, setDraft] = useState<SavedLayoutStudioState>(() => createDefaultLayoutState());
   const layoutSlabs = useResolvedLayoutSlabs(option, draft.slabClones);
   const [saveStatus, setSaveStatus] = useState<LayoutSaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const planSig = job?.layoutStudioPlan ? JSON.stringify(job.layoutStudioPlan) : "";
+  const planSig = areaId
+    ? JSON.stringify(job?.areas?.find((area) => area.id === areaId)?.layoutStudioPlan ?? null)
+    : JSON.stringify(job?.layoutStudioPlan ?? null);
   const optionPlacementSig = option
-    ? JSON.stringify(option.layoutStudioPlacement ?? null)
+    ? JSON.stringify((areaId ? option.layoutAreaStates?.[areaId]?.layoutStudioPlacement : option.layoutStudioPlacement) ?? null)
     : "";
   const legacyOptionSig = option?.layoutStudio ? JSON.stringify(option.layoutStudio) : "";
 
@@ -38,11 +41,11 @@ export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
       setDraft(createDefaultLayoutState());
       return;
     }
-    setDraft(hydrateMergedLayoutState(job, option ?? null));
+    setDraft(hydrateMergedLayoutState(job, option ?? null, areaId ?? null));
     setSaveStatus("idle");
     setSaveError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid resetting on every job snapshot reference; rely on serialized plan/option payloads
-  }, [jobId, option?.id, planSig, optionPlacementSig, legacyOptionSig]);
+  }, [areaId, jobId, option?.id, planSig, optionPlacementSig, legacyOptionSig]);
 
   /** Recompute summary when resolved slab dimensions change (e.g. photo aspect loaded). */
   useEffect(() => {
@@ -89,7 +92,7 @@ export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
       setSaveError(null);
       try {
         const previewBlob = await buildPreviewBlob(toPersist);
-        const saved = await persistLayoutDraft(jobId, job, optionId, option ?? null, toPersist, {
+        const saved = await persistLayoutDraft(jobId, job, optionId, option ?? null, toPersist, areaId ?? null, {
           previewBlob,
           layoutSlabs,
         });
@@ -103,7 +106,7 @@ export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
         return false;
       }
     },
-    [buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]
+    [areaId, buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]
   );
 
   const saveQuotePhase = useCallback(async (): Promise<boolean> => {
@@ -112,7 +115,7 @@ export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
     setSaveError(null);
     try {
       const previewBlob = await buildPreviewBlob(draft);
-      const saved = await persistLayoutDraft(jobId, job, optionId, option, draft, {
+      const saved = await persistLayoutDraft(jobId, job, optionId, option, draft, areaId ?? null, {
         previewBlob,
         quotePromotion: true,
         layoutSlabs,
@@ -126,7 +129,7 @@ export function useLayoutStudio({ job, jobId, option, optionId }: Params) {
       setSaveError(e instanceof Error ? e.message : "Could not save layout.");
       return false;
     }
-  }, [buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]);
+  }, [areaId, buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]);
 
   return {
     draft,

@@ -77,6 +77,8 @@ type Props = {
   showSlabTabs?: boolean;
   /** Piece name / splash label on slab (matches Live Layout Preview toggle). */
   showPieceLabels?: boolean;
+  /** Optional second line with placed piece bounding dimensions. */
+  showPieceDimensions?: boolean;
   /**
    * Multiple slabs: `tabs` shows one slab at a time; `column` stacks every slab vertically
    * (pieces filtered by `placement.slabId`).
@@ -124,6 +126,7 @@ export function PlaceWorkspace({
   readOnly = false,
   showSlabTabs = true,
   showPieceLabels = true,
+  showPieceDimensions = false,
   slabViewMode = "column",
   primarySlabId = null,
   onRemoveSlab,
@@ -472,6 +475,7 @@ export function PlaceWorkspace({
                     : baseFont;
                   const longHoriz = bw >= bh;
                   const labelRot = longHoriz ? 0 : 90;
+                  const dimensionText = `${bw.toFixed(1)}" x ${bh.toFixed(1)}"`;
                   const colliding = collidingPieceIds.has(piece.id);
                   const fill = colliding
                     ? sel
@@ -514,7 +518,14 @@ export function PlaceWorkspace({
                           className="ls-place-piece-label"
                           style={{ pointerEvents: "none", userSelect: "none" }}
                         >
-                          {labelText}
+                          <tspan x="0" dy={showPieceDimensions ? "-0.45em" : "0"}>
+                            {labelText}
+                          </tspan>
+                          {showPieceDimensions ? (
+                            <tspan x="0" dy="1.15em" className="ls-place-preview-piece-dimension">
+                              {dimensionText}
+                            </tspan>
+                          ) : null}
                         </text>
                       ) : null}
                     </g>

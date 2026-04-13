@@ -32,6 +32,7 @@ type Props = {
   tracePlanWidth?: number | null;
   tracePlanHeight?: number | null;
   showLabels: boolean;
+  showDimensions?: boolean;
   selectedPieceId: string | null;
   /** Distinct prefix when multiple previews mount (e.g. inline + modal) so SVG ids stay unique. */
   previewInstanceId?: string;
@@ -114,6 +115,7 @@ export function PlaceLayoutPreview({
   tracePlanWidth,
   tracePlanHeight,
   showLabels,
+  showDimensions = false,
   selectedPieceId,
   previewInstanceId = "inline",
   variant = "inline",
@@ -277,6 +279,8 @@ export function PlaceLayoutPreview({
           const maxY = Math.max(...ys);
           const bw = maxX - minX;
           const bh = maxY - minY;
+          const bwIn = workspaceKind === "blank" ? bw : bw / Math.max(pixelsPerInch ?? 1, 1);
+          const bhIn = workspaceKind === "blank" ? bh : bh / Math.max(pixelsPerInch ?? 1, 1);
           const cx = (minX + maxX) / 2;
           const cy = (minY + maxY) / 2;
           const longHoriz = bw >= bh;
@@ -293,6 +297,7 @@ export function PlaceLayoutPreview({
           const labelText = isStrip
             ? (stripLetterLabelById.get(piece.id) ?? "—")
             : (pieceLetterLabelById.get(piece.id) ?? piece.name);
+          const dimensionText = `${bwIn.toFixed(1)}" x ${bhIn.toFixed(1)}"`;
 
           const ringCen = centroid(ringOpen);
           const { ox: arcOx, oy: arcOy } = planWorldOffset(piece, pieces);
@@ -398,7 +403,12 @@ export function PlaceLayoutPreview({
                   className={`ls-place-preview-piece-label${sel ? " ls-place-preview-piece-label--selected" : ""}`}
                   style={{ pointerEvents: "none", userSelect: "none" }}
                 >
-                  {labelText}
+                  <tspan x="0" dy={showDimensions ? "-0.45em" : "0"}>{labelText}</tspan>
+                  {showDimensions ? (
+                    <tspan x="0" dy="1.15em" className="ls-place-preview-piece-dimension">
+                      {dimensionText}
+                    </tspan>
+                  ) : null}
                 </text>
               ) : null}
             </g>

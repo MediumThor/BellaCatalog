@@ -1,5 +1,10 @@
 import { updateJob, updateJobComparisonOption } from "../../../services/compareQuoteFirestore";
-import type { JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
+import {
+  jobAreasForJob,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+  type LayoutAreaOptionState,
+} from "../../../types/compareQuote";
 import { omitUndefinedDeep } from "../../../utils/compareSnapshot";
 import { createDefaultLayoutState } from "../constants";
 import { uploadLayoutPreviewPng } from "./layoutStorage";
@@ -65,12 +70,19 @@ export function hydrateLayoutFromOption(option: JobComparisonOptionRecord): Save
  */
 export function hydrateMergedLayoutState(
   job: JobRecord | null,
-  option: JobComparisonOptionRecord | null
+  option: JobComparisonOptionRecord | null,
+  areaId?: string | null
 ): SavedLayoutStudioState {
   const base = createDefaultLayoutState();
+  const selectedArea = areaId ? jobAreasForJob(job ?? { areaType: "", areas: [] }).find((area) => area.id === areaId) : null;
+  const areaPlan = selectedArea?.layoutStudioPlan ?? job?.layoutStudioPlan ?? null;
+  const areaPlacement =
+    (areaId ? option?.layoutAreaStates?.[areaId ?? ""]?.layoutStudioPlacement : null) ??
+    option?.layoutStudioPlacement ??
+    null;
 
-  if (job?.layoutStudioPlan) {
-    const p = job.layoutStudioPlan;
+  if (areaPlan) {
+    const p = areaPlan;
     let merged: SavedLayoutStudioState = {
       ...base,
       version: p.version ?? LAYOUT_STUDIO_VERSION,
@@ -83,8 +95,8 @@ export function hydrateMergedLayoutState(
       updatedAt: p.updatedAt ?? base.updatedAt,
     };
 
-    if (option?.layoutStudioPlacement) {
-      const pl = option.layoutStudioPlacement;
+    if (areaPlacement) {
+      const pl = areaPlacement;
       merged = {
         ...merged,
         placements: pl.placements ?? [],
@@ -157,10 +169,11 @@ export function recomputeDraftSummary(
 
 export async function persistLayoutDraft(
   jobId: string,
-  _job: JobRecord,
+  job: JobRecord,
   optionId: string | undefined,
   option: JobComparisonOptionRecord | null,
   draft: SavedLayoutStudioState,
+  areaId?: string | null,
   opts?: { previewBlob?: Blob | null; quotePromotion?: boolean; layoutSlabs?: LayoutSlab[] }
 ): Promise<SavedLayoutStudioState> {
   const withPlacements = recomputeDraftSummary(draft, option, opts?.layoutSlabs);
@@ -169,7 +182,15 @@ export async function persistLayoutDraft(
   const plan = draftToJobPlan(withPlacements);
   /** Firestore rejects `undefined` at any depth (common on optional piece/calibration fields). */
   const layoutStudioPlan = omitUndefinedDeep(plan) as SavedJobLayoutPlan;
-  await updateJob(jobId, { layoutStudioPlan });
+  const areaPatch = areaId
+    ? jobAreasForJob(job).map((area) =>
+        area.id === areaId ? { ...area, updatedAt: t, layoutStudioPlan } : area
+      )
+    : job.areas ?? null;
+  await updateJob(jobId, {
+    layoutStudioPlan,
+    ...(areaPatch ? { areas: areaPatch, areaType: areaPatch.map((area) => area.name).join(", ") } : {}),
+  });
 
   if (!option || !optionId) {
     return { ...withPlacements, updatedAt: t };
@@ -201,12 +222,40 @@ export async function persistLayoutDraft(
     layoutPreviewImageUrl: previewUrl,
     layoutUpdatedAt: t,
   };
+  if (areaId) {
+    const nextAreaState: LayoutAreaOptionState = {
+      layoutStudioPlacement: placementBlob,
+      layoutEstimatedAreaSqFt: withPlacements.summary.areaSqFt,
+      layoutEstimatedFinishedEdgeLf: withPlacements.summary.finishedEdgeLf,
+      layoutSinkCount: withPlacements.summary.sinkCount,
+      layoutEstimatedSlabCount: withPlacements.summary.estimatedSlabCount,
+      layoutPreviewImageUrl: previewUrl,
+      layoutUpdatedAt: t,
+    };
+    patch.layoutAreaStates = {
+      ...(option?.layoutAreaStates ?? {}),
+      [areaId]: nextAreaState,
+    };
+  }
   if (opts?.quotePromotion) {
     patch.layoutQuoteReadyAt = t;
     patch.layoutProfileLf = withPlacements.summary.profileEdgeLf ?? 0;
     patch.layoutMiterLf = withPlacements.summary.miterEdgeLf ?? 0;
     patch.layoutSplashLf = 0;
     patch.layoutSplashCount = withPlacements.summary.splashPieceCount ?? 0;
+    if (areaId && patch.layoutAreaStates?.[areaId]) {
+      patch.layoutAreaStates = {
+        ...patch.layoutAreaStates,
+        [areaId]: {
+          ...patch.layoutAreaStates[areaId],
+          layoutQuoteReadyAt: t,
+          layoutProfileLf: withPlacements.summary.profileEdgeLf ?? 0,
+          layoutMiterLf: withPlacements.summary.miterEdgeLf ?? 0,
+          layoutSplashLf: 0,
+          layoutSplashCount: withPlacements.summary.splashPieceCount ?? 0,
+        },
+      };
+    }
   }
 
   const cleaned = omitUndefinedDeep(patch as unknown as Record<string, unknown>) as Record<string, unknown>;

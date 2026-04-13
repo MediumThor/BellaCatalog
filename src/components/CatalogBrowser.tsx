@@ -44,6 +44,15 @@ export type CatalogBrowserProps = {
   pickMode?: boolean;
   onPickItem?: (item: CatalogItem) => void;
   pickLabel?: string;
+  allowDelete?: boolean;
+  searchPlacement?: "header" | "inline";
+  compareBagAction?: {
+    label: string;
+    srLabel: string;
+    className?: string;
+    disabled?: boolean;
+    onClick: (items: CatalogItem[]) => void;
+  };
 };
 
 export function CatalogBrowser({
@@ -54,6 +63,9 @@ export function CatalogBrowser({
   pickMode,
   onPickItem,
   pickLabel,
+  allowDelete,
+  searchPlacement = "header",
+  compareBagAction,
 }: CatalogBrowserProps) {
   const [prefs, setPrefs] = useState<UiPreferences>(() => mergePreferences(loadPreferences()));
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => [...loadFavoriteIds()]);
@@ -69,11 +81,16 @@ export function CatalogBrowser({
   const [compareBagIds, setCompareBagIds] = useState<string[]>([]);
   const [compareOnboardOpen, setCompareOnboardOpen] = useState(false);
   const aiConfigured = geminiCatalogSearchConfigured();
-  const compareBagEnabled = !pickMode;
+  const compareBagEnabled = Boolean(compareBagAction) || !pickMode;
+  const canDeleteCatalogRows = allowDelete ?? !pickMode;
 
   useLayoutEffect(() => {
+    if (searchPlacement !== "header") {
+      setHeaderSearchSlot(null);
+      return;
+    }
     setHeaderSearchSlot(document.getElementById("catalog-header-search-root"));
-  }, []);
+  }, [searchPlacement]);
 
   useEffect(() => {
     savePreferences(prefs);
@@ -209,9 +226,9 @@ export function CatalogBrowser({
   }, [catalog]);
 
   const handleRequestDeleteEntry = useCallback((item: CatalogItem) => {
-    if (pickMode) return;
+    if (!canDeleteCatalogRows) return;
     setDeleteConfirm(item);
-  }, [pickMode]);
+  }, [canDeleteCatalogRows]);
 
   const confirmDeleteEntry = useCallback(() => {
     if (!deleteConfirm) return;
@@ -339,16 +356,28 @@ export function CatalogBrowser({
         </div>
       ) : null}
 
-      <CompareCatalogOnboardingModal
-        open={compareOnboardOpen}
-        onClose={() => setCompareOnboardOpen(false)}
-        selectedItems={compareBagItems}
-        onClearSelection={clearCompareBag}
-      />
+      {!compareBagAction ? (
+        <CompareCatalogOnboardingModal
+          open={compareOnboardOpen}
+          onClose={() => setCompareOnboardOpen(false)}
+          selectedItems={compareBagItems}
+          onClearSelection={clearCompareBag}
+        />
+      ) : null}
 
       <FloatingCompareButton
         count={compareBagEnabled ? compareBagIds.length : 0}
-        onClick={() => setCompareOnboardOpen(true)}
+        onClick={() => {
+          if (compareBagAction) {
+            compareBagAction.onClick(compareBagItems);
+            return;
+          }
+          setCompareOnboardOpen(true);
+        }}
+        label={compareBagAction?.label}
+        srLabel={compareBagAction?.srLabel}
+        className={compareBagAction?.className}
+        disabled={compareBagAction?.disabled}
       />
 
       <ConfirmDialog
@@ -375,7 +404,7 @@ export function CatalogBrowser({
         </p>
       ) : null}
 
-      {headerSearchSlot
+      {searchPlacement === "header" && headerSearchSlot
         ? createPortal(
             <SearchBar
               variant="header"
@@ -392,6 +421,20 @@ export function CatalogBrowser({
             headerSearchSlot
           )
         : null}
+
+      {searchPlacement === "inline" ? (
+        <SearchBar
+          value={prefs.searchQuery}
+          onChange={(searchQuery) => {
+            setAiRankedIds([]);
+            setAiStatus({ kind: "idle", message: "" });
+            updatePrefs({ searchQuery });
+          }}
+          onAiSearch={runAiSearch}
+          aiBusy={aiBusy}
+          aiDisabledReason={aiConfigured ? undefined : "Set VITE_GEMINI_API_KEY to enable AI search"}
+        />
+      ) : null}
 
       {aiStatus.kind !== "idle" ? (
         <div className="ai-search-status" data-kind={aiStatus.kind} role="status">
@@ -547,7 +590,7 @@ export function CatalogBrowser({
             items={displayedItems}
             favoriteIds={favoriteSet}
             onToggleFavorite={toggleFavorite}
-            onRequestDeleteEntry={pickMode ? undefined : handleRequestDeleteEntry}
+            onRequestDeleteEntry={canDeleteCatalogRows ? handleRequestDeleteEntry : undefined}
             hidePrices={hidePricesEffective}
             showQuotedPrice={showQuotedEffective}
             showTags={prefs.showTags}
@@ -564,7 +607,7 @@ export function CatalogBrowser({
             columns={prefs.columns}
             favoriteIds={favoriteSet}
             onToggleFavorite={toggleFavorite}
-            onRequestDeleteEntry={pickMode ? undefined : handleRequestDeleteEntry}
+            onRequestDeleteEntry={canDeleteCatalogRows ? handleRequestDeleteEntry : undefined}
             hidePrices={hidePricesEffective}
             showQuotedPrice={showQuotedEffective}
             showTags={prefs.showTags}

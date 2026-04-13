@@ -164,6 +164,22 @@ function formatDimInches(n: number): string {
   return String(Math.round(n * 1000) / 1000);
 }
 
+function snapPlanPointToNearestInch(p: LayoutPoint): LayoutPoint {
+  return { x: Math.round(p.x), y: Math.round(p.y) };
+}
+
+function segmentMidpoint(a: LayoutPoint, b: LayoutPoint): LayoutPoint {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function segmentLength(a: LayoutPoint, b: LayoutPoint): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function formatDraftSegmentLength(lengthIn: number): string {
+  return `${Math.max(1, Math.round(lengthIn))}"`;
+}
+
 function edgeSegmentHasArc(pc: LayoutPiece, edgeIndex: number): boolean {
   const s = getEffectiveEdgeArcSagittasIn(pc)[edgeIndex];
   const c = getEffectiveEdgeArcCirclesIn(pc)[edgeIndex];
@@ -249,6 +265,8 @@ export type BlankPlanWorkspaceHandle = {
   zoomToSelected: () => void;
   /** Toggle drag-to-zoom box mode (marquee zoom to region). */
   toggleBoxZoom: () => void;
+  /** Clear any in-progress ortho draft without changing the active tool. */
+  cancelOrthoDraw: () => void;
 };
 
 function nextPieceName(pieces: LayoutPiece[]): string {
@@ -709,6 +727,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         toggleBoxZoom: () => {
           setBoxZoomMode((v) => !v);
           setZoomBoxDrag(null);
+        },
+        cancelOrthoDraw: () => {
+          setOrthoPoints(null);
+          setOrthoCursor(null);
         },
       }),
       [zoomOut, zoomIn, fitAllPiecesInView, fitPieceInView, selectedPieceId],
@@ -1218,12 +1240,12 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         const ppu = planUnitsPerScreenPx();
         const snapTh = Math.max(1.5, ppu * 12);
         const guideTh = Math.max(2.25, ppu * 18);
-        const vertexHitR = Math.max(2.0, ppu * 12);
+        const vertexHitR = Math.max(2.6, ppu * 18);
         /** Close the ring by clicking the start point — must run before vertex delete. */
         if (
           orthoPoints &&
           orthoPoints.length >= 3 &&
-          nearPoint(orthoPoints[0], p, vertexHitR)
+          nearPoint(orthoPoints[0], snapPlanPointToNearestInch(p), vertexHitR)
         ) {
           finishOrthoPolygon();
           return;
@@ -1247,13 +1269,17 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         }
         if (!orthoPoints || orthoPoints.length === 0) {
           const targets = collectOrthoSnapTargets(pieces, null, null);
-          const first = orthoSnapFirstPoint(p, targets, snapTh, guideTh).preview;
+          const first = snapPlanPointToNearestInch(
+            orthoSnapFirstPoint(p, targets, snapTh, guideTh).preview,
+          );
           setOrthoPoints([first]);
           return;
         }
         const last = orthoPoints[orthoPoints.length - 1];
         const targets = collectOrthoSnapTargets(pieces, orthoPoints, last);
-        const snapped = orthoSnapPreview(last, p, targets, snapTh, guideTh).preview;
+        const snapped = snapPlanPointToNearestInch(
+          orthoSnapPreview(last, p, targets, snapTh, guideTh).preview,
+        );
         if (
           orthoPoints.length >= 3 &&
           (nearPoint(orthoPoints[0], snapped, snapTh) ||
@@ -1262,6 +1288,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           finishOrthoPolygon();
           return;
         }
+        if (nearPoint(last, snapped, 1e-6)) return;
         setOrthoPoints((prev) => (prev ? [...prev, snapped] : [snapped]));
         return;
       }
@@ -1580,11 +1607,12 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       if (tool === "polygon") {
         e.preventDefault();
         const ppu = planUnitsPerScreenPx();
-        const vertexHitR = Math.max(2.0, ppu * 12);
+        const vertexHitR = Math.max(2.6, ppu * 18);
+        const snappedPoint = snapPlanPointToNearestInch(p);
         if (
           polyDraft &&
           polyDraft.length >= 3 &&
-          nearPoint(polyDraft[0], p, vertexHitR)
+          nearPoint(polyDraft[0], snappedPoint, vertexHitR)
         ) {
           finishPolygon();
           return;
@@ -1605,7 +1633,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             return;
           }
         }
-        setPolyDraft((prev) => (prev ? [...prev, p] : [p]));
+        setPolyDraft((prev) => {
+          if (!prev) return [snappedPoint];
+          if (nearPoint(prev[prev.length - 1]!, snappedPoint, 1e-6)) return prev;
+          return [...prev, snappedPoint];
+        });
         return;
       }
       if (tool === "rect" || tool === "lShape") {
@@ -2354,6 +2386,57 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         orthoDrawSnap = orthoSnapPreview(last, orthoCursor, targets, snapTh, guideTh);
       }
     }
+
+    const orthoCloseRadius = Math.max(2.6, planUnitsPerScreenPx() * 18);
+    const polygonCloseRadius = Math.max(2.6, planUnitsPerScreenPx() * 18);
+    const orthoPreviewPoint =
+      orthoDrawSnap && orthoPoints && orthoPoints.length > 0
+        ? snapPlanPointToNearestInch(orthoDrawSnap.preview)
+        : null;
+    const polygonPreviewPoint =
+      polyDraft && polyDraft.length > 0 && polyCursor
+        ? snapPlanPointToNearestInch(polyCursor)
+        : null;
+    const orthoDisplayPreview =
+      orthoPoints &&
+      orthoPoints.length >= 3 &&
+      orthoPreviewPoint &&
+      nearPoint(orthoPoints[0], orthoPreviewPoint, orthoCloseRadius)
+        ? orthoPoints[0]
+        : orthoPreviewPoint;
+    const polygonDisplayPreview =
+      polyDraft &&
+      polyDraft.length >= 3 &&
+      polygonPreviewPoint &&
+      nearPoint(polyDraft[0], polygonPreviewPoint, polygonCloseRadius)
+        ? polyDraft[0]
+        : polygonPreviewPoint;
+    const activeDraftSegment =
+      tool === "orthoDraw" &&
+      orthoPoints &&
+      orthoPoints.length > 0 &&
+      orthoDisplayPreview &&
+      !nearPoint(orthoPoints[orthoPoints.length - 1]!, orthoDisplayPreview, 1e-6)
+        ? {
+            a: orthoPoints[orthoPoints.length - 1]!,
+            b: orthoDisplayPreview,
+            lengthLabel: formatDraftSegmentLength(
+              segmentLength(orthoPoints[orthoPoints.length - 1]!, orthoDisplayPreview),
+            ),
+          }
+        : tool === "polygon" &&
+            polyDraft &&
+            polyDraft.length > 0 &&
+            polygonDisplayPreview &&
+            !nearPoint(polyDraft[polyDraft.length - 1]!, polygonDisplayPreview, 1e-6)
+          ? {
+              a: polyDraft[polyDraft.length - 1]!,
+              b: polygonDisplayPreview,
+              lengthLabel: formatDraftSegmentLength(
+                segmentLength(polyDraft[polyDraft.length - 1]!, polygonDisplayPreview),
+              ),
+            }
+          : null;
 
     return (
       <div className="ls-blank-wrap" ref={stageRef}>
@@ -3228,12 +3311,12 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     pointerEvents="none"
                   />
                 ) : null}
-                {polyCursor ? (
+                {polygonDisplayPreview ? (
                   <line
                     x1={polyDraft[polyDraft.length - 1]!.x}
                     y1={polyDraft[polyDraft.length - 1]!.y}
-                    x2={polyCursor.x}
-                    y2={polyCursor.y}
+                    x2={polygonDisplayPreview.x}
+                    y2={polygonDisplayPreview.y}
                     stroke="rgba(232,212,139,0.92)"
                     strokeWidth={0.18}
                     strokeDasharray="0.9 0.45"
@@ -3273,17 +3356,64 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   ),
                 )
               : null}
-            {orthoPoints && orthoPoints.length > 0 && orthoCursor && orthoDrawSnap ? (
+            {orthoPoints && orthoPoints.length >= 2 ? (
               <polyline
-                points={[...orthoPoints, orthoDrawSnap.preview]
-                  .map((q) => `${q.x},${q.y}`)
-                  .join(" ")}
+                points={orthoPoints.map((q) => `${q.x},${q.y}`).join(" ")}
                 fill="none"
+                stroke="rgba(232,212,139,0.92)"
+                strokeWidth={0.18}
+                pointerEvents="none"
+              />
+            ) : null}
+            {orthoPoints && orthoPoints.length > 0 && orthoDisplayPreview ? (
+              <line
+                x1={orthoPoints[orthoPoints.length - 1]!.x}
+                y1={orthoPoints[orthoPoints.length - 1]!.y}
+                x2={orthoDisplayPreview.x}
+                y2={orthoDisplayPreview.y}
                 stroke="rgba(232,212,139,0.92)"
                 strokeWidth={0.18}
                 strokeDasharray="0.9 0.45"
                 pointerEvents="none"
               />
+            ) : null}
+            {tool === "polygon" && polyDraft && polyDraft.length >= 3 ? (
+              <circle
+                cx={polyDraft[0]!.x}
+                cy={polyDraft[0]!.y}
+                r={polygonCloseRadius}
+                className="ls-draft-close-target"
+                pointerEvents="none"
+              />
+            ) : null}
+            {tool === "orthoDraw" && orthoPoints && orthoPoints.length >= 3 ? (
+              <circle
+                cx={orthoPoints[0]!.x}
+                cy={orthoPoints[0]!.y}
+                r={orthoCloseRadius}
+                className="ls-draft-close-target"
+                pointerEvents="none"
+              />
+            ) : null}
+            {activeDraftSegment ? (
+              <g className="ls-draft-segment-label" pointerEvents="none">
+                <rect
+                  x={segmentMidpoint(activeDraftSegment.a, activeDraftSegment.b).x - Math.max(2.25, activeDraftSegment.lengthLabel.length * 0.42)}
+                  y={segmentMidpoint(activeDraftSegment.a, activeDraftSegment.b).y - 1.9}
+                  width={Math.max(4.5, activeDraftSegment.lengthLabel.length * 0.84)}
+                  height={1.45}
+                  rx={0.4}
+                  ry={0.4}
+                />
+                <text
+                  x={segmentMidpoint(activeDraftSegment.a, activeDraftSegment.b).x}
+                  y={segmentMidpoint(activeDraftSegment.a, activeDraftSegment.b).y - 1.18}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  {activeDraftSegment.lengthLabel}
+                </text>
+              </g>
             ) : null}
             {tool === "select" && selectedPieceId
               ? pieces

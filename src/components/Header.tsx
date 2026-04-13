@@ -42,7 +42,7 @@ function HeaderInner({
             <NavLink to="/" end className={navClass}>
               Catalog
             </NavLink>
-            <NavLink to="/compare" className={navClass}>
+            <NavLink to="/layout" className={navClass}>
               Layout Studio
             </NavLink>
           </nav>

@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { AREA_TYPE_PRESETS } from "../types/compareQuote";
+import { useEffect, useRef, useState } from "react";
+import { AddressAutocompleteInput } from "../components/AddressAutocompleteInput";
 
 export type JobFormValues = {
   name: string;
+  contactName: string;
+  contactPhone: string;
+  siteAddress: string;
   areaType: string;
   notes: string;
   assumptions: string;
@@ -10,6 +13,9 @@ export type JobFormValues = {
 
 export const emptyJobFormValues = (): JobFormValues => ({
   name: "",
+  contactName: "",
+  contactPhone: "",
+  siteAddress: "",
   areaType: "Kitchen",
   notes: "",
   assumptions: "",
@@ -18,15 +24,29 @@ export const emptyJobFormValues = (): JobFormValues => ({
 type Props = {
   open: boolean;
   onClose: () => void;
+  initialValues?: JobFormValues | null;
   onSubmit: (values: JobFormValues) => Promise<void>;
 };
 
-export function CreateJobModal({ open, onClose, onSubmit }: Props) {
-  const [values, setValues] = useState<JobFormValues>(() => emptyJobFormValues());
+export function CreateJobModal({ open, onClose, initialValues, onSubmit }: Props) {
+  const [values, setValues] = useState<JobFormValues>(() => initialValues ?? emptyJobFormValues());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prevOpenRef = useRef(false);
+  const isEdit = Boolean(initialValues);
+
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setValues(initialValues ?? emptyJobFormValues());
+      setError(null);
+    }
+    prevOpenRef.current = open;
+  }, [open, initialValues]);
 
   if (!open) return null;
+
+  const title = isEdit ? "Edit job details" : "New job";
+  const submitLabel = isEdit ? "Save details" : "Create job";
 
   const update = (patch: Partial<JobFormValues>) => {
     setValues((v) => ({ ...v, ...patch }));
@@ -42,7 +62,7 @@ export function CreateJobModal({ open, onClose, onSubmit }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="job-modal-title" className="modal-title">
-          New job
+          {title}
         </h2>
         {error ? (
           <p className="compare-warning" role="alert">
@@ -59,19 +79,32 @@ export function CreateJobModal({ open, onClose, onSubmit }: Props) {
               placeholder="e.g. Main kitchen"
             />
           </label>
-          <label className="form-label compare-form-span-2">
-            Area type
+          <label className="form-label">
+            Contact name
             <input
               className="form-input"
-              list="area-presets"
-              value={values.areaType}
-              onChange={(e) => update({ areaType: e.target.value })}
+              value={values.contactName}
+              onChange={(e) => update({ contactName: e.target.value })}
+              placeholder="e.g. Jane Smith"
             />
-            <datalist id="area-presets">
-              {AREA_TYPE_PRESETS.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
+          </label>
+          <label className="form-label">
+            Contact phone
+            <input
+              className="form-input"
+              value={values.contactPhone}
+              onChange={(e) => update({ contactPhone: e.target.value })}
+              placeholder="e.g. 555-123-4567"
+            />
+          </label>
+          <label className="form-label compare-form-span-2">
+            Address
+            <AddressAutocompleteInput
+              id={isEdit ? "edit-job-address" : "create-job-address"}
+              className="form-input"
+              value={values.siteAddress}
+              onChange={(siteAddress) => update({ siteAddress })}
+            />
           </label>
           <label className="form-label compare-form-span-2">
             Notes
@@ -93,6 +126,7 @@ export function CreateJobModal({ open, onClose, onSubmit }: Props) {
             />
           </label>
         </div>
+        <p className="modal-sub">Add areas after the job is created in a separate step.</p>
         <p className="modal-sub">
           DXF / drawing attachments are planned for a later phase; URLs can be filled manually in
           Firestore if needed today.
@@ -123,7 +157,7 @@ export function CreateJobModal({ open, onClose, onSubmit }: Props) {
               }
             }}
           >
-            {saving ? "Saving…" : "Create job"}
+            {saving ? "Saving…" : submitLabel}
           </button>
         </div>
       </div>

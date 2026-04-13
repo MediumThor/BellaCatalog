@@ -1,5 +1,10 @@
 import JSZip from "jszip";
-import type { CustomerRecord, JobComparisonOptionRecord, JobRecord } from "../types/compareQuote";
+import {
+  customerDisplayName,
+  type CustomerRecord,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+} from "../types/compareQuote";
 import { formatMoney } from "./priceHelpers";
 import {
   computeQuotedInstallForCompareOption,
@@ -23,6 +28,9 @@ type ExportQuotePackageInput = {
   repName: string;
   repEmail: string;
   generatedAt: string;
+  areaId?: string | null;
+  areaName?: string | null;
+  areaSelectedOptionId?: string | null;
 };
 
 type FileWriterHandle = {
@@ -51,9 +59,20 @@ function formatTimestampForFilename(value: Date): string {
   return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}_${pad(value.getHours())}-${pad(value.getMinutes())}-${pad(value.getSeconds())}`;
 }
 
-function quotedSummaryLines(job: JobRecord, option: JobComparisonOptionRecord, isFinal: boolean): string[] {
+function areaMetrics(option: JobComparisonOptionRecord, areaId?: string | null) {
+  if (!areaId) return null;
+  return option.layoutAreaStates?.[areaId] ?? null;
+}
+
+function quotedSummaryLines(
+  job: JobRecord,
+  option: JobComparisonOptionRecord,
+  isFinal: boolean,
+  areaId?: string | null
+): string[] {
+  const metrics = areaMetrics(option, areaId);
   const quoted = computeQuotedInstallForCompareOption({
-    jobSquareFootage: effectiveQuoteSquareFootage(job, option),
+    jobSquareFootage: metrics?.layoutEstimatedAreaSqFt ?? effectiveQuoteSquareFootage(job, option),
     priceUnit: option.priceUnit,
     catalogLinePrice: option.selectedPriceValue,
     slabQuantity: option.slabQuantity,
@@ -79,9 +98,9 @@ function quotedSummaryLines(job: JobRecord, option: JobComparisonOptionRecord, i
     lines.push(`Notes: ${option.notes.trim()}`);
   }
 
-  if (option.layoutUpdatedAt) {
+  if ((metrics?.layoutUpdatedAt ?? option.layoutUpdatedAt)) {
     lines.push(
-      `Layout Studio (visual est.): ${option.layoutEstimatedAreaSqFt ?? "—"} sq ft area · ${option.layoutEstimatedFinishedEdgeLf ?? "—"} ft edge · ${option.layoutSinkCount ?? "—"} sinks · ${option.layoutEstimatedSlabCount ?? "—"} slabs (est.)`
+      `Layout Studio (visual est.): ${metrics?.layoutEstimatedAreaSqFt ?? option.layoutEstimatedAreaSqFt ?? "—"} sq ft area · ${metrics?.layoutEstimatedFinishedEdgeLf ?? option.layoutEstimatedFinishedEdgeLf ?? "—"} ft edge · ${metrics?.layoutSinkCount ?? option.layoutSinkCount ?? "—"} sinks · ${metrics?.layoutEstimatedSlabCount ?? option.layoutEstimatedSlabCount ?? "—"} slabs (est.)`
     );
   }
 
@@ -95,9 +114,15 @@ function buildSummaryText({
   repName,
   repEmail,
   generatedAt,
+  areaId,
+  areaName,
+  areaSelectedOptionId,
 }: ExportQuotePackageInput): string {
-  const finalOption = options.find((option) => option.id === job.finalOptionId) ?? null;
-  const jobQuoteSqFt = jobQuoteSquareFootage(job, options);
+  const finalOption =
+    options.find((option) => option.id === (areaSelectedOptionId ?? job.finalOptionId)) ?? null;
+  const jobQuoteSqFt =
+    (finalOption ? areaMetrics(finalOption, areaId)?.layoutEstimatedAreaSqFt : null) ??
+    jobQuoteSquareFootage(job, options);
   const lines: string[] = [
     "Bella Stone Quote Summary",
     "=========================",
@@ -111,7 +136,7 @@ function buildSummaryText({
     "",
     "Customer",
     "--------",
-    customer ? `${customer.firstName} ${customer.lastName}`.trim() : "—",
+    customer ? customerDisplayName(customer) : "—",
     customer?.phone || "—",
     customer?.email || "—",
     customer?.address || "—",
@@ -126,7 +151,7 @@ function buildSummaryText({
     "Job",
     "---",
     `Name: ${job.name}`,
-    `Area: ${job.areaType}`,
+    `Area: ${areaName || job.areaType}`,
     `Quote area (sq ft): ${jobQuoteSqFt > 0 ? String(jobQuoteSqFt) : "— (from layout when saved)"}`,
     `Status: ${job.status}`,
     `Attachments: DXF: ${job.dxfAttachmentUrl ?? "—"} · Drawing: ${job.drawingAttachmentUrl ?? "—"}`
@@ -155,7 +180,14 @@ function buildSummaryText({
   );
 
   options.forEach((option, index) => {
-    lines.push(`${index + 1}. ${quotedSummaryLines(job, option, option.id === job.finalOptionId).join("\n   ")}`);
+    lines.push(
+      `${index + 1}. ${quotedSummaryLines(
+        job,
+        option,
+        option.id === (areaSelectedOptionId ?? job.finalOptionId),
+        areaId
+      ).join("\n   ")}`
+    );
     lines.push("");
   });
 
@@ -346,7 +378,8 @@ async function exportToDirectory(
   summaryFilename: string,
   summaryText: string,
   options: JobComparisonOptionRecord[],
-  imageFilenames: Map<string, string>
+  imageFilenames: Map<string, string>,
+  areaId?: string | null
 ): Promise<ExportResult> {
   const targetDirectory =
     typeof rootDirectory.getDirectoryHandle === "function"
@@ -372,9 +405,10 @@ async function exportToDirectory(
       }
     }
 
-    if (option.layoutPreviewImageUrl?.trim()) {
+    const previewUrl = areaMetrics(option, areaId)?.layoutPreviewImageUrl ?? option.layoutPreviewImageUrl;
+    if (previewUrl?.trim()) {
       try {
-        const jpegBlob = await getImageAsJpeg(option.layoutPreviewImageUrl);
+        const jpegBlob = await getImageAsJpeg(previewUrl);
         const layoutName = `Layout-${option.id.slice(0, 12)}.jpg`;
         await writeFile(targetDirectory, layoutName, jpegBlob);
         writtenImages.push(layoutName);
@@ -397,7 +431,8 @@ async function exportToZip(
   summaryFilename: string,
   summaryText: string,
   options: JobComparisonOptionRecord[],
-  imageFilenames: Map<string, string>
+  imageFilenames: Map<string, string>,
+  areaId?: string | null
 ): Promise<ExportResult> {
   const zip = new JSZip();
   const packageFolder = zip.folder(folderName);
@@ -424,9 +459,10 @@ async function exportToZip(
       }
     }
 
-    if (option.layoutPreviewImageUrl?.trim()) {
+    const previewUrl = areaMetrics(option, areaId)?.layoutPreviewImageUrl ?? option.layoutPreviewImageUrl;
+    if (previewUrl?.trim()) {
       try {
-        const jpegBlob = await getImageAsJpeg(option.layoutPreviewImageUrl);
+        const jpegBlob = await getImageAsJpeg(previewUrl);
         const layoutName = `Layout-${option.id.slice(0, 12)}.jpg`;
         packageFolder.file(layoutName, jpegBlob);
         writtenImages.push(layoutName);
@@ -449,7 +485,7 @@ async function exportToZip(
 
 export async function exportQuotePackage(input: ExportQuotePackageInput): Promise<ExportResult | null> {
   const customerName = input.customer
-    ? sanitizeFilenamePart(`${input.customer.firstName} ${input.customer.lastName}`.trim(), "customer")
+    ? sanitizeFilenamePart(customerDisplayName(input.customer), "customer")
     : "customer";
   const jobName = sanitizeFilenamePart(input.job.name, "job");
   const timestamp = formatTimestampForFilename(new Date());
@@ -462,7 +498,7 @@ export async function exportQuotePackage(input: ExportQuotePackageInput): Promis
   };
 
   if (typeof windowWithPicker.showDirectoryPicker !== "function") {
-    return exportToZip(folderName, summaryFilename, summaryText, input.options, imageFilenames);
+    return exportToZip(folderName, summaryFilename, summaryText, input.options, imageFilenames, input.areaId);
   }
 
   try {
@@ -470,7 +506,15 @@ export async function exportQuotePackage(input: ExportQuotePackageInput): Promis
       mode: "readwrite",
       id: "quote-export",
     });
-    return await exportToDirectory(directory, folderName, summaryFilename, summaryText, input.options, imageFilenames);
+    return await exportToDirectory(
+      directory,
+      folderName,
+      summaryFilename,
+      summaryText,
+      input.options,
+      imageFilenames,
+      input.areaId
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return null;

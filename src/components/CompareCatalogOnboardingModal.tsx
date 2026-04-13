@@ -11,13 +11,20 @@ import {
   subscribeJobsForCustomer,
 } from "../services/compareQuoteFirestore";
 import type { CatalogItem } from "../types/catalog";
-import type { CustomerRecord, JobRecord } from "../types/compareQuote";
+import {
+  buildJobAreas,
+  customerContactSummary,
+  customerDisplayName,
+  type CustomerRecord,
+  type JobRecord,
+} from "../types/compareQuote";
 import { AREA_TYPE_PRESETS } from "../types/compareQuote";
 import {
   emptyCustomerFormValues,
   type CustomerFormValues,
 } from "../compare/CreateCustomerModal";
 import { emptyJobFormValues, type JobFormValues } from "../compare/CreateJobModal";
+import { formatPhoneInput } from "../utils/phone";
 
 type FlowMode = "existing" | "new";
 
@@ -33,7 +40,7 @@ function filterCustomers(customers: CustomerRecord[], q: string): CustomerRecord
   const s = q.trim().toLowerCase();
   if (!s) return customers;
   return customers.filter((c) => {
-    const blob = `${c.firstName} ${c.lastName} ${c.phone} ${c.email} ${c.address}`.toLowerCase();
+    const blob = `${c.businessName ?? ""} ${c.firstName} ${c.lastName} ${c.phone} ${c.email} ${c.address}`.toLowerCase();
     return blob.includes(s);
   });
 }
@@ -162,7 +169,11 @@ export function CompareCatalogOnboardingModal({
       const jobId = await createJob(user.uid, {
         customerId: selectedCustomerId,
         name: inlineJob.name.trim(),
+        contactName: inlineJob.contactName.trim(),
+        contactPhone: inlineJob.contactPhone.trim(),
+        siteAddress: inlineJob.siteAddress.trim(),
         areaType: inlineJob.areaType.trim() || "Other",
+        areas: buildJobAreas(inlineJob.areaType.trim() || "Other"),
         squareFootage: 0,
         notes: inlineJob.notes.trim(),
         assumptions: inlineJob.assumptions.trim(),
@@ -190,12 +201,14 @@ export function CompareCatalogOnboardingModal({
       setError("Sign in to continue.");
       return;
     }
-    if (!newCustomer.firstName.trim() || !newCustomer.lastName.trim()) {
-      setError("First and last name are required.");
+    const hasBusiness = Boolean(newCustomer.businessName.trim());
+    const hasPersonName = Boolean(newCustomer.firstName.trim() && newCustomer.lastName.trim());
+    if (!hasBusiness && !hasPersonName) {
+      setError("Enter a business name, or both first and last name.");
       return;
     }
-    if (!newCustomer.phone.trim() || !newCustomer.email.trim() || !newCustomer.address.trim()) {
-      setError("Phone, email, and address are required.");
+    if (!newCustomer.address.trim()) {
+      setError("Address is required.");
       return;
     }
     if (!newJob.name.trim()) {
@@ -205,6 +218,7 @@ export function CompareCatalogOnboardingModal({
     setSaving(true);
     try {
       const customerId = await createCustomer(user.uid, {
+        businessName: newCustomer.businessName.trim(),
         firstName: newCustomer.firstName.trim(),
         lastName: newCustomer.lastName.trim(),
         phone: newCustomer.phone.trim(),
@@ -215,7 +229,11 @@ export function CompareCatalogOnboardingModal({
       const jobId = await createJob(user.uid, {
         customerId,
         name: newJob.name.trim(),
+        contactName: newJob.contactName.trim(),
+        contactPhone: newJob.contactPhone.trim(),
+        siteAddress: newJob.siteAddress.trim(),
         areaType: newJob.areaType.trim() || "Other",
+        areas: buildJobAreas(newJob.areaType.trim() || "Other"),
         squareFootage: 0,
         notes: newJob.notes.trim(),
         assumptions: newJob.assumptions.trim(),
@@ -375,9 +393,11 @@ export function CompareCatalogOnboardingModal({
                             }}
                           >
                             <span className="compare-onboard-cust__name">
-                              {c.firstName} {c.lastName}
+                              {customerDisplayName(c)}
                             </span>
-                            <span className="compare-onboard-cust__meta">{c.phone}</span>
+                            <span className="compare-onboard-cust__meta">
+                              {customerContactSummary(c, "No contact info")}
+                            </span>
                           </button>
                         </li>
                       );
@@ -388,7 +408,7 @@ export function CompareCatalogOnboardingModal({
                 {selectedCustomerId && selectedCustomer ? (
                   <section className="compare-onboard-jobs" aria-labelledby="compare-onboard-jobs-title">
                     <h3 id="compare-onboard-jobs-title" className="compare-onboard-section-title">
-                      Jobs for {selectedCustomer.firstName} {selectedCustomer.lastName}
+                      Jobs for {customerDisplayName(selectedCustomer)}
                     </h3>
                     {jobs.length === 0 ? (
                       <div className="compare-onboard-inline-job">
@@ -466,7 +486,7 @@ export function CompareCatalogOnboardingModal({
                                 >
                                   <span className="compare-onboard-job__name">{j.name}</span>
                                   <span className="compare-onboard-job__meta">
-                                    {j.areaType} · {j.status}
+                                    {j.areaType || "No areas yet"} · {j.status}
                                   </span>
                                 </button>
                               </li>
@@ -490,8 +510,18 @@ export function CompareCatalogOnboardingModal({
               <div className="compare-onboard-body compare-onboard-body--new">
                 <h3 className="compare-onboard-section-title">Customer</h3>
                 <div className="compare-form-grid">
+                  <label className="form-label compare-form-span-2">
+                    Business name
+                    <input
+                      className="form-input"
+                      value={newCustomer.businessName}
+                      onChange={(e) => setNewCustomer((v) => ({ ...v, businessName: e.target.value }))}
+                      autoComplete="organization"
+                      placeholder="Optional business or company name"
+                    />
+                  </label>
                   <label className="form-label">
-                    First name *
+                    First name
                     <input
                       className="form-input"
                       value={newCustomer.firstName}
@@ -500,7 +530,7 @@ export function CompareCatalogOnboardingModal({
                     />
                   </label>
                   <label className="form-label">
-                    Last name *
+                    Last name
                     <input
                       className="form-input"
                       value={newCustomer.lastName}
@@ -509,16 +539,18 @@ export function CompareCatalogOnboardingModal({
                     />
                   </label>
                   <label className="form-label">
-                    Phone *
+                    Phone
                     <input
                       className="form-input"
                       value={newCustomer.phone}
-                      onChange={(e) => setNewCustomer((v) => ({ ...v, phone: e.target.value }))}
+                      onChange={(e) =>
+                        setNewCustomer((v) => ({ ...v, phone: formatPhoneInput(e.target.value) }))
+                      }
                       autoComplete="tel"
                     />
                   </label>
                   <label className="form-label">
-                    Email *
+                    Email
                     <input
                       className="form-input"
                       type="email"

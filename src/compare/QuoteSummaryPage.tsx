@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import {
   getCustomer,
@@ -7,17 +7,23 @@ import {
   subscribeOptionsForJob,
   updateJob,
 } from "../services/compareQuoteFirestore";
-import type { JobComparisonOptionRecord, JobRecord } from "../types/compareQuote";
+import {
+  customerDisplayName,
+  jobAreasForJob,
+  primaryAreaForJob,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+} from "../types/compareQuote";
 import { formatMoney } from "../utils/priceHelpers";
 import { exportQuotePackage } from "../utils/exportQuotePackage";
 import {
   computeQuotedInstallForCompareOption,
-  effectiveQuoteSquareFootage,
   jobQuoteSquareFootage,
 } from "../utils/quotedPrice";
 
 export function QuoteSummaryPage() {
   const { jobId } = useParams<{ jobId: string }>();
+  const [searchParams] = useSearchParams();
   const { user, profileDisplayName } = useAuth();
   const [job, setJob] = useState<JobRecord | null>(null);
   const [customer, setCustomer] = useState<Awaited<ReturnType<typeof getCustomer>>>(null);
@@ -53,25 +59,44 @@ export function QuoteSummaryPage() {
     return subscribeOptionsForJob(jobId, user.uid, setOptions);
   }, [jobId, user?.uid]);
 
+  const repDisplayName =
+    profileDisplayName?.trim() || user?.displayName?.trim() || user?.email || "Bella Stone";
+
+  const areaId = searchParams.get("area");
+  const optionIdFromQuery = searchParams.get("option");
+  const selectedArea = job
+    ? (areaId ? jobAreasForJob(job).find((area) => area.id === areaId) : null) ?? primaryAreaForJob(job)
+    : null;
+  const areaMetrics = (option: JobComparisonOptionRecord | null) =>
+    selectedArea ? option?.layoutAreaStates?.[selectedArea.id] ?? null : null;
+  const quoteAreaForOption = (option: JobComparisonOptionRecord | null) =>
+    areaMetrics(option)?.layoutEstimatedAreaSqFt ?? option?.layoutEstimatedAreaSqFt ?? job?.squareFootage ?? 0;
+  const areaOptions = useMemo(() => {
+    if (!selectedArea) return options;
+    if (!Array.isArray(selectedArea.associatedOptionIds)) return options;
+    const ids = new Set(selectedArea.associatedOptionIds);
+    return options.filter((option) => ids.has(option.id));
+  }, [options, selectedArea]);
+  const explicitOptionId =
+    optionIdFromQuery && areaOptions.some((option) => option.id === optionIdFromQuery) ? optionIdFromQuery : null;
+
   if (!jobId) return <p className="compare-warning">Missing job.</p>;
   if (!job) return <p className="product-sub">Loading…</p>;
   if (user?.uid !== job.ownerUserId) {
     return <p className="compare-warning">You do not have access to this job.</p>;
   }
 
-  const repDisplayName =
-    profileDisplayName?.trim() || user?.displayName?.trim() || user?.email || "Bella Stone";
-
-  const finalOpt = options.find((o) => o.id === job.finalOptionId) ?? null;
+  const finalOptionId = explicitOptionId ?? selectedArea?.selectedOptionId ?? areaOptions[0]?.id ?? job.finalOptionId;
+  const finalOpt = areaOptions.find((o) => o.id === finalOptionId) ?? null;
   const finalQuoted = finalOpt
     ? computeQuotedInstallForCompareOption({
-        jobSquareFootage: effectiveQuoteSquareFootage(job, finalOpt),
+        jobSquareFootage: quoteAreaForOption(finalOpt),
         priceUnit: finalOpt.priceUnit,
         catalogLinePrice: finalOpt.selectedPriceValue,
         slabQuantity: finalOpt.slabQuantity,
       })
     : null;
-  const jobQuoteSqFt = jobQuoteSquareFootage(job, options);
+  const jobQuoteSqFt = finalOpt ? quoteAreaForOption(finalOpt) : jobQuoteSquareFootage(job, areaOptions);
   const printed = new Date().toLocaleString();
 
   const handleExport = async () => {
@@ -87,6 +112,9 @@ export function QuoteSummaryPage() {
         repName: repDisplayName,
         repEmail: user?.email || "",
         generatedAt: printed,
+        areaId: selectedArea?.id ?? null,
+        areaName: selectedArea?.name ?? null,
+        areaSelectedOptionId: finalOpt?.id ?? selectedArea?.selectedOptionId ?? null,
       });
 
       if (!result) {
@@ -155,9 +183,7 @@ export function QuoteSummaryPage() {
           <section className="quote-block">
             <h2 className="quote-block-title">Customer</h2>
             <p>
-              <strong>
-                {customer.firstName} {customer.lastName}
-              </strong>
+              <strong>{customerDisplayName(customer)}</strong>
             </p>
             <p className="quote-summary-line">{customer.phone}</p>
             <p className="quote-summary-line">{customer.email}</p>
@@ -169,7 +195,7 @@ export function QuoteSummaryPage() {
         <section className="quote-block">
           <h2 className="quote-block-title">Job</h2>
           <p>
-            <strong>{job.name}</strong> · {job.areaType}
+            <strong>{job.name}</strong> · {(selectedArea?.name ?? job.areaType) || "No areas yet"}
           </p>
           <p>
             Quote area (sq ft):{" "}
@@ -252,32 +278,32 @@ export function QuoteSummaryPage() {
                     <span className="quote-inline-label">Option notes:</span> {finalOpt.notes}
                   </p>
                 ) : null}
-                {finalOpt.layoutUpdatedAt ? (
+                {(areaMetrics(finalOpt)?.layoutUpdatedAt ?? finalOpt.layoutUpdatedAt) ? (
                   <div className="quote-layout-studio">
                     <h3 className="quote-block-subtitle">Layout Studio</h3>
-                    {finalOpt.layoutPreviewImageUrl ? (
+                    {(areaMetrics(finalOpt)?.layoutPreviewImageUrl ?? finalOpt.layoutPreviewImageUrl) ? (
                       <img
                         className="quote-layout-preview"
-                        src={finalOpt.layoutPreviewImageUrl}
+                        src={areaMetrics(finalOpt)?.layoutPreviewImageUrl ?? finalOpt.layoutPreviewImageUrl ?? undefined}
                         alt=""
                       />
                     ) : null}
                     <dl className="quote-dl">
                       <div>
                         <dt>Est. layout area</dt>
-                        <dd>{finalOpt.layoutEstimatedAreaSqFt ?? "—"} sq ft</dd>
+                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedAreaSqFt ?? finalOpt.layoutEstimatedAreaSqFt ?? "—"} sq ft</dd>
                       </div>
                       <div>
                         <dt>Est. finished edge</dt>
-                        <dd>{finalOpt.layoutEstimatedFinishedEdgeLf ?? "—"} lin ft</dd>
+                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedFinishedEdgeLf ?? finalOpt.layoutEstimatedFinishedEdgeLf ?? "—"} lin ft</dd>
                       </div>
                       <div>
                         <dt>Sinks (layout)</dt>
-                        <dd>{finalOpt.layoutSinkCount ?? "—"}</dd>
+                        <dd>{areaMetrics(finalOpt)?.layoutSinkCount ?? finalOpt.layoutSinkCount ?? "—"}</dd>
                       </div>
                       <div>
                         <dt>Est. slabs (layout)</dt>
-                        <dd>{finalOpt.layoutEstimatedSlabCount ?? "—"}</dd>
+                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedSlabCount ?? finalOpt.layoutEstimatedSlabCount ?? "—"}</dd>
                       </div>
                     </dl>
                     <p className="product-sub">
@@ -285,7 +311,7 @@ export function QuoteSummaryPage() {
                     </p>
                     <Link
                       className="btn btn-ghost btn-sm"
-                      to={`/compare/jobs/${job.id}/layout?option=${encodeURIComponent(finalOpt.id)}`}
+                      to={`/layout/jobs/${job.id}?option=${encodeURIComponent(finalOpt.id)}${selectedArea ? `&area=${encodeURIComponent(selectedArea.id)}` : ""}`}
                     >
                       Open Layout Studio
                     </Link>
@@ -300,13 +326,13 @@ export function QuoteSummaryPage() {
           </section>
         )}
 
-        {options.length > 0 ? (
+        {areaOptions.length > 1 && !explicitOptionId ? (
           <section className="quote-block no-print">
-            <h2 className="quote-block-title">Shortlisted options ({options.length})</h2>
+            <h2 className="quote-block-title">Shortlisted options ({areaOptions.length})</h2>
             <ul className="quote-shortlist">
-              {options.map((o) => {
+              {areaOptions.map((o) => {
                 const q = computeQuotedInstallForCompareOption({
-                  jobSquareFootage: effectiveQuoteSquareFootage(job, o),
+                  jobSquareFootage: quoteAreaForOption(o),
                   priceUnit: o.priceUnit,
                   catalogLinePrice: o.selectedPriceValue,
                   slabQuantity: o.slabQuantity,
@@ -318,10 +344,10 @@ export function QuoteSummaryPage() {
                     {job.finalOptionId === o.id ? (
                       <span className="compare-final-pill"> Final</span>
                     ) : null}
-                    {o.layoutUpdatedAt ? (
+                    {(areaMetrics(o)?.layoutUpdatedAt ?? o.layoutUpdatedAt) ? (
                       <span className="product-sub">
                         {" "}
-                        · Layout: {o.layoutEstimatedAreaSqFt ?? "—"} sq ft (est.)
+                        · Layout: {areaMetrics(o)?.layoutEstimatedAreaSqFt ?? o.layoutEstimatedAreaSqFt ?? "—"} sq ft (est.)
                       </span>
                     ) : null}
                   </li>

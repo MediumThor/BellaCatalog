@@ -4,7 +4,7 @@
 export async function renderPdfFileFirstPageToDataUrl(
   file: File,
   scale = 2
-): Promise<{ dataUrl: string; width: number; height: number }> {
+): Promise<{ dataUrl: string; pngBlob: Blob; width: number; height: number }> {
   const { GlobalWorkerOptions, getDocument } = await import("pdfjs-dist/build/pdf.mjs");
   GlobalWorkerOptions.workerSrc = new URL(
     "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -28,7 +28,13 @@ export async function renderPdfFileFirstPageToDataUrl(
     // ignore
   }
   const dataUrl = canvas.toDataURL("image/png");
-  return { dataUrl, width: canvas.width, height: canvas.height };
+  const pngBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Could not render PDF preview"));
+    }, "image/png");
+  });
+  return { dataUrl, pngBlob, width: canvas.width, height: canvas.height };
 }
 
 export async function renderPdfUrlFirstPageToDataUrl(

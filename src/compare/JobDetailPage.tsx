@@ -9,7 +9,15 @@ import {
   subscribeOptionsForJob,
   updateJob,
 } from "../services/compareQuoteFirestore";
-import type { CustomerRecord, JobComparisonOptionRecord, JobRecord, JobStatus } from "../types/compareQuote";
+import {
+  customerDisplayName,
+  jobAreasForJob,
+  type JobAreaRecord,
+  type CustomerRecord,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+  type JobStatus,
+} from "../types/compareQuote";
 import { formatMoney } from "../utils/priceHelpers";
 import { exportQuotePackage } from "../utils/exportQuotePackage";
 import {
@@ -64,6 +72,15 @@ function CompareOptionQuotedBlock({
   );
 }
 
+function areaAssociatedOptions(
+  area: JobAreaRecord,
+  options: JobComparisonOptionRecord[]
+): JobComparisonOptionRecord[] {
+  if (!Array.isArray(area?.associatedOptionIds)) return options;
+  const ids = new Set(area.associatedOptionIds);
+  return options.filter((option) => ids.has(option.id));
+}
+
 export function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const { user, profileDisplayName } = useAuth();
@@ -113,6 +130,18 @@ export function JobDetailPage() {
     profileDisplayName?.trim() || user?.displayName?.trim() || user?.email || "Bella Stone";
 
   const finalOption = options.find((o) => o.id === job.finalOptionId) ?? null;
+  const jobAreas = jobAreasForJob(job);
+  const quoteReadyAreaOptions = jobAreas.flatMap((area) =>
+    areaAssociatedOptions(area, options)
+      .filter((option) =>
+        Boolean(
+          option.layoutAreaStates?.[area.id]?.layoutPreviewImageUrl ||
+            option.layoutAreaStates?.[area.id]?.layoutStudioPlacement ||
+            (jobAreas.length === 1 && (option.layoutPreviewImageUrl || option.layoutStudioPlacement))
+        )
+      )
+      .map((option) => ({ area, option }))
+  );
   const finalQuoted = finalOption
     ? computeQuotedInstallForCompareOption({
         jobSquareFootage: effectiveQuoteSquareFootage(job, finalOption),
@@ -161,9 +190,7 @@ export function JobDetailPage() {
         <Link to="/compare">Compare tool</Link>
         <span aria-hidden="true"> / </span>
         {customer ? (
-          <Link to={`/compare/customers/${customer.id}`}>
-            {customer.firstName} {customer.lastName}
-          </Link>
+          <Link to={`/compare/customers/${customer.id}`}>{customerDisplayName(customer)}</Link>
         ) : (
           <span>Customer</span>
         )}
@@ -199,7 +226,7 @@ export function JobDetailPage() {
         <div className="compare-job-detail-stats">
           <div className="compare-job-detail-stat">
             <span className="compare-job-detail-stat__label">Area</span>
-            <span className="compare-job-detail-stat__value">{job.areaType}</span>
+            <span className="compare-job-detail-stat__value">{job.areaType || "No areas yet"}</span>
           </div>
           <div className="compare-job-detail-stat">
             <span className="compare-job-detail-stat__label">Quote area (sq ft)</span>
@@ -255,6 +282,15 @@ export function JobDetailPage() {
           </Link>
         </div>
         <div className="compare-job-detail-toolbar__secondary">
+          {quoteReadyAreaOptions.map(({ area, option }) => (
+            <Link
+              key={`${area.id}-${option.id}`}
+              className="btn btn-ghost"
+              to={`/compare/jobs/${job.id}/quote?area=${encodeURIComponent(area.id)}&option=${encodeURIComponent(option.id)}`}
+            >
+              {quoteReadyAreaOptions.length === 1 ? "PDF quote" : `PDF quote: ${area.name} - ${option.productName}`}
+            </Link>
+          ))}
           <button
             type="button"
             className="btn btn-ghost"

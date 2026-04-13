@@ -9,7 +9,12 @@ import {
   subscribeJobsForCustomer,
   updateCustomer,
 } from "../services/compareQuoteFirestore";
-import type { CustomerRecord, JobComparisonOptionRecord, JobRecord } from "../types/compareQuote";
+import {
+  customerDisplayName,
+  type CustomerRecord,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+} from "../types/compareQuote";
 import { CreateCustomerModal, type CustomerFormValues } from "./CreateCustomerModal";
 import { CreateJobModal, type JobFormValues } from "./CreateJobModal";
 
@@ -35,6 +40,7 @@ function formatJobStatus(status: string): string {
 }
 
 function customerToFormValues(c: {
+  businessName?: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -43,6 +49,7 @@ function customerToFormValues(c: {
   notes: string;
 }): CustomerFormValues {
   return {
+    businessName: c.businessName ?? "",
     firstName: c.firstName,
     lastName: c.lastName,
     phone: c.phone,
@@ -98,7 +105,7 @@ function CustomerJobRow({
             <span className="compare-job-row__dot" aria-hidden="true">
               ·
             </span>
-            <span className="compare-job-row__area">{job.areaType}</span>
+            <span className="compare-job-row__area">{job.areaType || "No areas yet"}</span>
           </span>
           <div
             className="compare-job-row__thumbs"
@@ -189,7 +196,7 @@ export function CustomerDetailPage() {
         <Link to="/compare">Compare tool</Link>
         <span aria-hidden="true"> / </span>
         <span>
-          {customer.firstName} {customer.lastName}
+          {customerDisplayName(customer)}
         </span>
       </nav>
 
@@ -202,7 +209,7 @@ export function CustomerDetailPage() {
       <header className="compare-customer-hero">
         <div className="compare-customer-hero__head">
           <h1 className="compare-title compare-customer-hero__title">
-            {customer.firstName} {customer.lastName}
+            {customerDisplayName(customer)}
           </h1>
           <div className="compare-customer-hero__actions">
             <button type="button" className="btn btn-ghost" onClick={() => setEditOpen(true)}>
@@ -222,14 +229,18 @@ export function CustomerDetailPage() {
         </div>
 
         <div className="compare-customer-contact">
-          <a className="compare-customer-contact__item" href={`tel:${customer.phone}`}>
-            <span className="compare-customer-contact__label">Phone</span>
-            <span className="compare-customer-contact__value">{customer.phone}</span>
-          </a>
-          <a className="compare-customer-contact__item" href={`mailto:${customer.email}`}>
-            <span className="compare-customer-contact__label">Email</span>
-            <span className="compare-customer-contact__value">{customer.email}</span>
-          </a>
+          {customer.phone.trim() ? (
+            <a className="compare-customer-contact__item" href={`tel:${customer.phone}`}>
+              <span className="compare-customer-contact__label">Phone</span>
+              <span className="compare-customer-contact__value">{customer.phone}</span>
+            </a>
+          ) : null}
+          {customer.email.trim() ? (
+            <a className="compare-customer-contact__item" href={`mailto:${customer.email}`}>
+              <span className="compare-customer-contact__label">Email</span>
+              <span className="compare-customer-contact__value">{customer.email}</span>
+            </a>
+          ) : null}
           <div className="compare-customer-contact__item compare-customer-contact__item--block">
             <span className="compare-customer-contact__label">Address</span>
             <span className="compare-customer-contact__value">{customer.address}</span>
@@ -287,6 +298,7 @@ export function CustomerDetailPage() {
         onClose={() => setEditOpen(false)}
         onSubmit={async (values: CustomerFormValues) => {
           await updateCustomer(customer.id, {
+            businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),
             lastName: values.lastName.trim(),
             phone: values.phone.trim(),
@@ -304,7 +316,11 @@ export function CustomerDetailPage() {
           await createJob(user.uid, {
             customerId,
             name: values.name.trim(),
-            areaType: values.areaType.trim() || "Other",
+            contactName: values.contactName.trim(),
+            contactPhone: values.contactPhone.trim(),
+            siteAddress: values.siteAddress.trim(),
+            areaType: "",
+            areas: [],
             squareFootage: 0,
             notes: values.notes.trim(),
             assumptions: values.assumptions.trim(),
