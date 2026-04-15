@@ -155,8 +155,9 @@ function pieceAreaSqFt(piece: LayoutPiece, fallbackPixelsPerInch?: number | null
 function splashLinearFeetFromPieces(pieces: LayoutPiece[], fallbackPixelsPerInch?: number | null): number {
   return pieces.reduce((sum, piece) => {
     if (piece.pieceRole !== "splash") return sum;
-    const heightIn = piece.splashMeta?.heightIn;
-    if (!Number.isFinite(heightIn) || heightIn <= 0) return sum;
+    const rawHeightIn = piece.splashMeta?.heightIn;
+    const heightIn = typeof rawHeightIn === "number" && Number.isFinite(rawHeightIn) ? rawHeightIn : null;
+    if (heightIn == null || heightIn <= 0) return sum;
     const pieceSqFt = pieceAreaSqFt(piece, fallbackPixelsPerInch);
     const linearFeet = (pieceSqFt * 144) / heightIn / 12;
     return sum + linearFeet;
@@ -233,7 +234,7 @@ export function computeSlabMaterialQuoteLines(input: {
 export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
   const raw = job.layoutQuoteSettings;
   if (!raw || typeof raw !== "object") return { ...DEFAULT_LAYOUT_QUOTE_SETTINGS };
-  const rawRecord = raw as Record<string, unknown>;
+  const rawRecord = raw as unknown as Record<string, unknown>;
   const materialMarkup =
     typeof raw.materialMarkup === "number" && Number.isFinite(raw.materialMarkup) && raw.materialMarkup > 0
       ? raw.materialMarkup

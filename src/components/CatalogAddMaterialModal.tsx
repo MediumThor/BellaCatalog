@@ -230,7 +230,6 @@ function isManualCatalogItem(item: CatalogItem | null | undefined): boolean {
 }
 
 function manualFormFromItem(item: CatalogItem): ManualCatalogForm {
-  const raw = item.rawSourceFields || {};
   const price = item.priceEntries[0];
   const { slabWidth, slabHeight } = inferSlabDimensions(item);
   return {

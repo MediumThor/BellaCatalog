@@ -765,6 +765,14 @@ export function LayoutStudioScreen({
     [activeOption?.id, onOptionChange, save],
   );
 
+  const workspaceKind = useMemo((): "source" | "blank" => {
+    if (draft.workspaceKind === "blank" || draft.workspaceKind === "source") return draft.workspaceKind;
+    if (draft.source) return "source";
+    return "blank";
+  }, [draft.workspaceKind, draft.source]);
+
+  const showEntryHub = draft.workspaceKind !== "blank" && !draft.source;
+
   const openAddMaterialsSafely = useCallback(async () => {
     if (!onOpenAddMaterials) return;
     if (!showEntryHub) {
@@ -774,14 +782,6 @@ export function LayoutStudioScreen({
     setMaterialMenuOpen(false);
     onOpenAddMaterials();
   }, [onOpenAddMaterials, save, showEntryHub]);
-
-  const workspaceKind = useMemo((): "source" | "blank" => {
-    if (draft.workspaceKind === "blank" || draft.workspaceKind === "source") return draft.workspaceKind;
-    if (draft.source) return "source";
-    return "blank";
-  }, [draft.workspaceKind, draft.source]);
-
-  const showEntryHub = workspaceKind === undefined;
 
   const mergedQuoteSettings = useMemo(() => mergeLayoutQuoteSettings(job), [job]);
   const [liveQuoteSettings, setLiveQuoteSettings] = useState<LayoutQuoteSettings>(mergedQuoteSettings);
