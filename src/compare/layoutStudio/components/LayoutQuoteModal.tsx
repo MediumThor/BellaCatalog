@@ -164,6 +164,8 @@ export function LayoutQuoteModal({
         commercial: singleCommercial,
         customerExclusions,
         materialChargeModeLabel: singleMaterialChargeModeLabel,
+        installationPerSqft: quoteSettings.installationPerSqft,
+        splashPerLf: quoteSettings.splashPerLf,
         customerTotal: singleCustomerTotal,
         customerPerSqft: singleCustomerPerSqft,
       }),
@@ -258,6 +260,7 @@ export function LayoutQuoteModal({
       materialTotal: 0,
       rawMaterialTotal: 0,
       fabricationTotal: 0,
+      installationTotal: 0,
       sinkAddOnTotal: 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
@@ -267,6 +270,8 @@ export function LayoutQuoteModal({
       catalogMaterialPerSqft: null,
       materialAreaSqFt: 0,
       countertopSqFt: 0,
+      fabricatedSqFt: 0,
+      splashLinearFeet: 0,
       materialChargeMode: quoteSettings.materialChargeMode,
     };
     for (const section of allMaterialsComputed) {
@@ -275,6 +280,7 @@ export function LayoutQuoteModal({
       total.materialTotal += section.commercial.materialTotal;
       total.rawMaterialTotal += section.commercial.rawMaterialTotal;
       total.fabricationTotal += section.commercial.fabricationTotal;
+      total.installationTotal += section.commercial.installationTotal;
       total.sinkAddOnTotal += section.commercial.sinkAddOnTotal;
       total.splashAddOnTotal += section.commercial.splashAddOnTotal;
       total.profileAddOnTotal += section.commercial.profileAddOnTotal;
@@ -282,6 +288,8 @@ export function LayoutQuoteModal({
       total.grandTotal += section.commercial.grandTotal;
       total.materialAreaSqFt += section.commercial.materialAreaSqFt;
       total.countertopSqFt += section.commercial.countertopSqFt;
+      total.fabricatedSqFt += section.commercial.fabricatedSqFt;
+      total.splashLinearFeet += section.commercial.splashLinearFeet;
     }
     return hasCommercial ? total : null;
   }, [allMaterialsComputed, quoteSettings.materialChargeMode]);
@@ -327,6 +335,8 @@ export function LayoutQuoteModal({
         commercial: combinedCommercial,
         customerExclusions,
         materialChargeModeLabel: allMaterialsModeLabel,
+        installationPerSqft: quoteSettings.installationPerSqft,
+        splashPerLf: quoteSettings.splashPerLf,
         customerTotal: allMaterialsCustomerTotal,
         customerPerSqft: allMaterialsCustomerPerSqft,
       }),
@@ -670,6 +680,8 @@ function buildCustomerRows(input: {
   commercial: CommercialQuoteBreakdown | null;
   customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
   materialChargeModeLabel: string;
+  installationPerSqft: number;
+  splashPerLf: number;
   customerTotal: number | null;
   customerPerSqft: number | null;
 }): LayoutQuoteDisplayRow[] {
@@ -685,11 +697,16 @@ function buildCustomerRows(input: {
     commercial,
     customerExclusions,
     materialChargeModeLabel,
+    installationPerSqft,
+    splashPerLf,
     customerTotal,
     customerPerSqft,
   } = input;
   const rows: LayoutQuoteDisplayRow[] = [];
   const include = (rowId: LayoutQuoteCustomerRowId) => !customerExclusions[rowId];
+  const safeInstallationPerSqft =
+    Number.isFinite(installationPerSqft) && installationPerSqft >= 0 ? installationPerSqft : 0;
+  const safeSplashPerLf = Number.isFinite(splashPerLf) && splashPerLf >= 0 ? splashPerLf : 0;
 
   if (include("materialOption")) rows.push({ label: "Material / option", value: materialOptionValue });
   if (include("vendorManufacturer")) rows.push({ label: "Vendor / manufacturer", value: vendorManufacturerValue });
@@ -709,12 +726,23 @@ function buildCustomerRows(input: {
     }
     if (include("fabrication")) {
       rows.push({
-        label: `Fabrication (${commercial.countertopSqFt.toFixed(1)} sq ft × ${formatMoney(commercial.fabricationPerSqft)})`,
+        label: `Fabrication (${commercial.fabricatedSqFt.toFixed(1)} sq ft × ${formatMoney(commercial.fabricationPerSqft)})`,
         value: formatMoney(commercial.fabricationTotal),
       });
     }
+    if (include("installation")) {
+      rows.push({
+        label: `Installation (${commercial.fabricatedSqFt.toFixed(1)} sq ft × ${formatMoney(safeInstallationPerSqft)})`,
+        value: formatMoney(commercial.installationTotal),
+      });
+    }
     if (include("sinkCutouts")) rows.push({ label: "Sink cutouts", value: formatMoney(commercial.sinkAddOnTotal) });
-    if (include("splashAddOn")) rows.push({ label: "Splash add-on", value: formatMoney(commercial.splashAddOnTotal) });
+    if (include("splashAddOn")) {
+      rows.push({
+        label: `Splash add-on (${commercial.splashLinearFeet.toFixed(1)} lf × ${formatMoney(safeSplashPerLf)})`,
+        value: formatMoney(commercial.splashAddOnTotal),
+      });
+    }
     if (include("profileAddOn")) rows.push({ label: "Profile add-on", value: formatMoney(commercial.profileAddOnTotal) });
     if (include("miterAddOn")) rows.push({ label: "Miter add-on", value: formatMoney(commercial.miterAddOnTotal) });
   }

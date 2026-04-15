@@ -26,6 +26,9 @@ export function mergeCatalogWithOverlay(
   const overlayItems = ignoreRemoved
     ? overlay.importedSources.flatMap((s) => s.items)
     : overlay.importedSources.flatMap((s) => s.items).filter((it) => !removed.has(it.sourceFile));
+  const overlayEditedItems = ignoreRemoved
+    ? overlay.editedItems ?? []
+    : (overlay.editedItems ?? []).filter((it) => !removed.has(it.sourceFile));
   const overlayWarnings = overlay.importedSources.flatMap((s) => s.importWarnings);
 
   const baseItems = ignoreRemoved ? base.items : base.items.filter((it) => !removed.has(it.sourceFile));
@@ -42,9 +45,17 @@ export function mergeCatalogWithOverlay(
         }))),
   ];
 
-  let items = [...overlayItems, ...baseItems]
+  const editedExpandedItems = overlayEditedItems
     .map(normalizeCatalogItemSizes)
     .flatMap((it) => expandCatalogItemByThickness(it));
+  const editedIds = new Set(editedExpandedItems.map((it) => it.id));
+
+  let items = [...overlayItems, ...baseItems]
+    .map(normalizeCatalogItemSizes)
+    .flatMap((it) => expandCatalogItemByThickness(it))
+    .filter((it) => !editedIds.has(it.id));
+
+  items = [...editedExpandedItems, ...items];
 
   if (!ignoreRemovedItems) {
     items = items.filter((it) => !removedItemIds.has(it.id));

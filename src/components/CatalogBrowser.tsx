@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogCollection, CatalogItem, NormalizedCatalog, UiPreferences } from "../types/catalog";
 import { CatalogAddToCollectionModal } from "./CatalogAddToCollectionModal";
+import { CatalogAddMaterialModal } from "./CatalogAddMaterialModal";
 import { CatalogCollectionsBar } from "./CatalogCollectionsBar";
 import { CatalogCreateManualCollectionModal } from "./CatalogCreateManualCollectionModal";
 import { CatalogCollectionsManagerModal } from "./CatalogCollectionsManagerModal";
@@ -100,6 +101,8 @@ export function CatalogBrowser({
   const [headerSearchSlot, setHeaderSearchSlot] = useState<HTMLElement | null>(null);
   const [compareBagIds, setCompareBagIds] = useState<string[]>([]);
   const [compareOnboardOpen, setCompareOnboardOpen] = useState(false);
+  const [addMaterialOpen, setAddMaterialOpen] = useState(false);
+  const [editingMaterialItem, setEditingMaterialItem] = useState<CatalogItem | null>(null);
   const [createManualOpen, setCreateManualOpen] = useState(false);
   const [saveSmartOpen, setSaveSmartOpen] = useState(false);
   const [collectionManagerOpen, setCollectionManagerOpen] = useState(false);
@@ -250,6 +253,11 @@ export function CatalogBrowser({
     }
     return buildFilterOptions(collectionBaseItems);
   }, [collectionBaseItems]);
+  const preferredAddMaterialVendor = useMemo(() => {
+    if (prefs.vendor && prefs.vendor !== "__all__") return prefs.vendor;
+    if (filterOptions.vendors.length === 1) return filterOptions.vendors[0];
+    return "";
+  }, [filterOptions.vendors, prefs.vendor]);
 
   const displayedItems: CatalogItem[] = useMemo(() => {
     if (!catalog) return [];
@@ -496,6 +504,11 @@ export function CatalogBrowser({
     setDeleteConfirm(item);
   }, [canDeleteCatalogRows]);
 
+  const handleRequestEditEntry = useCallback((item: CatalogItem) => {
+    setEditingMaterialItem(item);
+    setAddMaterialOpen(false);
+  }, []);
+
   const confirmDeleteEntry = useCallback(() => {
     if (!deleteConfirm) return;
     const next = markItemRemoved(deleteConfirm.id);
@@ -635,6 +648,19 @@ export function CatalogBrowser({
         open={createManualOpen}
         onClose={() => setCreateManualOpen(false)}
         onCreate={createManualCollection}
+      />
+
+      <CatalogAddMaterialModal
+        open={addMaterialOpen || !!editingMaterialItem}
+        onClose={() => {
+          setAddMaterialOpen(false);
+          setEditingMaterialItem(null);
+        }}
+        onCreated={bumpOverlay}
+        preferredVendor={preferredAddMaterialVendor}
+        vendorSuggestions={filterOptions.vendors}
+        thicknessOptions={filterOptions.thicknesses}
+        initialItem={editingMaterialItem}
       />
 
       <CatalogSaveSmartCollectionModal
@@ -881,19 +907,39 @@ export function CatalogBrowser({
         />
 
         {pickMode ? null : (
-          <div className="catalog-tools-export-footer">
-            <button type="button" className="btn btn-primary" onClick={onExportCsv}>
-              Export CSV
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onExportHorus}
-              title="Export full inventory to Horus Match Inventory (sheet 'Match Inventory'). Ignores UI filters, search, and Data Manager removed sources."
-            >
-              Export Horus
-            </button>
-          </div>
+          <>
+            <section className="catalog-tools-section">
+              <h3 className="catalog-tools-section__title">Catalog actions</h3>
+              <button
+                type="button"
+                className="btn catalog-tools-layout-extras__btn catalog-tools-action-btn catalog-tools-action-btn--green"
+                onClick={() => {
+                  setEditingMaterialItem(null);
+                  setAddMaterialOpen(true);
+                }}
+              >
+                Add material
+              </button>
+            </section>
+
+            <div className="catalog-tools-export-footer">
+              <button
+                type="button"
+                className="btn catalog-tools-action-btn catalog-tools-action-btn--red"
+                onClick={onExportCsv}
+              >
+                Export CSV
+              </button>
+              <button
+                type="button"
+                className="btn catalog-tools-action-btn catalog-tools-action-btn--red"
+                onClick={onExportHorus}
+                title="Export full inventory to Horus Match Inventory (sheet 'Match Inventory'). Ignores UI filters, search, and Data Manager removed sources."
+              >
+                Export Horus
+              </button>
+            </div>
+          </>
         )}
       </CatalogToolsDrawer>
 
@@ -931,6 +977,7 @@ export function CatalogBrowser({
             favoriteIds={favoriteSet}
             onToggleFavorite={toggleFavorite}
             onRequestDeleteEntry={canDeleteCatalogRows ? handleRequestDeleteEntry : undefined}
+            onRequestEditEntry={handleRequestEditEntry}
             hidePrices={hidePricesEffective}
             showQuotedPrice={showQuotedEffective}
             showTags={prefs.showTags}
@@ -950,6 +997,7 @@ export function CatalogBrowser({
             favoriteIds={favoriteSet}
             onToggleFavorite={toggleFavorite}
             onRequestDeleteEntry={canDeleteCatalogRows ? handleRequestDeleteEntry : undefined}
+            onRequestEditEntry={handleRequestEditEntry}
             hidePrices={hidePricesEffective}
             showQuotedPrice={showQuotedEffective}
             showTags={prefs.showTags}

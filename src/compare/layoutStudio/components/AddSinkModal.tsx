@@ -17,6 +17,7 @@ type Props = {
 };
 
 const SPREADS: FaucetSpreadIn[] = [2, 4, 8, 10, 12];
+const FAUCET_HOLE_OPTIONS = [1, 2, 3, 4, 5] as const;
 
 export function AddSinkModal({ open, previewRotationDeg = 0, onClose, onConfirm }: Props) {
   const [name, setName] = useState("");
@@ -102,15 +103,19 @@ export function AddSinkModal({ open, previewRotationDeg = 0, onClose, onConfirm 
             </label>
             <label className="ls-field">
               Faucet holes
-              <input
-                className="ls-input"
-                type="number"
-                min={1}
-                max={5}
-                step={1}
-                value={faucetHoleCount}
-                onChange={(e) => setFaucetHoleCount(Number(e.target.value))}
-              />
+              <div className="ls-hole-count-toggle" role="group" aria-label="Faucet hole count">
+                {FAUCET_HOLE_OPTIONS.map((holeCount) => (
+                  <button
+                    key={holeCount}
+                    type="button"
+                    className={`ls-hole-count-toggle-btn${n === holeCount ? " is-active" : ""}`}
+                    aria-pressed={n === holeCount}
+                    onClick={() => setFaucetHoleCount(holeCount)}
+                  >
+                    {holeCount}
+                  </button>
+                ))}
+              </div>
             </label>
             {showSpread ? (
               <fieldset className="ls-field ls-field-span ls-faucet-spread-fieldset">
@@ -119,17 +124,17 @@ export function AddSinkModal({ open, previewRotationDeg = 0, onClose, onConfirm 
                   Center to center: distance from the center of one hole to the center of the next adjacent
                   hole.
                 </p>
-                <div className="ls-radio-row">
+                <div className="ls-hole-count-toggle" role="group" aria-label="Hole spread in inches">
                   {SPREADS.map((s) => (
-                    <label key={s} className="ls-radio-label">
-                      <input
-                        type="radio"
-                        name="faucet-spread"
-                        checked={spreadIn === s}
-                        onChange={() => setSpreadIn(s)}
-                      />
+                    <button
+                      key={s}
+                      type="button"
+                      className={`ls-hole-count-toggle-btn${spreadIn === s ? " is-active" : ""}`}
+                      aria-pressed={spreadIn === s}
+                      onClick={() => setSpreadIn(s)}
+                    >
                       {s}
-                    </label>
+                    </button>
                   ))}
                 </div>
               </fieldset>

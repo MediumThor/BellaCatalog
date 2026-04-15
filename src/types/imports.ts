@@ -2,6 +2,7 @@ import type { CatalogItem, ImportWarning } from "./catalog";
 
 export type ImportParserId =
   | "auto"
+  | "manual"
   | "msi_q_quartz"
   | "stonex"
   | "daltile_natural"
@@ -30,5 +31,7 @@ export interface CatalogOverlayState {
   removedSourceFiles: string[];
   /** Catalog item ids hidden locally (per-row); does not change built JSON files. */
   removedItemIds: string[];
+  /** Per-row local edits layered over the merged catalog. */
+  editedItems: CatalogItem[];
 }
 

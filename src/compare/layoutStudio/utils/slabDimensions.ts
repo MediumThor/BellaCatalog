@@ -1,6 +1,8 @@
 import type { JobComparisonOptionRecord } from "../../../types/compareQuote";
+import type { CatalogItem } from "../../../types/catalog";
 import type { LayoutSlab } from "../types";
 import { corsSafeImageUrl } from "../../../utils/renderableImageUrl";
+import { loadOverlayState } from "../../../utils/import/importStorage";
 
 const DIM_PAIR = /(\d+(?:\.\d+)?)\s*["']?\s*[x×]\s*(\d+(?:\.\d+)?)\s*["']?/i;
 const DIM_PAIR_CM = /(\d+(?:\.\d+)?)\s*cm\s*[x×]\s*(\d+(?:\.\d+)?)\s*cm/i;
@@ -49,11 +51,40 @@ function collectImageCandidatesFromRecord(out: string[], record: UnknownRecord |
   for (const key of IMAGE_ARRAY_KEYS) pushImageCandidates(out, record[key]);
 }
 
-function resolveOptionSlabImageUrl(option: JobComparisonOptionRecord): string {
+function localCatalogOverrideForOption(option: JobComparisonOptionRecord): CatalogItem | null {
+  const catalogItemId = option.catalogItemId?.trim();
+  if (!catalogItemId || typeof window === "undefined") return null;
+  try {
+    const overlay = loadOverlayState();
+    const edited = (overlay.editedItems ?? []).find((item) => item.id === catalogItemId);
+    if (edited) return edited;
+    for (const source of overlay.importedSources ?? []) {
+      const imported = source.items.find((item) => item.id === catalogItemId);
+      if (imported) return imported;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function catalogPrimaryImageCandidate(item: CatalogItem | null): string {
+  if (!item) return "";
+  const candidates = [
+    item.imageUrl,
+    item.galleryImages?.find((url) => typeof url === "string" && url.trim()),
+    item.liveInventory?.imageUrl ?? undefined,
+    item.liveInventory?.galleryImages?.find((url) => typeof url === "string" && url.trim()),
+  ];
+  return candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+}
+
+function resolveOptionSlabImageUrl(option: JobComparisonOptionRecord, overrideItem?: CatalogItem | null): string {
   const snapshot = asRecord(option.snapshotData);
   const rawSourceFields = asRecord(snapshot?.["rawSourceFields"]);
   const liveInventory = asRecord(snapshot?.["liveInventory"]);
   const candidates: string[] = [];
+  pushImageCandidate(candidates, catalogPrimaryImageCandidate(overrideItem ?? null));
   pushImageCandidate(candidates, option.imageUrl);
   pushImageCandidate(candidates, option.sourceImageUrl);
   collectImageCandidatesFromRecord(candidates, snapshot);
@@ -139,8 +170,9 @@ export function applyRealisticSlabDimensions(
  * Build normalized slab list for the option. V1: primary slab from option snapshot + image.
  */
 export function slabsForOption(option: JobComparisonOptionRecord): LayoutSlab[] {
-  const { widthIn, heightIn, parsed } = parseSizeToInchesPair(option.size);
-  const imageUrl = resolveOptionSlabImageUrl(option);
+  const overrideItem = localCatalogOverrideForOption(option);
+  const { widthIn, heightIn, parsed } = parseSizeToInchesPair(overrideItem?.size || option.size);
+  const imageUrl = resolveOptionSlabImageUrl(option, overrideItem);
   if (!imageUrl) {
     return [];
   }

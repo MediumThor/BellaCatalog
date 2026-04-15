@@ -1,8 +1,10 @@
+import { PenSquare } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import {
   createJob,
+  deleteCustomer,
   deleteJob,
   fetchOptionsForJob,
   subscribeCustomer,
@@ -10,6 +12,8 @@ import {
   updateCustomer,
 } from "../services/compareQuoteFirestore";
 import {
+  DEFAULT_CUSTOMER_TYPE,
+  buildJobAreas,
   customerDisplayName,
   type CustomerRecord,
   type JobComparisonOptionRecord,
@@ -40,6 +44,7 @@ function formatJobStatus(status: string): string {
 }
 
 function customerToFormValues(c: {
+  customerType?: CustomerRecord["customerType"];
   businessName?: string;
   firstName: string;
   lastName: string;
@@ -49,6 +54,7 @@ function customerToFormValues(c: {
   notes: string;
 }): CustomerFormValues {
   return {
+    customerType: c.customerType ?? DEFAULT_CUSTOMER_TYPE,
     businessName: c.businessName ?? "",
     firstName: c.firstName,
     lastName: c.lastName,
@@ -149,6 +155,7 @@ function CustomerJobRow({
 export function CustomerDetailPage() {
   const { customerId } = useParams<{ customerId: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [customer, setCustomer] = useState<CustomerRecord | null | undefined>(undefined);
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [jobOpen, setJobOpen] = useState(false);
@@ -212,8 +219,14 @@ export function CustomerDetailPage() {
             {customerDisplayName(customer)}
           </h1>
           <div className="compare-customer-hero__actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setEditOpen(true)}>
-              Edit customer
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon"
+              aria-label={`Edit customer ${customerDisplayName(customer)}`}
+              title="Edit customer"
+              onClick={() => setEditOpen(true)}
+            >
+              <PenSquare aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -296,8 +309,13 @@ export function CustomerDetailPage() {
         open={editOpen}
         initialValues={customerToFormValues(customer)}
         onClose={() => setEditOpen(false)}
+        onDelete={async () => {
+          await deleteCustomer(customer.id, user.uid);
+          navigate("/compare");
+        }}
         onSubmit={async (values: CustomerFormValues) => {
           await updateCustomer(customer.id, {
+            customerType: values.customerType,
             businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),
             lastName: values.lastName.trim(),
@@ -313,14 +331,15 @@ export function CustomerDetailPage() {
         open={jobOpen}
         onClose={() => setJobOpen(false)}
         onSubmit={async (values: JobFormValues) => {
+          const initialAreaName = values.name.trim();
           await createJob(user.uid, {
             customerId,
-            name: values.name.trim(),
+            name: initialAreaName,
             contactName: values.contactName.trim(),
             contactPhone: values.contactPhone.trim(),
             siteAddress: values.siteAddress.trim(),
-            areaType: "",
-            areas: [],
+            areaType: initialAreaName,
+            areas: buildJobAreas(initialAreaName),
             squareFootage: 0,
             notes: values.notes.trim(),
             assumptions: values.assumptions.trim(),

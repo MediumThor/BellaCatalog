@@ -14,6 +14,7 @@ import {
   addCatalogItemsToJobBatch,
   createCustomer,
   createJob,
+  deleteCustomer,
   deleteJob,
   fetchOptionsForJob,
   getCustomer,
@@ -23,14 +24,19 @@ import {
   subscribeJobsForCustomer,
   subscribeOptionsForJob,
   updateJob,
+  updateJobComparisonOption,
+  updateCustomer,
 } from "../services/compareQuoteFirestore";
 import {
+  CUSTOMER_TYPE_OPTIONS,
   buildJobAreas,
-  customerContactSummary,
   customerDisplayName,
+  customerTypeLabel,
+  normalizeCustomerType,
   jobAreasForJob,
   primaryAreaForJob,
   type CustomerRecord,
+  type CustomerType,
   type JobAreaRecord,
   type JobComparisonOptionRecord,
   type JobRecord,
@@ -40,9 +46,19 @@ import { CreateCustomerModal, type CustomerFormValues } from "./CreateCustomerMo
 import { CreateJobModal, type JobFormValues } from "./CreateJobModal";
 import { AreaMaterialsCatalogModal } from "./AreaMaterialsCatalogModal";
 
-function inferTag(jobRow: JobRecord): string {
-  const source = `${jobRow.name} ${jobRow.notes} ${jobRow.assumptions} ${jobRow.areaType}`.toLowerCase();
-  return source.includes("commercial") ? "Commercial" : "Residential";
+type LayoutStudioCustomerFilter = "all" | CustomerType;
+
+function customerToFormValues(customer: CustomerRecord): CustomerFormValues {
+  return {
+    customerType: normalizeCustomerType(customer.customerType),
+    businessName: customer.businessName ?? "",
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    phone: customer.phone,
+    email: customer.email,
+    address: customer.address,
+    notes: customer.notes,
+  };
 }
 
 function optionHasSavedPreviewPlacement(option: JobComparisonOptionRecord, areaId: string): boolean {
@@ -91,6 +107,20 @@ function areaAssociatedOptions(area: JobAreaRecord | null, options: JobCompariso
   if (!Array.isArray(area.associatedOptionIds)) return options;
   const ids = new Set(area.associatedOptionIds);
   return options.filter((option) => ids.has(option.id));
+}
+
+function parseImportedAreaSource(
+  sourceKey: string,
+  jobs: JobRecord[]
+): { job: JobRecord; area: JobAreaRecord } | null {
+  if (!sourceKey) return null;
+  const [sourceJobId, sourceAreaId] = sourceKey.split(":");
+  if (!sourceJobId || !sourceAreaId) return null;
+  const sourceJob = jobs.find((job) => job.id === sourceJobId);
+  if (!sourceJob) return null;
+  const sourceArea = jobAreasForJob(sourceJob).find((area) => area.id === sourceAreaId);
+  if (!sourceArea?.layoutStudioPlan) return null;
+  return { job: sourceJob, area: sourceArea };
 }
 
 function areaSinkSummaries(area: JobAreaRecord): string[] {
@@ -176,6 +206,7 @@ export function LayoutStudioPage() {
   const [jobsByCustomer, setJobsByCustomer] = useState<Record<string, JobRecord[]>>({});
   const [jobOptionsByJobId, setJobOptionsByJobId] = useState<Record<string, JobComparisonOptionRecord[]>>({});
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<LayoutStudioCustomerFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedJobs, setExpandedJobs] = useState<Record<string, boolean>>({});
   const [previewTarget, setPreviewTarget] = useState<{ jobId: string; areaId: string } | null>(null);
@@ -184,6 +215,7 @@ export function LayoutStudioPage() {
   const [areaMaterialsSaving, setAreaMaterialsSaving] = useState(false);
   const [areaMaterialsError, setAreaMaterialsError] = useState<string | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [jobModalOpen, setJobModalOpen] = useState(false);
   const [areaModalJobId, setAreaModalJobId] = useState<string | null>(null);
   const [newAreaName, setNewAreaName] = useState("");
@@ -479,24 +511,28 @@ export function LayoutStudioPage() {
         return;
       }
       const refreshedOptions = await fetchOptionsForJob(areaMaterialsJob.id, user.uid);
+      const latestJob = await getJob(areaMaterialsJob.id);
+      const baseJobForAreaUpdate = latestJob ?? areaMaterialsJob;
+      const latestArea =
+        jobAreasForJob(baseJobForAreaUpdate).find((area) => area.id === areaMaterialsArea.id) ?? areaMaterialsArea;
       setJobOptionsByJobId((prev) => ({ ...prev, [areaMaterialsJob.id]: refreshedOptions }));
       if (hasJobContext && job?.id === areaMaterialsJob.id) {
         setOptions(refreshedOptions);
       }
       const addedOptions = refreshedOptions.filter((option) => !existingIds.has(option.id));
-      const existingAssociatedOptionIds = Array.isArray(areaMaterialsArea.associatedOptionIds)
-        ? areaMaterialsArea.associatedOptionIds
+      const existingAssociatedOptionIds = Array.isArray(latestArea.associatedOptionIds)
+        ? latestArea.associatedOptionIds
         : existingOptions.map((option) => option.id);
       const nextAssociatedOptionIds = Array.from(
         new Set([...existingAssociatedOptionIds, ...addedOptions.map((option) => option.id)])
       );
-      const nextSelectedOptionId = addedOptions[0]?.id ?? areaMaterialsArea.selectedOptionId ?? null;
+      const nextSelectedOptionId = latestArea.selectedOptionId ?? addedOptions[0]?.id ?? null;
       if (
-        nextSelectedOptionId !== areaMaterialsArea.selectedOptionId ||
-        nextAssociatedOptionIds.join("|") !== (areaMaterialsArea.associatedOptionIds ?? []).join("|")
+        nextSelectedOptionId !== latestArea.selectedOptionId ||
+        nextAssociatedOptionIds.join("|") !== (latestArea.associatedOptionIds ?? []).join("|")
       ) {
-        const nextAreas = jobAreasForJob(areaMaterialsJob).map((area) =>
-          area.id === areaMaterialsArea.id
+        const nextAreas = jobAreasForJob(baseJobForAreaUpdate).map((area) =>
+          area.id === latestArea.id
             ? {
                 ...area,
                 associatedOptionIds: nextAssociatedOptionIds,
@@ -505,7 +541,7 @@ export function LayoutStudioPage() {
               }
             : area
         );
-        await updateJob(areaMaterialsJob.id, {
+        await updateJob(baseJobForAreaUpdate.id, {
           areas: nextAreas,
           areaType: nextAreas.map((area) => area.name).join(", "),
         });
@@ -527,6 +563,9 @@ export function LayoutStudioPage() {
   if (!hasJobContext) {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     const filteredCustomers = customers.filter((row) => {
+      const matchesType =
+        customerTypeFilter === "all" || normalizeCustomerType(row.customerType) === customerTypeFilter;
+      if (!matchesType) return false;
       if (!normalizedQuery) return true;
       const fullName = `${row.businessName ?? ""} ${row.firstName} ${row.lastName}`.toLowerCase();
       const directCustomerMatch =
@@ -540,12 +579,17 @@ export function LayoutStudioPage() {
         return haystack.includes(normalizedQuery);
       });
     });
+    const emptyCustomerMessage =
+      customerTypeFilter === "all"
+        ? "No customers match your search yet."
+        : `No ${customerTypeLabel(customerTypeFilter).toLowerCase()} customers match your search yet.`;
 
     const activeCustomerId =
       selectedCustomerId && filteredCustomers.some((c) => c.id === selectedCustomerId)
         ? selectedCustomerId
         : (filteredCustomers[0]?.id ?? null);
     const activeCustomer = filteredCustomers.find((row) => row.id === activeCustomerId) ?? null;
+    const editingCustomer = editingCustomerId ? customers.find((row) => row.id === editingCustomerId) ?? null : null;
     const activeJobs = activeCustomer ? jobsByCustomer[activeCustomer.id] ?? [] : [];
     const customerPlanSources = activeJobs.flatMap((customerJob) =>
       jobAreasForJob(customerJob)
@@ -580,21 +624,40 @@ export function LayoutStudioPage() {
         <div className="ls-entry-dashboard">
         <aside className="ls-entry-sidebar glass-panel">
           <div className="ls-entry-sidebar-head">
-            <p className="ls-entry-sidebar-label">Customers</p>
-            <button
-              type="button"
-              className="ls-entry-sidebar-add"
-              aria-label="Create customer"
-              title="Create customer"
-              onClick={() => setCustomerModalOpen(true)}
-            >
-              +
-            </button>
+            <div className="ls-entry-sidebar-head-main">
+              <p className="ls-entry-sidebar-label">Customers</p>
+              <div className="ls-entry-sidebar-filter-row">
+                <div className="view-toggle ls-entry-customer-filter" role="group" aria-label="Customer type filter">
+                  {[{ value: "all", label: "All" }, ...CUSTOMER_TYPE_OPTIONS].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="btn view-toggle__btn"
+                      data-active={customerTypeFilter === option.value}
+                      aria-pressed={customerTypeFilter === option.value}
+                      onClick={() => setCustomerTypeFilter(option.value as LayoutStudioCustomerFilter)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="ls-entry-sidebar-add"
+                  aria-label="Create customer"
+                  title="Create customer"
+                  onClick={() => setCustomerModalOpen(true)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
           </div>
           <div className="ls-entry-sidebar-list">
             {filteredCustomers.map((row) => {
               const name = customerDisplayName(row);
               const isActive = row.id === activeCustomerId;
+              const typeLabel = customerTypeLabel(row.customerType);
               return (
                 <button
                   key={row.id}
@@ -603,7 +666,9 @@ export function LayoutStudioPage() {
                   onClick={() => setSelectedCustomerId(row.id)}
                 >
                   <span className="ls-entry-sidebar-item-name">{name || "Unnamed customer"}</span>
-                  <span className="ls-entry-sidebar-item-meta">{(jobsByCustomer[row.id] ?? []).length} jobs</span>
+                  <span className="ls-entry-sidebar-item-meta">
+                    {typeLabel} · {(jobsByCustomer[row.id] ?? []).length} jobs
+                  </span>
                 </button>
               );
             })}
@@ -612,14 +677,32 @@ export function LayoutStudioPage() {
 
         <section className="ls-entry-main glass-panel">
           {!activeCustomer ? (
-            <p className="ls-muted">No customers match your search yet.</p>
+            <p className="ls-muted">{emptyCustomerMessage}</p>
           ) : (
             <div className="ls-entry-customer-head">
               <div className="ls-entry-customer-head-copy">
-                <h3 className="ls-entry-customer-name">{customerDisplayName(activeCustomer)}</h3>
-                <p className="ls-entry-customer-meta">
-                  {customerContactSummary(activeCustomer)}
-                </p>
+                <div className="ls-entry-customer-title-row">
+                  <h3 className="ls-entry-customer-name">{customerDisplayName(activeCustomer)}</h3>
+                  <button
+                    type="button"
+                    className="ls-entry-icon-btn"
+                    aria-label={`Edit customer ${customerDisplayName(activeCustomer)}`}
+                    title="Edit customer"
+                    onClick={() => {
+                      if (activeCustomer) {
+                        setEditingCustomerId(activeCustomer.id);
+                      }
+                    }}
+                  >
+                    <PenSquare aria-hidden="true" />
+                  </button>
+                </div>
+                <ul className="ls-entry-customer-meta">
+                  {activeCustomer.phone.trim() ? <li>{activeCustomer.phone}</li> : null}
+                  {activeCustomer.email.trim() ? <li>{activeCustomer.email}</li> : null}
+                  {!activeCustomer.phone.trim() && !activeCustomer.email.trim() ? <li>No phone or email</li> : null}
+                  <li>{customerTypeLabel(activeCustomer.customerType)}</li>
+                </ul>
               </div>
               <div className="ls-entry-customer-head-actions">
                 <button
@@ -668,7 +751,6 @@ export function LayoutStudioPage() {
                           {areas.length} area{areas.length === 1 ? "" : "s"}
                         </p>
                       </div>
-                      <span className="ls-entry-tag">{inferTag(jobRow)}</span>
                       <div className="ls-entry-job-actions">
                         <button
                           type="button"
@@ -828,46 +910,57 @@ export function LayoutStudioPage() {
                                     {areaState?.layoutPreviewImageUrl ? (
                                       <span className="ls-entry-area-status">Saved layout available</span>
                                     ) : null}
+                                    <div className="ls-entry-area-actions-main">
+                                      <button
+                                        type="button"
+                                        className="ls-btn ls-btn-secondary"
+                                        onClick={() => {
+                                          setAreaMaterialsError(null);
+                                          setAreaMaterialsTarget({ jobId: jobRow.id, areaId: area.id });
+                                        }}
+                                      >
+                                        Add materials
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ls-btn ls-btn-secondary"
+                                        onClick={() =>
+                                          navigate(`/layout/jobs/${jobRow.id}?area=${encodeURIComponent(area.id)}`)
+                                        }
+                                      >
+                                        Open studio
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ls-btn ls-btn-secondary"
+                                        disabled={!areaState?.layoutPreviewImageUrl}
+                                        onClick={() => setPreviewTarget({ jobId: jobRow.id, areaId: area.id })}
+                                      >
+                                        {areaState?.layoutPreviewImageUrl ? "Preview layout" : "No saved layout"}
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="ls-entry-area-actions">
-                                  <button
-                                    type="button"
-                                    className="ls-btn ls-btn-primary"
-                                    onClick={() => {
-                                      setAreaMaterialsError(null);
-                                      setAreaMaterialsTarget({ jobId: jobRow.id, areaId: area.id });
-                                    }}
-                                  >
-                                    Add materials
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="ls-btn ls-btn-secondary"
-                                    onClick={() => navigate(`/layout/jobs/${jobRow.id}?area=${encodeURIComponent(area.id)}`)}
-                                  >
-                                    Open studio
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="ls-btn ls-btn-secondary"
-                                    disabled={!areaState?.layoutPreviewImageUrl}
-                                    onClick={() => setPreviewTarget({ jobId: jobRow.id, areaId: area.id })}
-                                  >
-                                    {areaState?.layoutPreviewImageUrl ? "Preview layout" : "No saved layout"}
-                                  </button>
-                                  {quoteableAreaMaterialOptions.map((option) => (
-                                    <button
-                                      key={`${area.id}-${option.id}-quote`}
-                                      type="button"
-                                      className="ls-btn ls-btn-secondary"
-                                      title={`Open PDF quote preview for ${option.productName}`}
-                                      onClick={() => setQuoteTarget({ jobId: jobRow.id, areaId: area.id, optionId: option.id })}
-                                    >
-                                      PDF quote: {option.productName}
-                                    </button>
-                                  ))}
-                                </div>
+                                {quoteableAreaMaterialOptions.length > 0 ? (
+                                  <div className="ls-entry-area-actions">
+                                    <div className="ls-entry-area-actions-divider" aria-hidden="true" />
+                                    <div className="ls-entry-area-actions-quotes">
+                                      {quoteableAreaMaterialOptions.map((option) => (
+                                        <button
+                                          key={`${area.id}-${option.id}-quote`}
+                                          type="button"
+                                          className="ls-btn ls-btn-secondary"
+                                          title={`Open PDF quote preview for ${option.productName}`}
+                                          onClick={() =>
+                                            setQuoteTarget({ jobId: jobRow.id, areaId: area.id, optionId: option.id })
+                                          }
+                                        >
+                                          PDF quote: {option.productName}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           })}
@@ -948,6 +1041,7 @@ export function LayoutStudioPage() {
           onSubmit={async (values: CustomerFormValues) => {
             if (!user?.uid) throw new Error("Not signed in");
             const customerId = await createCustomer(user.uid, {
+              customerType: values.customerType,
               businessName: values.businessName.trim(),
               firstName: values.firstName.trim(),
               lastName: values.lastName.trim(),
@@ -960,20 +1054,45 @@ export function LayoutStudioPage() {
           }}
         />
 
+        <CreateCustomerModal
+          open={Boolean(editingCustomer)}
+          initialValues={editingCustomer ? customerToFormValues(editingCustomer) : null}
+          onClose={() => setEditingCustomerId(null)}
+          onDelete={async () => {
+            if (!editingCustomer || !user?.uid) throw new Error("Choose a customer first.");
+            await deleteCustomer(editingCustomer.id, user.uid);
+            setSelectedCustomerId((prev) => (prev === editingCustomer.id ? null : prev));
+          }}
+          onSubmit={async (values: CustomerFormValues) => {
+            if (!editingCustomer) throw new Error("Choose a customer first.");
+            await updateCustomer(editingCustomer.id, {
+              customerType: values.customerType,
+              businessName: values.businessName.trim(),
+              firstName: values.firstName.trim(),
+              lastName: values.lastName.trim(),
+              phone: values.phone.trim(),
+              email: values.email.trim(),
+              address: values.address.trim(),
+              notes: values.notes.trim(),
+            });
+          }}
+        />
+
         <CreateJobModal
           open={jobModalOpen}
           onClose={() => setJobModalOpen(false)}
           onSubmit={async (values: JobFormValues) => {
             if (!user?.uid) throw new Error("Not signed in");
             if (!activeCustomerId) throw new Error("Choose a customer first.");
+            const initialAreaName = values.name.trim();
             const createdJobId = await createJob(user.uid, {
               customerId: activeCustomerId,
-              name: values.name.trim(),
+              name: initialAreaName,
               contactName: values.contactName.trim(),
               contactPhone: values.contactPhone.trim(),
               siteAddress: values.siteAddress.trim(),
-              areaType: "",
-              areas: [],
+              areaType: initialAreaName,
+              areas: buildJobAreas(initialAreaName),
               squareFootage: 0,
               notes: values.notes.trim(),
               assumptions: values.assumptions.trim(),
@@ -1067,21 +1186,74 @@ export function LayoutStudioPage() {
                       .flat()
                       .find((candidate) => candidate.id === areaModalJobId);
                     if (!targetJob || !newAreaName.trim()) return;
+                    const createdAt = new Date().toISOString();
                     const existingAreas = jobAreasForJob(targetJob);
-                    const importedPlan =
-                      customerPlanSources.find((source) => source.key === copyPlanSource)?.plan ?? null;
+                    const importSource = parseImportedAreaSource(copyPlanSource, activeJobs);
+                    const sameJobImport = importSource?.job.id === targetJob.id;
+                    const targetJobOptions = jobOptionsByJobId[targetJob.id] ?? [];
+                    const targetJobOptionIds = targetJobOptions.map((option) => option.id);
+                    const importLinkedOptionIds =
+                      sameJobImport && importSource
+                        ? targetJobOptions
+                            .filter((option) => Boolean(option.layoutAreaStates?.[importSource.area.id]))
+                            .map((option) => option.id)
+                        : [];
+                    const importedAssociatedOptionIds =
+                      !importSource
+                        ? []
+                        : sameJobImport
+                        ? Array.isArray(importSource.area.associatedOptionIds) &&
+                          importSource.area.associatedOptionIds.length > 0
+                          ? importSource.area.associatedOptionIds.filter((optionId) =>
+                              targetJobOptions.some((option) => option.id === optionId)
+                            )
+                          : importLinkedOptionIds
+                        : targetJobOptionIds;
+                    const importedSelectedOptionId =
+                      sameJobImport &&
+                      importSource?.area.selectedOptionId &&
+                      importedAssociatedOptionIds.includes(importSource.area.selectedOptionId)
+                        ? importSource.area.selectedOptionId
+                        : importedAssociatedOptionIds[0] ?? null;
+                    const importedPlan = importSource?.area.layoutStudioPlan
+                      ? {
+                          ...structuredClone(importSource.area.layoutStudioPlan),
+                          updatedAt: createdAt,
+                        }
+                      : null;
+                    const createdAreas = buildJobAreas(newAreaName.trim(), createdAt).map((area, index) => ({
+                      ...area,
+                      id: `${area.id}-${existingAreas.length + index + 1}`,
+                      associatedOptionIds: sameJobImport ? [...importedAssociatedOptionIds] : area.associatedOptionIds,
+                      selectedOptionId: sameJobImport ? importedSelectedOptionId : area.selectedOptionId,
+                      layoutStudioPlan: importedPlan ? structuredClone(importedPlan) : null,
+                    }));
                     const nextAreas = [
                       ...existingAreas,
-                      ...buildJobAreas(newAreaName.trim(), new Date().toISOString()).map((area, index) => ({
-                        ...area,
-                        id: `${area.id}-${existingAreas.length + index + 1}`,
-                        layoutStudioPlan: importedPlan ?? null,
-                      })),
+                      ...createdAreas,
                     ];
                     await updateJob(targetJob.id, {
                       areas: nextAreas,
                       areaType: nextAreas.map((area) => area.name).join(", "),
                     });
+                    if (sameJobImport && importSource) {
+                      const optionUpdates = targetJobOptions.flatMap((option) => {
+                        const sourceAreaState = option.layoutAreaStates?.[importSource.area.id];
+                        if (!sourceAreaState) return [];
+                        const nextLayoutAreaStates = {
+                          ...(option.layoutAreaStates ?? {}),
+                        };
+                        for (const area of createdAreas) {
+                          nextLayoutAreaStates[area.id] = structuredClone(sourceAreaState);
+                        }
+                        return [{ optionId: option.id, layoutAreaStates: nextLayoutAreaStates }];
+                      });
+                      await Promise.all(
+                        optionUpdates.map(({ optionId, layoutAreaStates }) =>
+                          updateJobComparisonOption(optionId, { layoutAreaStates })
+                        )
+                      );
+                    }
                     setExpandedJobs((prev) => ({ ...prev, [targetJob.id]: true }));
                     setAreaModalJobId(null);
                     setNewAreaName("");

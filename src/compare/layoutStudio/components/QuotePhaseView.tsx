@@ -72,6 +72,12 @@ export function QuotePhaseView({
   const profileEdgeLf = draft.summary.profileEdgeLf ?? 0;
   const miterEdgeLf = draft.summary.miterEdgeLf ?? 0;
   const splashAreaSqFt = draft.summary.splashAreaSqFt ?? 0;
+  const installationPerSqft =
+    Number.isFinite(quoteSettings.installationPerSqft) && quoteSettings.installationPerSqft >= 0
+      ? quoteSettings.installationPerSqft
+      : 0;
+  const splashPerLf =
+    Number.isFinite(quoteSettings.splashPerLf) && quoteSettings.splashPerLf >= 0 ? quoteSettings.splashPerLf : 0;
 
   const countertopSqFt = useMemo(() => {
     const total = draft.summary.areaSqFt;
@@ -79,6 +85,7 @@ export function QuotePhaseView({
     const miter = draft.summary.miterAreaSqFt ?? 0;
     return Math.max(0, total - splash - miter);
   }, [draft.summary.areaSqFt, draft.summary.splashAreaSqFt, draft.summary.miterAreaSqFt]);
+  const fabricatedSqFt = countertopSqFt + splashAreaSqFt;
 
   const commercial = useMemo(
     () =>
@@ -314,8 +321,8 @@ export function QuotePhaseView({
           <>
             <p className="ls-muted ls-quote-exclude-legend">
               Cost to us uses supplier/catalog material cost before markup and does not change with customer slab
-              pricing mode. Fabrication profit currently reflects the charged fabrication amount because fabrication
-              cost is not modeled separately yet.
+              pricing mode. Fabrication profit currently reflects the charged fabrication amount, and installation is
+              only reflected in gross profit, because labor cost is not modeled separately yet.
             </p>
             <div className="ls-quote-analytics-grid" aria-label="Quote cost analytics">
               <AnalyticsCard label="Cost to us" value={analytics.slabCostTotal != null ? formatMoney(analytics.slabCostTotal) : "—"} />
@@ -378,7 +385,8 @@ export function QuotePhaseView({
             <span className="ls-quote-material-mode-title">Slab pricing basis</span>
             <span className="ls-quote-material-mode-value">{materialChargeModeLabel}</span>
             <span className="ls-muted ls-quote-material-mode-hint">
-              Controlled from `Slab pricing` above. Fabrication still uses countertop sq ft ({countertopSqFt.toFixed(1)} est.).
+              Controlled from `Slab pricing` above. Fabrication and installation use fabricated sq ft (pieces +
+              splash, {fabricatedSqFt.toFixed(1)} est.).
             </span>
           </div>
         </div>
@@ -465,11 +473,25 @@ export function QuotePhaseView({
                   <>
                     Fabrication{" "}
                     <span className="ls-quote-dl-sub">
-                      ({countertopSqFt.toFixed(1)} sq ft × {formatMoney(commercial.fabricationPerSqft)})
+                      ({commercial.fabricatedSqFt.toFixed(1)} sq ft × {formatMoney(commercial.fabricationPerSqft)})
                     </span>
                   </>
                 }
                 dd={formatMoney(commercial.fabricationTotal)}
+              />
+              <QuoteDlRow
+                rowId="installation"
+                excluded={customerExclusions.installation}
+                onExcludeChange={onSetCustomerExclusion}
+                dt={
+                  <>
+                    Installation{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({commercial.fabricatedSqFt.toFixed(1)} sq ft × {formatMoney(installationPerSqft)})
+                    </span>
+                  </>
+                }
+                dd={formatMoney(commercial.installationTotal)}
               />
               <QuoteDlRow
                 rowId="sinkCutouts"
@@ -482,7 +504,14 @@ export function QuotePhaseView({
                 rowId="splashAddOn"
                 excluded={customerExclusions.splashAddOn}
                 onExcludeChange={onSetCustomerExclusion}
-                dt="Splash add-on"
+                dt={
+                  <>
+                    Splash add-on{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({commercial.splashLinearFeet.toFixed(1)} lf × {formatMoney(splashPerLf)})
+                    </span>
+                  </>
+                }
                 dd={formatMoney(commercial.splashAddOnTotal)}
               />
               <QuoteDlRow

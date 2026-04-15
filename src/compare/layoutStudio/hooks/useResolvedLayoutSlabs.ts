@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { JobComparisonOptionRecord } from "../../../types/compareQuote";
+import { CATALOG_OVERLAY_UPDATED_EVENT } from "../../../utils/import/importStorage";
 import type { LayoutSlab, SlabCloneEntry } from "../types";
 import { applyRealisticSlabDimensions, slabsForOption } from "../utils/slabDimensions";
 
@@ -13,8 +14,16 @@ export function useResolvedLayoutSlabs(
   option: JobComparisonOptionRecord | null,
   slabClones?: SlabCloneEntry[] | null
 ): LayoutSlab[] {
-  const base = useMemo(() => (option ? slabsForOption(option) : []), [option]);
+  const [overlayVersion, setOverlayVersion] = useState(0);
+  const base = useMemo(() => (option ? slabsForOption(option) : []), [option, overlayVersion]);
   const [imgDims, setImgDims] = useState<Record<string, { w: number; h: number }>>({});
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOverlayUpdated = () => setOverlayVersion((prev) => prev + 1);
+    window.addEventListener(CATALOG_OVERLAY_UPDATED_EVENT, onOverlayUpdated);
+    return () => window.removeEventListener(CATALOG_OVERLAY_UPDATED_EVENT, onOverlayUpdated);
+  }, []);
 
   useEffect(() => {
     if (!base.length) return;

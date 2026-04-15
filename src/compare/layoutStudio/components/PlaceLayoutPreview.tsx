@@ -652,26 +652,18 @@ export function PlaceLayoutPreview({
                 ? "rgba(72, 80, 92, 0.42)"
                 : `rgba(120, 200, 255, ${0.07 + (idx % 5) * 0.02})`;
 
-          const LIVE_PREVIEW_SELECTED_STROKE = "rgba(90, 175, 255, 0.98)";
           const MITER_PLAN_STROKE = "#0d47a1";
-          const showPlacedOutline = sel && placedMapped;
           const edgeStroke = (ei: number) =>
-            placedMapped && !showPlacedOutline
+            placedMapped
               ? "transparent"
               : piece.edgeTags?.miterEdgeIndices?.includes(ei)
-                ? showPlacedOutline
-                  ? LIVE_PREVIEW_SELECTED_STROKE
-                  : MITER_PLAN_STROKE
-                : sel
-                  ? LIVE_PREVIEW_SELECTED_STROKE
-                  : "rgba(190, 205, 220, 0.42)";
+                ? MITER_PLAN_STROKE
+                : "rgba(190, 205, 220, 0.42)";
           const edgeStrokeW = (ei: number) =>
-            placedMapped && !showPlacedOutline
+            placedMapped
               ? 0
               : piece.edgeTags?.miterEdgeIndices?.includes(ei)
-              ? 0.2
-              : sel
-                ? 0.38
+                ? 0.2
                 : 0.16;
 
           const xs = ringOpen.map((q) => q.x);
@@ -697,6 +689,7 @@ export function PlaceLayoutPreview({
                   18,
                   Math.min(shortSide * 0.12, Math.min(traceDims.w, traceDims.h) * 0.045)
                 );
+          const labelFontSize = sel ? fontSize * 1.28 : fontSize;
           const labelText = isStrip
             ? (stripLetterLabelById.get(piece.id) ?? "—")
             : (pieceLabelById.get(piece.id) ?? piece.name);
@@ -733,14 +726,6 @@ export function PlaceLayoutPreview({
                     className="ls-slab-layout-fill-image"
                   />
                 </g>
-              ) : null}
-              {sel && placedMapped ? (
-                <path
-                  d={d}
-                  fill="rgba(64, 156, 255, 0.24)"
-                  stroke="none"
-                  style={{ pointerEvents: "none" }}
-                />
               ) : null}
               <path
                 d={d}
@@ -811,8 +796,8 @@ export function PlaceLayoutPreview({
               {showLabels ? (
                 <text
                   transform={`translate(${cx},${cy}) rotate(${labelRot})`}
-                  fill={labelColor}
-                  fontSize={fontSize}
+                  fill={sel ? "#d32f2f" : labelColor}
+                  fontSize={labelFontSize}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   className={`ls-place-preview-piece-label${sel ? " ls-place-preview-piece-label--selected" : ""}`}

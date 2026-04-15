@@ -165,8 +165,8 @@ function DataManagerPanelInner({
             Data manager
           </div>
           <div className="product-sub">
-            Upload PDFs to parse + merge (saved locally), remove whole supplier lists, hide single rows, or restore
-            hidden entries (local overlay only).
+            Upload supplier PDFs, remove whole source lists, hide single rows, or restore hidden entries. Everything
+            here is merged through the local overlay on this computer.
           </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
@@ -183,7 +183,7 @@ function DataManagerPanelInner({
 
       {err ? (
         <div className="import-warnings" style={{ marginTop: "0.75rem" }} role="alert">
-          <strong>Import failed.</strong> {err}
+          <strong>PDF import failed.</strong> {err}
         </div>
       ) : null}
 
@@ -244,7 +244,9 @@ function DataManagerPanelInner({
                 <div>
                   <div style={{ fontWeight: 700 }}>{s.sourceFile}</div>
                   <div className="product-sub">
-                    {s.vendor} · {s.items.length} rows · imported {new Date(s.importedAtIso).toLocaleString()}
+                    {s.vendor} · {s.parserId === "manual" ? "manual entry" : "pdf import"} · {s.items.length} rows
+                    {" · "}
+                    {new Date(s.importedAtIso).toLocaleString()}
                   </div>
                 </div>
                 <button type="button" className="btn" onClick={() => removeImported(s.id)}>

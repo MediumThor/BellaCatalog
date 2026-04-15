@@ -46,6 +46,7 @@ export function LayoutQuoteSheet({
       : null;
   const showPrimaryPreview = primaryPreviewNode != null || primaryPreviewUrl != null;
   const showPlanReference = !hasMaterialSections && model.planImageUrl != null && (livePlacement != null || placementUrl != null);
+  const planReferenceUrl = showPlanReference ? (model.planImageUrl ?? undefined) : undefined;
 
   return (
     <>
@@ -102,15 +103,15 @@ export function LayoutQuoteSheet({
               )}
             </section>
 
-            {showPlanReference ? (
+            {planReferenceUrl ? (
               <section className="ls-layout-quote-section">
                 <h2 className="ls-layout-quote-h2">Plan layout</h2>
                 <button
                   type="button"
                   className="ls-layout-quote-img-btn"
-                  onClick={() => setLightboxUrl(model.planImageUrl)}
+                  onClick={() => setLightboxUrl(planReferenceUrl)}
                 >
-                  <img src={model.planImageUrl} alt="" className="ls-layout-quote-hero-img" />
+                  <img src={planReferenceUrl} alt="" className="ls-layout-quote-hero-img" />
                   <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
                 </button>
               </section>

@@ -21,8 +21,9 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
   const [fabOverride, setFabOverride] = useState(
     initial.fabricationPerSqftOverride == null ? "" : String(initial.fabricationPerSqftOverride)
   );
+  const [installationSf, setInstallationSf] = useState(String(initial.installationPerSqft));
   const [sinkEach, setSinkEach] = useState(String(initial.sinkCutoutEach));
-  const [splashSf, setSplashSf] = useState(String(initial.splashPerSqft));
+  const [splashLf, setSplashLf] = useState(String(initial.splashPerLf));
   const [profileLf, setProfileLf] = useState(String(initial.profilePerLf));
   const [miterLf, setMiterLf] = useState(String(initial.miterPerLf));
   const [saving, setSaving] = useState(false);
@@ -31,8 +32,9 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
     if (!open) return;
     setMaterialMarkup(String(initial.materialMarkup));
     setFabOverride(initial.fabricationPerSqftOverride == null ? "" : String(initial.fabricationPerSqftOverride));
+    setInstallationSf(String(initial.installationPerSqft));
     setSinkEach(String(initial.sinkCutoutEach));
-    setSplashSf(String(initial.splashPerSqft));
+    setSplashLf(String(initial.splashPerLf));
     setProfileLf(String(initial.profilePerLf));
     setMiterLf(String(initial.miterPerLf));
     setSaving(false);
@@ -65,8 +67,9 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
         const n = parseFloat(t.replace(/,/g, ""));
         return Number.isFinite(n) && n >= 0 ? n : null;
       })(),
+      installationPerSqft: numOr(installationSf, 0, 0),
       sinkCutoutEach: numOr(sinkEach, 0, 0),
-      splashPerSqft: numOr(splashSf, 0, 0),
+      splashPerLf: numOr(splashLf, 0, 0),
       profilePerLf: numOr(profileLf, 0, 0),
       miterPerLf: numOr(miterLf, 0, 0),
     };
@@ -92,8 +95,8 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
           Quote pricing
         </h2>
         <p className="ls-muted ls-quote-settings-lead">
-          Defaults for this job’s commercial summary. Fabrication applies to countertop piece area only (excludes
-          splash strips). Material billing now comes from each layout’s `Slab pricing` choices.
+          Defaults for this job’s commercial summary. Fabrication and installation apply to fabricated area
+          (pieces + splash). Material billing comes from each layout’s `Slab pricing` choices.
         </p>
 
         <div className="ls-quote-settings-fields">
@@ -111,7 +114,7 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
           </label>
 
           <label className="ls-quote-settings-field">
-            <span className="ls-quote-settings-label">Fabrication $ / sq ft (countertop pieces)</span>
+            <span className="ls-quote-settings-label">Fabrication $ / sq ft (fabricated area)</span>
             <input
               type="number"
               className="ls-input"
@@ -122,6 +125,19 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
               onChange={(e) => setFabOverride(e.target.value)}
             />
             <span className="ls-quote-settings-hint">Leave empty to use the built-in schedule from material $/sq ft.</span>
+          </label>
+
+          <label className="ls-quote-settings-field">
+            <span className="ls-quote-settings-label">Installation $ / sq ft (fabricated area)</span>
+            <input
+              type="number"
+              className="ls-input"
+              min={0}
+              step={0.5}
+              value={installationSf}
+              onChange={(e) => setInstallationSf(e.target.value)}
+            />
+            <span className="ls-quote-settings-hint">Charged on piece area plus splash area.</span>
           </label>
 
           <label className="ls-quote-settings-field">
@@ -137,15 +153,16 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
           </label>
 
           <label className="ls-quote-settings-field">
-            <span className="ls-quote-settings-label">Splash $ / sq ft</span>
+            <span className="ls-quote-settings-label">Splash $ / lf</span>
             <input
               type="number"
               className="ls-input"
               min={0}
               step={0.5}
-              value={splashSf}
-              onChange={(e) => setSplashSf(e.target.value)}
+              value={splashLf}
+              onChange={(e) => setSplashLf(e.target.value)}
             />
+            <span className="ls-quote-settings-hint">Splash charge uses strip linear footage, derived from area and splash height.</span>
           </label>
 
           <label className="ls-quote-settings-field">

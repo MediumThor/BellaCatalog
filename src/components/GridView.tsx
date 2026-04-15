@@ -2,6 +2,7 @@ import { memo } from "react";
 import type { CatalogItem } from "../types/catalog";
 import { CatalogCollectionButton } from "./CatalogCollectionButton";
 import { CompareBagButton } from "./CompareBagButton";
+import { EditIconButton } from "./EditIconButton";
 import { FavoriteStar } from "./FavoriteStar";
 import { PriceBadgeGroup } from "./PriceBadgeGroup";
 import { QuotedPriceDisplay } from "./QuotedPriceDisplay";
@@ -36,6 +37,7 @@ type Props = {
   favoriteIds: Set<string>;
   onToggleFavorite: (id: string) => void;
   onRequestDeleteEntry?: (item: CatalogItem) => void;
+  onRequestEditEntry?: (item: CatalogItem) => void;
   hidePrices: boolean;
   showQuotedPrice: boolean;
   showTags: boolean;
@@ -55,6 +57,7 @@ function GridViewInner({
   favoriteIds,
   onToggleFavorite,
   onRequestDeleteEntry,
+  onRequestEditEntry,
   hidePrices,
   showQuotedPrice,
   showTags,
@@ -87,43 +90,33 @@ function GridViewInner({
             role="listitem"
           >
             <div className="catalog-grid-card__media">
-              <div className="catalog-grid-card__fav">
-                <div className="catalog-grid-card__quick-actions">
-                  {compareBagEnabled && compareBagIds && onToggleCompareBag ? (
-                    <div className="catalog-grid-card__selection-stack">
-                      <CompareBagButton
-                        selected={compareBagIds.has(item.id)}
-                        onToggle={() => onToggleCompareBag(item.id)}
-                        label={item.displayName}
-                      />
-                      {onOpenCollections ? (
-                        <CatalogCollectionButton
-                          active={collectionCount > 0}
-                          count={collectionCount}
-                          onClick={() => onOpenCollections(item)}
-                          label={item.displayName}
-                        />
-                      ) : null}
-                    </div>
-                  ) : onOpenCollections ? (
-                    <div className="catalog-grid-card__selection-stack">
+              {(compareBagEnabled && compareBagIds && onToggleCompareBag) || onOpenCollections ? (
+                <div className="catalog-grid-card__media-actions catalog-grid-card__media-actions--left">
+                  <div className="catalog-grid-card__selection-stack">
+                    {onOpenCollections ? (
                       <CatalogCollectionButton
                         active={collectionCount > 0}
                         count={collectionCount}
                         onClick={() => onOpenCollections(item)}
                         label={item.displayName}
                       />
-                    </div>
-                  ) : null}
-                  <FavoriteStar
-                    active={favorite}
-                    onToggle={() => onToggleFavorite(item.id)}
-                    label={item.displayName}
-                  />
+                    ) : null}
+                    {compareBagEnabled && compareBagIds && onToggleCompareBag ? (
+                      <CompareBagButton
+                        selected={compareBagIds.has(item.id)}
+                        onToggle={() => onToggleCompareBag(item.id)}
+                        label={item.displayName}
+                      />
+                    ) : null}
+                  </div>
                 </div>
-                {onRequestDeleteEntry ? (
-                  <TrashIconButton label={item.displayName} onClick={() => onRequestDeleteEntry(item)} />
-                ) : null}
+              ) : null}
+              <div className="catalog-grid-card__media-actions catalog-grid-card__media-actions--right">
+                <FavoriteStar
+                  active={favorite}
+                  onToggle={() => onToggleFavorite(item.id)}
+                  label={item.displayName}
+                />
               </div>
               {hasImage ? (
                 <SlabThumbnailLightbox
@@ -138,7 +131,21 @@ function GridViewInner({
               )}
             </div>
             <div className="catalog-grid-card__body">
-              <h2 className="catalog-grid-card__title">{item.displayName}</h2>
+              <div className="catalog-grid-card__title-row">
+                <h2 className="catalog-grid-card__title">{item.displayName}</h2>
+                {onRequestEditEntry ? (
+                  <div className="catalog-grid-card__title-actions">
+                    <EditIconButton label={item.displayName} onClick={() => onRequestEditEntry(item)} />
+                    {onRequestDeleteEntry ? (
+                      <TrashIconButton label={item.displayName} onClick={() => onRequestDeleteEntry(item)} />
+                    ) : null}
+                  </div>
+                ) : onRequestDeleteEntry ? (
+                  <div className="catalog-grid-card__title-actions">
+                    <TrashIconButton label={item.displayName} onClick={() => onRequestDeleteEntry(item)} />
+                  </div>
+                ) : null}
+              </div>
               <div className="catalog-grid-card__vendor">{item.vendor}</div>
               <div className="catalog-grid-card__links">
                 <div className="catalog-grid-card__link-row">

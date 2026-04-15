@@ -3,6 +3,14 @@
 import type { SavedJobLayoutPlan, SavedLayoutStudioState, SavedOptionLayoutPlacement } from "../compare/layoutStudio/types";
 
 export type JobStatus = "draft" | "comparing" | "selected" | "quoted" | "closed";
+export type CustomerType = "residential" | "commercial";
+
+export const DEFAULT_CUSTOMER_TYPE: CustomerType = "residential";
+
+export const CUSTOMER_TYPE_OPTIONS: Array<{ value: CustomerType; label: string }> = [
+  { value: "residential", label: "Residential" },
+  { value: "commercial", label: "Commercial" },
+];
 
 /** How material $ is billed in Layout Studio commercial summary (fabrication still uses piece sq ft). */
 export type MaterialChargeMode = "sqft_used" | "full_slab";
@@ -11,12 +19,14 @@ export type MaterialChargeMode = "sqft_used" | "full_slab";
 export interface LayoutQuoteSettings {
   /** Markup multiplier on catalog material cost before fabrication (default matches catalog quote model). */
   materialMarkup: number;
-  /** If set, fabrication $/sq ft on countertop pieces; if null, use material-tier schedule. */
+  /** If set, fabrication $/sq ft on fabricated area (pieces + splash); if null, use material-tier schedule. */
   fabricationPerSqftOverride: number | null;
+  /** Additional install $/sq ft on fabricated area (pieces + splash). */
+  installationPerSqft: number;
   /** Add-on $ per sink cutout (layout sink count). */
   sinkCutoutEach: number;
-  /** Add-on $ per sq ft of splash strip area. */
-  splashPerSqft: number;
+  /** Add-on $ per linear foot of splash strip length. */
+  splashPerLf: number;
   /** Add-on $ per linear foot of profile edge. */
   profilePerLf: number;
   /** Add-on $ per linear foot of miter edge. */
@@ -30,8 +40,9 @@ export interface LayoutQuoteSettings {
 export const DEFAULT_LAYOUT_QUOTE_SETTINGS: LayoutQuoteSettings = {
   materialMarkup: 1.6,
   fabricationPerSqftOverride: null,
+  installationPerSqft: 0,
   sinkCutoutEach: 0,
-  splashPerSqft: 0,
+  splashPerLf: 0,
   profilePerLf: 0,
   miterPerLf: 0,
   materialChargeMode: "sqft_used",
@@ -50,6 +61,7 @@ export type LayoutQuoteCustomerRowId =
   | "splashArea"
   | "materialCost"
   | "fabrication"
+  | "installation"
   | "sinkCutouts"
   | "splashAddOn"
   | "profileAddOn"
@@ -60,6 +72,7 @@ export type LayoutQuoteCustomerRowId =
 export interface CustomerRecord {
   id: string;
   ownerUserId: string;
+  customerType?: CustomerType | null;
   businessName?: string;
   firstName: string;
   lastName: string;
@@ -69,6 +82,14 @@ export interface CustomerRecord {
   notes: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export function normalizeCustomerType(customerType: CustomerType | null | undefined): CustomerType {
+  return customerType === "commercial" ? "commercial" : DEFAULT_CUSTOMER_TYPE;
+}
+
+export function customerTypeLabel(customerType: CustomerType | null | undefined): string {
+  return normalizeCustomerType(customerType) === "commercial" ? "Commercial" : "Residential";
 }
 
 export function customerDisplayName(customer: Pick<CustomerRecord, "businessName" | "firstName" | "lastName">): string {

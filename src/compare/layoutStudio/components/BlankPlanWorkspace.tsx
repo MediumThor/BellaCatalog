@@ -170,6 +170,35 @@ function snapPlanPointToNearestInch(p: LayoutPoint): LayoutPoint {
   return { x: Math.round(p.x), y: Math.round(p.y) };
 }
 
+function collectPlanCornerSnapTargets(pieces: readonly LayoutPiece[]): LayoutPoint[] {
+  const out: LayoutPoint[] = [];
+  for (const piece of pieces) {
+    if (isPlanStripPiece(piece)) continue;
+    const ring = normalizeClosedRing(planDisplayPoints(piece, pieces));
+    for (const point of ring) {
+      out.push({ x: point.x, y: point.y });
+    }
+  }
+  return out;
+}
+
+function snapPlanPointToCornerOrNearestInch(
+  p: LayoutPoint,
+  pieces: readonly LayoutPiece[],
+  cornerSnapRadius: number,
+): LayoutPoint {
+  let best: LayoutPoint | null = null;
+  let bestDistance = cornerSnapRadius;
+  for (const target of collectPlanCornerSnapTargets(pieces)) {
+    const d = Math.hypot(target.x - p.x, target.y - p.y);
+    if (d <= bestDistance) {
+      bestDistance = d;
+      best = target;
+    }
+  }
+  return best ? { x: best.x, y: best.y } : snapPlanPointToNearestInch(p);
+}
+
 function segmentMidpoint(a: LayoutPoint, b: LayoutPoint): LayoutPoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
@@ -471,6 +500,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
   ) {
     const piecesRef = useRef(pieces);
     piecesRef.current = pieces;
+    const dimEditInputRef = useRef<HTMLInputElement | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
     const stageRef = useRef<HTMLDivElement | null>(null);
     const [dragRect, setDragRect] = useState<{
@@ -595,6 +625,17 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const sinkDragOrthoAxisRef = useRef<"x" | "y" | null>(null);
     const seenPieceIdsRef = useRef<Set<string> | null>(null);
     const prevTraceToolRef = useRef<TraceTool | null>(null);
+
+    useEffect(() => {
+      if (!dimEdit) return;
+      const input = dimEditInputRef.current;
+      if (!input) return;
+      requestAnimationFrame(() => {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+      });
+    }, [dimEdit?.pieceId, dimEdit?.edgeIndex, dimEdit?.left, dimEdit?.top]);
 
     useEffect(() => {
       const prev = prevTraceToolRef.current;
@@ -1818,7 +1859,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         e.preventDefault();
         const ppu = planUnitsPerScreenPx();
         const vertexHitR = Math.max(2.6, ppu * 18);
-        const snappedPoint = snapPlanPointToNearestInch(p);
+        const snappedPoint = snapPlanPointToCornerOrNearestInch(
+          p,
+          piecesRef.current,
+          Math.max(1.5, ppu * 12),
+        );
         if (
           polyDraft &&
           polyDraft.length >= 3 &&
@@ -1851,7 +1896,12 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
       if (tool === "rect" || tool === "lShape") {
-        const snapped = snapPlanPointToNearestInch(p);
+        const ppu = planUnitsPerScreenPx();
+        const snapped = snapPlanPointToCornerOrNearestInch(
+          p,
+          piecesRef.current,
+          Math.max(1.5, ppu * 12),
+        );
         setDragRect({ a: snapped, b: snapped });
         return;
       }
@@ -3788,7 +3838,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   )
               : null}
           </svg>
-          {tool === "select" && selectedEdge && popoverPos ? (
+          {tool === "select" && selectedEdge && popoverPos && !dimEdit ? (
             <div
               className="ls-edge-popover-cluster"
               style={{ left: popoverPos.left, top: popoverPos.top }}
@@ -4029,14 +4079,23 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               <label className="ls-dim-popover-label">
                 Length (in)
                 <input
+                  ref={dimEditInputRef}
                   className="ls-input ls-dim-input"
-                  type="number"
-                  min={0.01}
-                  step={0.125}
+                  type="text"
+                  inputMode="decimal"
                   value={dimEdit.value}
                   onChange={(e) =>
                     setDimEdit((d) => (d ? { ...d, value: e.target.value } : d))
                   }
+                  onFocus={(e) => {
+                    e.currentTarget.select();
+                    e.currentTarget.setSelectionRange(0, e.currentTarget.value.length);
+                  }}
+                  onPointerUp={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.select();
+                    e.currentTarget.setSelectionRange(0, e.currentTarget.value.length);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       applyDimensionLength(

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { ShoppingCart } from "lucide-react";
 import type { CatalogItem, ColumnVisibility } from "../types/catalog";
 import { ProductRow } from "./ProductRow";
 
@@ -8,6 +9,7 @@ type Props = {
   favoriteIds: Set<string>;
   onToggleFavorite: (id: string) => void;
   onRequestDeleteEntry?: (item: CatalogItem) => void;
+  onRequestEditEntry?: (item: CatalogItem) => void;
   hidePrices: boolean;
   showQuotedPrice: boolean;
   showTags: boolean;
@@ -27,6 +29,7 @@ function TableViewInner({
   favoriteIds,
   onToggleFavorite,
   onRequestDeleteEntry,
+  onRequestEditEntry,
   hidePrices,
   showQuotedPrice,
   showTags,
@@ -49,13 +52,8 @@ function TableViewInner({
             <th>Fav</th>
             {compareBagEnabled ? (
               <th scope="col">
-                <span className="table-th-icon" title="Compare bag">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <path
-                      fill="currentColor"
-                      d="M6 8V7a6 6 0 1 1 12 0v1h1.25A1.75 1.75 0 0 1 21 9.75l-.7 9.35A2 2 0 0 1 18.3 21H5.7a2 2 0 0 1-1.99-1.9L3 9.75A1.75 1.75 0 0 1 4.75 8zm2 0h8V7a4 4 0 1 0-8 0z"
-                    />
-                  </svg>
+                <span className="table-th-icon" title="Compare cart">
+                  <ShoppingCart size={16} aria-hidden="true" />
                 </span>
               </th>
             ) : null}
@@ -89,6 +87,7 @@ function TableViewInner({
               favorite={favoriteIds.has(item.id)}
               onToggleFavorite={onToggleFavorite}
               onRequestDeleteEntry={onRequestDeleteEntry}
+              onRequestEditEntry={onRequestEditEntry}
               hidePrices={hidePrices}
               showQuotedPrice={showQuotedPrice}
               showTags={showTags}

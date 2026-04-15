@@ -61,9 +61,14 @@ export function AddSinkPreviewSvg({
   const yDeck =
     -h / 2 - FAUCET_HOLE_RADIUS_IN - FAUCET_DECK_GAP_IN - FAUCET_DECK_EXTRA_OFFSET_IN;
   const hr = FAUCET_HOLE_RADIUS_IN;
+  const centerlineHalfLength = Math.max(
+    h / 2 + 1.5,
+    Math.abs(yDeck - hr) + 1.25,
+    Math.abs(yDeck + hr) + 1.25,
+  );
 
   const { minX, minY, width, height } = useMemo(() => {
-    const pad = 1.25;
+    const pad = 0.75;
     const pts: { x: number; y: number }[] = [
       { x: -w / 2, y: -h / 2 },
       { x: w / 2, y: -h / 2 },
@@ -76,8 +81,8 @@ export function AddSinkPreviewSvg({
       pts.push({ x: x - hr, y: yDeck });
       pts.push({ x: x + hr, y: yDeck });
     }
-    pts.push({ x: 0, y: -40 });
-    pts.push({ x: 0, y: 40 });
+    pts.push({ x: 0, y: -centerlineHalfLength });
+    pts.push({ x: 0, y: centerlineHalfLength });
     let minX0 = Infinity;
     let minY0 = Infinity;
     let maxX0 = -Infinity;
@@ -95,7 +100,7 @@ export function AddSinkPreviewSvg({
       width: maxX0 - minX0 + 2 * pad,
       height: maxY0 - minY0 + 2 * pad,
     };
-  }, [w, h, xs, yDeck, hr, previewRotationDeg]);
+  }, [w, h, xs, yDeck, hr, previewRotationDeg, centerlineHalfLength]);
 
   return (
     <div className="ls-add-sink-preview">
@@ -137,9 +142,9 @@ export function AddSinkPreviewSvg({
             ))}
             <line
               x1={0}
-              y1={-42}
+              y1={-centerlineHalfLength}
               x2={0}
-              y2={42}
+              y2={centerlineHalfLength}
               stroke="rgba(255,255,255,0.12)"
               strokeWidth={0.06}
               strokeDasharray="0.4 0.25"

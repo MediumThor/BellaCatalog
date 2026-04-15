@@ -694,16 +694,11 @@ export function PlaceWorkspace({
                   const warning = colliding || offSlab;
                   const nearCollision = !warning && nearCollisionPieceIds.has(piece.id);
                   const fill = warning
-                    ? sel
-                      ? "rgba(230, 55, 55, 0.42)"
-                      : "rgba(220, 45, 45, 0.36)"
+                    ? "rgba(220, 45, 45, 0.36)"
                     : nearCollision
-                      ? sel
-                        ? "rgba(255, 148, 41, 0.38)"
-                        : "rgba(242, 137, 30, 0.3)"
-                    : sel
-                      ? "rgba(201,162,39,0.28)"
+                      ? "rgba(242, 137, 30, 0.3)"
                       : "rgba(120,200,255,0.2)";
+                  const labelFontSize = sel ? fontSize * 1.28 : fontSize;
                   return (
                     <g key={piece.id}>
                     <polygon
@@ -732,10 +727,10 @@ export function PlaceWorkspace({
                         <text
                           transform={`translate(${pl.x},${pl.y}) rotate(${labelRot})`}
                           fill="#d32f2f"
-                          fontSize={fontSize}
+                          fontSize={labelFontSize}
                           textAnchor="middle"
                           dominantBaseline="middle"
-                          className="ls-place-piece-label"
+                          className={`ls-place-piece-label${sel ? " ls-place-piece-label--selected" : ""}`}
                           style={{ pointerEvents: "none", userSelect: "none" }}
                         >
                           <tspan x="0" dy={showPieceDimensions ? "-0.45em" : "0"}>

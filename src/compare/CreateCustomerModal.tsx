@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { AddressAutocompleteInput } from "../components/AddressAutocompleteInput";
+import {
+  CUSTOMER_TYPE_OPTIONS,
+  DEFAULT_CUSTOMER_TYPE,
+  type CustomerType,
+} from "../types/compareQuote";
 import { formatPhoneInput } from "../utils/phone";
 
 export type CustomerFormValues = {
+  customerType: CustomerType;
   businessName: string;
   firstName: string;
   lastName: string;
@@ -13,6 +19,7 @@ export type CustomerFormValues = {
 };
 
 export const emptyCustomerFormValues: CustomerFormValues = {
+  customerType: DEFAULT_CUSTOMER_TYPE,
   businessName: "",
   firstName: "",
   lastName: "",
@@ -28,20 +35,23 @@ type Props = {
   onSubmit: (values: CustomerFormValues) => Promise<void>;
   /** When set, dialog opens as edit with these values (synced when the dialog opens). */
   initialValues?: CustomerFormValues | null;
+  onDelete?: () => Promise<void>;
 };
 
-export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: Props) {
+export function CreateCustomerModal({ open, onClose, onSubmit, initialValues, onDelete }: Props) {
   const [values, setValues] = useState<CustomerFormValues>(emptyCustomerFormValues);
-  const [saving, setSaving] = useState(false);
+  const [busyAction, setBusyAction] = useState<"save" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const prevOpenRef = useRef(false);
 
   const isEdit = Boolean(initialValues);
+  const saving = busyAction !== null;
 
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setValues(initialValues ?? emptyCustomerFormValues);
       setError(null);
+      setBusyAction(null);
     }
     prevOpenRef.current = open;
   }, [open, initialValues]);
@@ -73,6 +83,23 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
           </p>
         ) : null}
         <div className="compare-form-grid">
+          <div className="form-label compare-form-span-2">
+            Customer type
+            <div className="view-toggle form-view-toggle" role="group" aria-label="Customer type">
+              {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className="btn view-toggle__btn"
+                  data-active={values.customerType === option.value}
+                  aria-pressed={values.customerType === option.value}
+                  onClick={() => update({ customerType: option.value })}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="form-label compare-form-span-2">
             Business name
             <input
@@ -121,13 +148,12 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
             />
           </label>
           <label className="form-label compare-form-span-2">
-            Address *
+            Address
             <AddressAutocompleteInput
               id={isEdit ? "edit-customer-address" : "create-customer-address"}
               className="form-input"
               value={values.address}
               onChange={(address) => update({ address })}
-              required
             />
           </label>
           <label className="form-label compare-form-span-2">
@@ -141,6 +167,34 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
           </label>
         </div>
         <div className="modal-actions">
+          {isEdit && onDelete ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={saving}
+              onClick={async () => {
+                setError(null);
+                if (
+                  !window.confirm(
+                    "Delete this customer? This will also remove all jobs and materials for this customer. This action cannot be undone."
+                  )
+                ) {
+                  return;
+                }
+                setBusyAction("delete");
+                try {
+                  await onDelete();
+                  onClose();
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Could not delete customer.");
+                } finally {
+                  setBusyAction(null);
+                }
+              }}
+            >
+              {busyAction === "delete" ? "Deleting…" : "Delete customer"}
+            </button>
+          ) : null}
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
@@ -156,11 +210,7 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
                 setError("Enter a business name, or both first and last name.");
                 return;
               }
-              if (!values.address.trim()) {
-                setError("Address is required.");
-                return;
-              }
-              setSaving(true);
+              setBusyAction("save");
               try {
                 await onSubmit(values);
                 if (!isEdit) {
@@ -170,11 +220,11 @@ export function CreateCustomerModal({ open, onClose, onSubmit, initialValues }: 
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Could not save customer.");
               } finally {
-                setSaving(false);
+                setBusyAction(null);
               }
             }}
           >
-            {saving ? "Saving…" : submitIdleLabel}
+            {busyAction === "save" ? "Saving…" : submitIdleLabel}
           </button>
         </div>
       </div>

@@ -201,6 +201,21 @@ export function subscribeJobsForCustomer(
   );
 }
 
+export async function fetchJobsForCustomer(
+  customerId: string,
+  ownerUserId: string
+): Promise<JobRecord[]> {
+  const q = query(
+    jobsCol(),
+    where("customerId", "==", customerId),
+    where("ownerUserId", "==", ownerUserId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<JobRecord, "id">) }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export function subscribeRecentJobsForUser(
   ownerUserId: string,
   onData: (rows: JobRecord[]) => void,
@@ -355,6 +370,13 @@ export async function deleteJob(jobId: string, ownerUserId: string): Promise<voi
   const opts = await fetchOptionsForJob(jobId, ownerUserId);
   await Promise.all(opts.map((o) => deleteJobComparisonOption(o.id)));
   await deleteDoc(doc(firebaseDb, "jobs", jobId));
+}
+
+/** Deletes the customer and cascades through all of their jobs/options first. */
+export async function deleteCustomer(customerId: string, ownerUserId: string): Promise<void> {
+  const jobs = await fetchJobsForCustomer(customerId, ownerUserId);
+  await Promise.all(jobs.map((job) => deleteJob(job.id, ownerUserId)));
+  await deleteDoc(doc(firebaseDb, "customers", customerId));
 }
 
 export async function setJobFinalOption(

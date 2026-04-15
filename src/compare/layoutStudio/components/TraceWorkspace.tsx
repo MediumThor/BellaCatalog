@@ -176,6 +176,69 @@ function seamUnitLabel(coordPerInch: number | null): "in" | "px" {
   return coordPerInch && coordPerInch > 0 ? "in" : "px";
 }
 
+function seamGeometryFromTraceEdge(
+  points: LayoutPoint[],
+  edgeIndex: number,
+  coordPerInch: number | null
+): SeamFromEdgeGeometry | null {
+  const strict = seamGeometryFromAxisAlignedEdge(points, edgeIndex);
+  if (strict) return strict;
+  const ring = normalizeClosedRing(points);
+  const n = ring.length;
+  if (n < 3) return null;
+  const i = edgeIndex % n;
+  const a = ring[i]!;
+  const b = ring[(i + 1) % n]!;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  if (absDx < 1e-6 && absDy < 1e-6) return null;
+
+  const segmentLen = Math.hypot(dx, dy);
+  const axisTol =
+    coordPerInch && coordPerInch > 0
+      ? Math.max(coordPerInch * 0.25, 1.5)
+      : Math.max(2, Math.min(8, segmentLen * 0.03));
+  const horizontalish = absDx >= absDy && absDy <= axisTol;
+  const verticalish = absDy > absDx && absDx <= axisTol;
+  if (!horizontalish && !verticalish) return null;
+
+  if (horizontalish) {
+    const xMin = Math.min(a.x, b.x);
+    const xMax = Math.max(a.x, b.x);
+    const span = xMax - xMin;
+    if (span <= 1e-6) return null;
+    const xSeam = (xMin + xMax) / 2;
+    return {
+      kind: "vertical",
+      xMin,
+      xMax,
+      xSeam,
+      dimA: xSeam - xMin,
+      dimB: xMax - xSeam,
+      labelA: "Left of seam",
+      labelB: "Right of seam",
+    };
+  }
+
+  const yMin = Math.min(a.y, b.y);
+  const yMax = Math.max(a.y, b.y);
+  const span = yMax - yMin;
+  if (span <= 1e-6) return null;
+  const ySeam = (yMin + yMax) / 2;
+  return {
+    kind: "horizontal",
+    yMin,
+    yMax,
+    ySeam,
+    dimA: ySeam - yMin,
+    dimB: yMax - ySeam,
+    labelA: "Upper side",
+    labelB: "Lower side",
+  };
+}
+
 function pickTraceEdgeAtPoint(
   p: LayoutPoint,
   pieces: readonly LayoutPiece[],
@@ -569,12 +632,12 @@ export function TraceWorkspace({
     if (!selectedEdge) return;
     const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
     if (!piece || isPlanStripPiece(piece)) return;
-    const geometry = seamGeometryFromAxisAlignedEdge(piece.points, selectedEdge.edgeIndex);
+    const coordPerInch = coordPerInchForPiece(piece);
+    const geometry = seamGeometryFromTraceEdge(piece.points, selectedEdge.edgeIndex, coordPerInch);
     if (!geometry) {
       window.alert("Seams can only be added from a straight horizontal or vertical edge.");
       return;
     }
-    const coordPerInch = coordPerInchForPiece(piece);
     setSeamModal({
       pieceId: piece.id,
       edgeIndex: selectedEdge.edgeIndex,
@@ -1929,7 +1992,11 @@ export function TraceWorkspace({
               return (
                 piece &&
                 !isPlanStripPiece(piece) &&
-                seamGeometryFromAxisAlignedEdge(piece.points, selectedEdge.edgeIndex)
+                seamGeometryFromTraceEdge(
+                  piece.points,
+                  selectedEdge.edgeIndex,
+                  coordPerInchForPiece(piece)
+                )
               );
             })() ? (
               <button

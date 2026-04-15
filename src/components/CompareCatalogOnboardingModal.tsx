@@ -12,6 +12,7 @@ import {
 } from "../services/compareQuoteFirestore";
 import type { CatalogItem } from "../types/catalog";
 import {
+  CUSTOMER_TYPE_OPTIONS,
   buildJobAreas,
   customerContactSummary,
   customerDisplayName,
@@ -207,10 +208,6 @@ export function CompareCatalogOnboardingModal({
       setError("Enter a business name, or both first and last name.");
       return;
     }
-    if (!newCustomer.address.trim()) {
-      setError("Address is required.");
-      return;
-    }
     if (!newJob.name.trim()) {
       setError("Job name is required.");
       return;
@@ -218,6 +215,7 @@ export function CompareCatalogOnboardingModal({
     setSaving(true);
     try {
       const customerId = await createCustomer(user.uid, {
+        customerType: newCustomer.customerType,
         businessName: newCustomer.businessName.trim(),
         firstName: newCustomer.firstName.trim(),
         lastName: newCustomer.lastName.trim(),
@@ -310,7 +308,7 @@ export function CompareCatalogOnboardingModal({
             <p className="compare-onboard-sub">
               {count === 0 ? (
                 <>
-                  No slabs in your bag — close and select products with the bag icon, then try again.
+                  No slabs in your cart — close and select products with the cart icon, then try again.
                 </>
               ) : (
                 <>
@@ -510,6 +508,23 @@ export function CompareCatalogOnboardingModal({
               <div className="compare-onboard-body compare-onboard-body--new">
                 <h3 className="compare-onboard-section-title">Customer</h3>
                 <div className="compare-form-grid">
+                  <div className="form-label compare-form-span-2">
+                    Customer type
+                    <div className="view-toggle form-view-toggle" role="group" aria-label="New customer type">
+                      {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className="btn view-toggle__btn"
+                          data-active={newCustomer.customerType === option.value}
+                          aria-pressed={newCustomer.customerType === option.value}
+                          onClick={() => setNewCustomer((v) => ({ ...v, customerType: option.value }))}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <label className="form-label compare-form-span-2">
                     Business name
                     <input
@@ -560,13 +575,12 @@ export function CompareCatalogOnboardingModal({
                     />
                   </label>
                   <label className="form-label compare-form-span-2">
-                    Address *
+                    Address
                     <AddressAutocompleteInput
                       id="compare-onboard-new-address"
                       className="form-input"
                       value={newCustomer.address}
                       onChange={(address) => setNewCustomer((v) => ({ ...v, address }))}
-                      required
                     />
                   </label>
                   <label className="form-label compare-form-span-2">

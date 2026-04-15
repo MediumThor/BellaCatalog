@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { CatalogItem, ColumnVisibility } from "../types/catalog";
 import { CatalogCollectionButton } from "./CatalogCollectionButton";
+import { EditIconButton } from "./EditIconButton";
 import { glueBrandLabel } from "../utils/glueBrandLabel";
 import { CompareBagButton } from "./CompareBagButton";
 import { FavoriteStar } from "./FavoriteStar";
@@ -18,6 +19,7 @@ type Props = {
   favorite: boolean;
   onToggleFavorite: (id: string) => void;
   onRequestDeleteEntry?: (item: CatalogItem) => void;
+  onRequestEditEntry?: (item: CatalogItem) => void;
   hidePrices: boolean;
   showQuotedPrice: boolean;
   showTags: boolean;
@@ -37,6 +39,7 @@ function ProductRowInner({
   favorite,
   onToggleFavorite,
   onRequestDeleteEntry,
+  onRequestEditEntry,
   hidePrices,
   showQuotedPrice,
   showTags,
@@ -71,6 +74,9 @@ function ProductRowInner({
               onClick={() => onOpenCollections(item)}
               label={item.displayName}
             />
+          ) : null}
+          {onRequestEditEntry ? (
+            <EditIconButton label={item.displayName} onClick={() => onRequestEditEntry(item)} />
           ) : null}
           {onRequestDeleteEntry ? (
             <TrashIconButton label={item.displayName} onClick={() => onRequestDeleteEntry(item)} />

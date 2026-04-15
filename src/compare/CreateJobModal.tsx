@@ -126,7 +126,7 @@ export function CreateJobModal({ open, onClose, initialValues, onSubmit }: Props
             />
           </label>
         </div>
-        <p className="modal-sub">Add areas after the job is created in a separate step.</p>
+        <p className="modal-sub">The first area will be created from the job name. Add more areas later if needed.</p>
         <p className="modal-sub">
           DXF / drawing attachments are planned for a later phase; URLs can be filled manually in
           Firestore if needed today.

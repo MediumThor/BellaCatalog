@@ -6,6 +6,14 @@ const CORS_PROXY_HOSTS = new Set([
 const CORS_IMAGE_PROXY_BASE = "https://wsrv.nl/";
 const URL_BASE_FALLBACK = "https://app.local/";
 
+function shouldProxyImage(parsed: URL): boolean {
+  if (CORS_PROXY_HOSTS.has(parsed.hostname)) return true;
+  if (parsed.hostname === "s3.us-east-2.amazonaws.com" && parsed.pathname.startsWith("/stonexusa-sps-files/")) {
+    return true;
+  }
+  return false;
+}
+
 export function normalizeRenderableImageUrl(raw: string | null | undefined): string {
   const trimmed = raw?.trim() || "";
   if (!trimmed) return "";
@@ -29,7 +37,7 @@ export function corsSafeImageUrl(raw: string | null | undefined): string {
     const parsed = new URL(normalized, baseHref);
     if (!/^https?:$/i.test(parsed.protocol)) return normalized;
     if (parsed.hostname === "wsrv.nl" || parsed.hostname === "images.weserv.nl") return parsed.href;
-    if (!CORS_PROXY_HOSTS.has(parsed.hostname)) return parsed.href;
+    if (!shouldProxyImage(parsed)) return parsed.href;
     return `${CORS_IMAGE_PROXY_BASE}?url=${encodeURIComponent(parsed.href)}`;
   } catch {
     return normalized;

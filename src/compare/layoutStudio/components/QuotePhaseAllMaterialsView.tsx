@@ -73,6 +73,12 @@ export function QuotePhaseAllMaterialsView({
 }: Props) {
   const [slabPricingOptionId, setSlabPricingOptionId] = useState<string | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const installationPerSqft =
+    Number.isFinite(quoteSettings.installationPerSqft) && quoteSettings.installationPerSqft >= 0
+      ? quoteSettings.installationPerSqft
+      : 0;
+  const splashPerLf =
+    Number.isFinite(quoteSettings.splashPerLf) && quoteSettings.splashPerLf >= 0 ? quoteSettings.splashPerLf : 0;
   const computedMaterials = useMemo<ComputedMaterial[]>(
     () =>
       materials.map((material) => {
@@ -138,6 +144,7 @@ export function QuotePhaseAllMaterialsView({
       materialTotal: 0,
       rawMaterialTotal: 0,
       fabricationTotal: 0,
+      installationTotal: 0,
       sinkAddOnTotal: 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
@@ -147,6 +154,8 @@ export function QuotePhaseAllMaterialsView({
       catalogMaterialPerSqft: null,
       materialAreaSqFt: 0,
       countertopSqFt: 0,
+      fabricatedSqFt: 0,
+      splashLinearFeet: 0,
       materialChargeMode: quoteSettings.materialChargeMode,
     };
     for (const material of computedMaterials) {
@@ -155,6 +164,7 @@ export function QuotePhaseAllMaterialsView({
       total.materialTotal += material.commercial.materialTotal;
       total.rawMaterialTotal += material.commercial.rawMaterialTotal;
       total.fabricationTotal += material.commercial.fabricationTotal;
+      total.installationTotal += material.commercial.installationTotal;
       total.sinkAddOnTotal += material.commercial.sinkAddOnTotal;
       total.splashAddOnTotal += material.commercial.splashAddOnTotal;
       total.profileAddOnTotal += material.commercial.profileAddOnTotal;
@@ -162,6 +172,8 @@ export function QuotePhaseAllMaterialsView({
       total.grandTotal += material.commercial.grandTotal;
       total.materialAreaSqFt += material.commercial.materialAreaSqFt;
       total.countertopSqFt += material.commercial.countertopSqFt;
+      total.fabricatedSqFt += material.commercial.fabricatedSqFt;
+      total.splashLinearFeet += material.commercial.splashLinearFeet;
     }
     return hasCommercial ? total : null;
   }, [computedMaterials, quoteSettings.materialChargeMode]);
@@ -381,8 +393,8 @@ export function QuotePhaseAllMaterialsView({
           <>
             <p className="ls-muted ls-quote-exclude-legend">
               Cost to us uses supplier/catalog material cost before markup and does not change with customer slab
-              pricing mode. Fabrication profit currently reflects the charged fabrication amount because fabrication
-              cost is not modeled separately yet.
+              pricing mode. Fabrication profit currently reflects the charged fabrication amount, and installation is
+              only reflected in gross profit, because labor cost is not modeled separately yet.
             </p>
             <div className="ls-quote-analytics-grid" aria-label="All materials cost analytics">
               <AnalyticsCard label="Cost to us" value={analytics.slabCostTotal != null ? formatMoney(analytics.slabCostTotal) : "—"} />
@@ -441,8 +453,8 @@ export function QuotePhaseAllMaterialsView({
             <span className="ls-quote-material-mode-title">Slab pricing basis</span>
             <span className="ls-quote-material-mode-value">{materialChargeModeLabel}</span>
             <span className="ls-muted ls-quote-material-mode-hint">
-              Controlled from each material’s `Slab pricing` button. Fabrication still uses total countertop sq ft (
-              {(combinedCommercial?.countertopSqFt ?? 0).toFixed(1)} est.).
+              Controlled from each material’s `Slab pricing` button. Fabrication and installation use total fabricated
+              sq ft (pieces + splash, {(combinedCommercial?.fabricatedSqFt ?? 0).toFixed(1)} est.).
             </span>
           </div>
         </div>
@@ -543,10 +555,24 @@ export function QuotePhaseAllMaterialsView({
                 onExcludeChange={onSetCustomerExclusion}
                 dt={
                   <>
-                    Fabrication <span className="ls-quote-dl-sub">({combinedCommercial.countertopSqFt.toFixed(1)} sq ft total)</span>
+                    Fabrication <span className="ls-quote-dl-sub">({combinedCommercial.fabricatedSqFt.toFixed(1)} sq ft total)</span>
                   </>
                 }
                 dd={formatMoney(combinedCommercial.fabricationTotal)}
+              />
+              <QuoteDlRow
+                rowId="installation"
+                excluded={customerExclusions.installation}
+                onExcludeChange={onSetCustomerExclusion}
+                dt={
+                  <>
+                    Installation{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({combinedCommercial.fabricatedSqFt.toFixed(1)} sq ft × {formatMoney(installationPerSqft)})
+                    </span>
+                  </>
+                }
+                dd={formatMoney(combinedCommercial.installationTotal)}
               />
               <QuoteDlRow
                 rowId="sinkCutouts"
@@ -559,7 +585,14 @@ export function QuotePhaseAllMaterialsView({
                 rowId="splashAddOn"
                 excluded={customerExclusions.splashAddOn}
                 onExcludeChange={onSetCustomerExclusion}
-                dt="Splash add-on"
+                dt={
+                  <>
+                    Splash add-on{" "}
+                    <span className="ls-quote-dl-sub">
+                      ({combinedCommercial.splashLinearFeet.toFixed(1)} lf × {formatMoney(splashPerLf)})
+                    </span>
+                  </>
+                }
                 dd={formatMoney(combinedCommercial.splashAddOnTotal)}
               />
               <QuoteDlRow

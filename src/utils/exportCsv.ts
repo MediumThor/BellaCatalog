@@ -25,6 +25,24 @@ function priceSummary(item: CatalogItem): string {
     .join(" | ");
 }
 
+function sizeDimensions(item: CatalogItem): { width: string; height: string } {
+  const raw = item.rawSourceFields || {};
+  const widthCandidates = [raw.slabWidth, raw.width, raw.slab_width, raw.slabWidthIn];
+  const heightCandidates = [raw.slabHeight, raw.height, raw.slab_height, raw.slabHeightIn];
+  const width = widthCandidates.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+  const height =
+    heightCandidates.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+  if (width || height) {
+    return { width, height };
+  }
+  const match = item.size.match(/^\s*(.+?)\s*[xX]\s*(.+?)\s*$/);
+  if (!match) return { width: "", height: "" };
+  return {
+    width: match[1]?.trim() || "",
+    height: match[2]?.trim() || "",
+  };
+}
+
 export function exportCsv(
   items: CatalogItem[],
   columns: ColumnVisibility
@@ -51,7 +69,7 @@ export function exportCsv(
     "Vendor",
     "Product Name",
     "Display Name",
-    ...activeOptional.map((o) => o.header),
+    ...activeOptional.flatMap((o) => (o.key === "size" ? ["Width", "Height", o.header] : [o.header])),
     "Lowest Price",
     "All Prices",
     "Live Availability",
@@ -90,9 +108,13 @@ export function exportCsv(
         case "finish":
           row.push(it.finish);
           break;
-        case "size":
+        case "size": {
+          const dims = sizeDimensions(it);
+          row.push(dims.width);
+          row.push(dims.height);
           row.push(it.size);
           break;
+        }
         case "sku":
           row.push(it.sku);
           break;

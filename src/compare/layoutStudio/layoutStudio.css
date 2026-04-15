@@ -693,12 +693,12 @@
 }
 
 .ls-add-sink-modal {
-  max-width: 720px;
+  max-width: 1080px;
 }
 
 .ls-add-sink-modal-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
   gap: 1rem 1.25rem;
   align-items: stretch;
 }
@@ -736,7 +736,8 @@
   align-items: center;
   justify-content: center;
   min-height: 240px;
-  padding: 0 0.35rem;
+  padding: 0;
+  overflow: hidden;
 }
 
 .ls-add-sink-preview-title {
@@ -751,7 +752,7 @@
   display: block;
   width: 100%;
   max-width: 100%;
-  height: auto;
+  height: 100%;
   max-height: min(52vh, 420px);
 }
 
@@ -760,6 +761,7 @@
   color: rgba(244, 241, 234, 0.62);
   margin: 0.5rem 0 0;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .ls-faucet-spread-fieldset {
@@ -772,6 +774,39 @@
   font-size: 0.75rem;
   margin-bottom: 0.35rem;
   color: rgba(244, 241, 234, 0.72);
+}
+
+.ls-hole-count-toggle {
+  display: flex;
+  align-self: stretch;
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.ls-hole-count-toggle-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 2.05rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(244, 241, 234, 0.86);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ls-hole-count-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.ls-hole-count-toggle-btn.is-active {
+  background: rgba(232, 212, 139, 0.16);
+  border-color: rgba(232, 212, 139, 0.4);
+  color: rgba(255, 248, 220, 0.98);
 }
 
 .ls-radio-row {
@@ -904,9 +939,9 @@
   position: absolute;
   width: min(340px, calc(100% - 1.6rem));
   max-width: 340px;
-  height: 620px;
-  min-height: 620px;
-  max-height: 620px;
+  height: min(690px, calc(100% - 1.6rem));
+  min-height: min(545px, calc(100% - 1.6rem));
+  max-height: calc(100% - 1.6rem);
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -943,7 +978,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.85rem 0.95rem 0.6rem;
+  padding: 0.65rem 0.85rem 0.45rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -968,8 +1003,28 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: visible;
-  padding: 0.85rem 0.95rem 0.95rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.65rem 0.6rem 0.75rem 0.85rem;
+  scrollbar-gutter: stable;
+}
+
+.ls-inspector-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.ls-inspector-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.ls-inspector-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+.ls-inspector-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .ls-piece-list-panel {
@@ -2028,13 +2083,13 @@
   color: rgba(244, 248, 255, 0.98);
 }
 
-/* Expanded live layout modal: piece labels in red (selected uses blue below) */
+/* Expanded live layout modal: selected piece stays red, not blue. */
 .ls-modal-layout-preview-body .ls-place-preview-piece-label {
   fill: #d32f2f !important;
 }
 
 .ls-modal-layout-preview-body .ls-place-preview-piece-label.ls-place-preview-piece-label--selected {
-  fill: rgba(130, 210, 255, 0.95) !important;
+  fill: #d32f2f !important;
 }
 
 .ls-modal {
@@ -3282,13 +3337,19 @@ select.ls-input optgroup {
 }
 
 .ls-place-preview-piece-label--selected {
-  fill: rgba(130, 210, 255, 0.95);
+  fill: #d32f2f;
+  font-weight: 700;
 }
 
 .ls-place-piece-label {
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.ls-place-piece-label--selected {
+  fill: #d32f2f;
+  font-weight: 700;
 }
 
 .ls-place-canvas-host .ls-place-dual .ls-place-svg,
@@ -3803,10 +3864,24 @@ select.ls-input optgroup {
 
 .ls-entry-sidebar-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.ls-entry-sidebar-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ls-entry-sidebar-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .ls-entry-sidebar-label {
@@ -3817,7 +3892,21 @@ select.ls-input optgroup {
   color: rgba(244, 241, 234, 0.55);
 }
 
+.ls-entry-customer-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.ls-entry-customer-filter .view-toggle__btn {
+  min-height: 2rem;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  font-size: 0.76rem;
+}
+
 .ls-entry-sidebar-add {
+  flex: 0 0 auto;
   width: 1.95rem;
   height: 1.95rem;
   min-width: 1.95rem;
@@ -3900,6 +3989,12 @@ select.ls-input optgroup {
   min-width: 0;
 }
 
+.ls-entry-customer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .ls-entry-customer-head-actions {
   display: flex;
   align-items: center;
@@ -3915,6 +4010,11 @@ select.ls-input optgroup {
 
 .ls-entry-customer-meta {
   margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
   color: rgba(244, 241, 234, 0.55);
   font-size: 0.86rem;
   line-height: 1.4;
@@ -3935,7 +4035,7 @@ select.ls-input optgroup {
 
 .ls-entry-job-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.85rem;
   align-items: center;
   padding: 0.9rem 1rem;
@@ -3958,15 +4058,6 @@ select.ls-input optgroup {
   color: rgba(244, 241, 234, 0.55);
   font-size: 0.82rem;
   line-height: 1.35;
-}
-
-.ls-entry-tag {
-  font-size: 0.76rem;
-  border-radius: 999px;
-  border: 1px solid rgba(232, 212, 139, 0.32);
-  background: rgba(232, 212, 139, 0.1);
-  padding: 0.25rem 0.55rem;
-  white-space: nowrap;
 }
 
 .ls-entry-job-actions {
@@ -4080,10 +4171,9 @@ select.ls-input optgroup {
 
 .ls-entry-area-head-actions {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 0.45rem;
-  flex-wrap: wrap;
   margin-left: auto;
 }
 
@@ -4206,9 +4296,32 @@ select.ls-input optgroup {
 
 .ls-entry-area-actions {
   display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.ls-entry-area-actions-main,
+.ls-entry-area-actions-quotes {
+  display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.ls-entry-area-head-actions .ls-entry-icon-btn {
+  align-self: flex-end;
+}
+
+.ls-entry-area-head-actions .ls-entry-area-actions-main {
+  flex-direction: column;
+  align-items: stretch;
+  width: min(220px, 100%);
+}
+
+.ls-entry-area-actions-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .ls-entry-pill {
@@ -4250,7 +4363,7 @@ select.ls-input optgroup {
 }
 
 .ls-entry-modal--catalog {
-  width: min(1480px, 100%);
+  width: 90vw;
   height: min(94vh, 1080px);
   overflow: hidden;
 }
@@ -4283,6 +4396,10 @@ select.ls-input optgroup {
   min-height: 0;
   overflow: auto;
   padding-right: 0.25rem;
+}
+
+.ls-entry-modal--catalog .catalog-tools-tab {
+  top: 35vh;
 }
 
 .ls-entry-modal-frame {
@@ -4440,6 +4557,11 @@ select.ls-input optgroup {
   max-width: 440px;
   padding: 1.35rem 1.5rem 1.5rem;
   animation: ls-sheet-in 0.28s ease;
+}
+
+.ls-sheet.ls-add-sink-modal {
+  width: min(1080px, calc(100vw - 3rem));
+  max-width: none;
 }
 
 @keyframes ls-sheet-in {

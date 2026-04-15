@@ -765,6 +765,16 @@ export function LayoutStudioScreen({
     [activeOption?.id, onOptionChange, save],
   );
 
+  const openAddMaterialsSafely = useCallback(async () => {
+    if (!onOpenAddMaterials) return;
+    if (!showEntryHub) {
+      const ok = await save(draftRef.current);
+      if (!ok) return;
+    }
+    setMaterialMenuOpen(false);
+    onOpenAddMaterials();
+  }, [onOpenAddMaterials, save, showEntryHub]);
+
   const workspaceKind = useMemo((): "source" | "blank" => {
     if (draft.workspaceKind === "blank" || draft.workspaceKind === "source") return draft.workspaceKind;
     if (draft.source) return "source";
@@ -774,12 +784,28 @@ export function LayoutStudioScreen({
   const showEntryHub = workspaceKind === undefined;
 
   const mergedQuoteSettings = useMemo(() => mergeLayoutQuoteSettings(job), [job]);
+  const [liveQuoteSettings, setLiveQuoteSettings] = useState<LayoutQuoteSettings>(mergedQuoteSettings);
+
+  useEffect(() => {
+    setLiveQuoteSettings(mergedQuoteSettings);
+  }, [mergedQuoteSettings]);
 
   const saveLayoutQuoteSettings = useCallback(
     async (next: LayoutQuoteSettings) => {
-      await updateJob(job.id, { layoutQuoteSettings: next });
+      const normalized = mergeLayoutQuoteSettings({
+        ...job,
+        layoutQuoteSettings: next,
+      });
+      const previous = liveQuoteSettings;
+      setLiveQuoteSettings(normalized);
+      try {
+        await updateJob(job.id, { layoutQuoteSettings: normalized });
+      } catch (error) {
+        setLiveQuoteSettings(previous);
+        throw error;
+      }
     },
-    [job.id]
+    [job, liveQuoteSettings]
   );
 
   const mergedCustomerExclusions = useMemo(() => mergeCustomerExclusions(job), [job]);
@@ -918,7 +944,10 @@ export function LayoutStudioScreen({
     }
     return new Set(
       draft.pieces
-        .filter((piece) => resolvedPieceMaterialOptionId(piece, draft.pieces) === activeOption.id)
+        .filter((piece) => {
+          const materialOptionId = resolvedPieceMaterialOptionId(piece, draft.pieces);
+          return materialOptionId == null || materialOptionId === activeOption.id;
+        })
         .map((piece) => piece.id),
     );
   }, [activeOption?.id, draft.pieces]);
@@ -3393,7 +3422,6 @@ export function LayoutStudioScreen({
             title="Drag piece details panel"
           >
             <p className="ls-card-title">Piece details</p>
-            <p className="ls-muted ls-inspector-sub">Drag to reposition.</p>
           </div>
         </div>
         <div className="ls-inspector-scroll">
@@ -3412,7 +3440,7 @@ export function LayoutStudioScreen({
             value={selectedPiece.notes ?? ""}
             onChange={(e) => updateSelectedPiece({ notes: e.target.value })}
             placeholder="Add piece notes for fabrication, layout, or install."
-            rows={4}
+            rows={3}
           />
         </label>
         <div className="ls-piece-material">
@@ -3950,10 +3978,7 @@ export function LayoutStudioScreen({
                 type="button"
                 className="ls-material-menu-add"
                 role="menuitem"
-                onClick={() => {
-                  setMaterialMenuOpen(false);
-                  onOpenAddMaterials();
-                }}
+                onClick={() => void openAddMaterialsSafely()}
               >
                 + Add material
               </button>
@@ -4249,7 +4274,7 @@ export function LayoutStudioScreen({
                     tracePlanWidth={draft.source?.sourceWidthPx ?? null}
                     tracePlanHeight={draft.source?.sourceHeightPx ?? null}
                     showPieceLabels={showPieceLabels}
-                    quoteSettings={mergedQuoteSettings}
+                    quoteSettings={liveQuoteSettings}
                     onSaveQuoteSettings={saveLayoutQuoteSettings}
                     onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
                     customerExclusions={mergedCustomerExclusions}
@@ -4269,7 +4294,7 @@ export function LayoutStudioScreen({
                     onActiveSlab={(id) => setActiveSlabId(id)}
                     showPieceLabels={showPieceLabels}
                     fullscreen={planCanvasExpanded}
-                    quoteSettings={mergedQuoteSettings}
+                    quoteSettings={liveQuoteSettings}
                     onSaveQuoteSettings={saveLayoutQuoteSettings}
                     onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
                     customerExclusions={mergedCustomerExclusions}
@@ -4996,10 +5021,7 @@ export function LayoutStudioScreen({
                                   type="button"
                                   className="ls-material-menu-add"
                                   role="menuitem"
-                                  onClick={() => {
-                                    setMaterialMenuOpen(false);
-                                    onOpenAddMaterials();
-                                  }}
+                                  onClick={() => void openAddMaterialsSafely()}
                                 >
                                   + Add material
                                 </button>
@@ -5821,7 +5843,7 @@ export function LayoutStudioScreen({
           activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
           ownerUserId={ownerUserId}
           showPieceLabels={showPieceLabels}
-          quoteSettings={mergedQuoteSettings}
+          quoteSettings={liveQuoteSettings}
           customerExclusions={mergedCustomerExclusions}
           allMaterialsSections={quoteShowingAllUsedMaterials ? quoteAllMaterialsSections : null}
         />
@@ -5831,7 +5853,7 @@ export function LayoutStudioScreen({
         <LayoutQuoteSettingsModal
           open={layoutQuoteSettingsOpen}
           onClose={() => setLayoutQuoteSettingsOpen(false)}
-          initial={mergedQuoteSettings}
+          initial={liveQuoteSettings}
           onSave={saveLayoutQuoteSettings}
         />
       ) : null}

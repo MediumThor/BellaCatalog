@@ -20,18 +20,21 @@ export type CommercialQuoteBreakdown = {
   materialTotal: number;
   rawMaterialTotal: number;
   fabricationTotal: number;
+  installationTotal: number;
   sinkAddOnTotal: number;
   splashAddOnTotal: number;
   profileAddOnTotal: number;
   miterAddOnTotal: number;
   grandTotal: number;
-  /** Effective fabrication $/sq ft (countertop pieces). */
+  /** Effective fabrication $/sq ft (fabricated area: pieces + splash). */
   fabricationPerSqft: number;
   /** Catalog material $/sq ft used for schedule (when applicable). */
   catalogMaterialPerSqft: number | null;
   /** Sq ft basis for material charge this run. */
   materialAreaSqFt: number;
   countertopSqFt: number;
+  fabricatedSqFt: number;
+  splashLinearFeet: number;
   materialChargeMode: LayoutQuoteSettings["materialChargeMode"];
 };
 
@@ -71,6 +74,7 @@ const CUSTOMER_ROW_IDS: LayoutQuoteCustomerRowId[] = [
   "splashArea",
   "materialCost",
   "fabrication",
+  "installation",
   "sinkCutouts",
   "splashAddOn",
   "profileAddOn",
@@ -100,6 +104,7 @@ export function customerQuoteTotalFromBreakdown(
   let t = 0;
   if (!ex.materialCost) t += commercial.materialTotal;
   if (!ex.fabrication) t += commercial.fabricationTotal;
+  if (!ex.installation) t += commercial.installationTotal;
   if (!ex.sinkCutouts) t += commercial.sinkAddOnTotal;
   if (!ex.splashAddOn) t += commercial.splashAddOnTotal;
   if (!ex.profileAddOn) t += commercial.profileAddOnTotal;
@@ -115,6 +120,15 @@ function slabAreaSqFt(slabs: LayoutSlab[]): number {
 
 function slabAreaSqFtFromSlab(slab: LayoutSlab): number {
   return Math.max(0, (slab.widthIn * slab.heightIn) / 144);
+}
+
+function supplierSqftMaterialTotal(args: {
+  catalogLinePrice: number;
+  slabAreaSqFt: number;
+  usedAreaSqFt: number;
+}): number {
+  const supplierAreaSqFt = args.slabAreaSqFt > 0 ? args.slabAreaSqFt : args.usedAreaSqFt;
+  return supplierAreaSqFt * args.catalogLinePrice;
 }
 
 export function slabChargeModeKey(optionId: string, slabId: string): string {
@@ -136,6 +150,17 @@ function pieceAreaSqFt(piece: LayoutPiece, fallbackPixelsPerInch?: number | null
     ? polygonAreaWithArcEdges(piece)
     : polygonArea(piece.points);
   return areaPx / (ppi * ppi) / 144;
+}
+
+function splashLinearFeetFromPieces(pieces: LayoutPiece[], fallbackPixelsPerInch?: number | null): number {
+  return pieces.reduce((sum, piece) => {
+    if (piece.pieceRole !== "splash") return sum;
+    const heightIn = piece.splashMeta?.heightIn;
+    if (!Number.isFinite(heightIn) || heightIn <= 0) return sum;
+    const pieceSqFt = pieceAreaSqFt(piece, fallbackPixelsPerInch);
+    const linearFeet = (pieceSqFt * 144) / heightIn / 12;
+    return sum + linearFeet;
+  }, 0);
 }
 
 export function computeSlabMaterialQuoteLines(input: {
@@ -175,7 +200,12 @@ export function computeSlabMaterialQuoteLines(input: {
       let rawMaterialTotal = 0;
       let materialTotal = 0;
       if (unit === "sqft") {
-        rawMaterialTotal = usedAreaSqFt * catalogLinePrice;
+        // Supplier cost follows the full slab consumed, even if the customer is billed on used sqft.
+        rawMaterialTotal = supplierSqftMaterialTotal({
+          catalogLinePrice,
+          slabAreaSqFt: slabArea,
+          usedAreaSqFt,
+        });
         materialTotal = billedAreaSqFt * catalogLinePrice * markup;
       } else if (slabArea > 0) {
         const ratio = mode === "full_slab" ? 1 : billedAreaSqFt / slabArea;
@@ -203,6 +233,7 @@ export function computeSlabMaterialQuoteLines(input: {
 export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
   const raw = job.layoutQuoteSettings;
   if (!raw || typeof raw !== "object") return { ...DEFAULT_LAYOUT_QUOTE_SETTINGS };
+  const rawRecord = raw as Record<string, unknown>;
   const materialMarkup =
     typeof raw.materialMarkup === "number" && Number.isFinite(raw.materialMarkup) && raw.materialMarkup > 0
       ? raw.materialMarkup
@@ -211,13 +242,21 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
     typeof raw.fabricationPerSqftOverride === "number" && Number.isFinite(raw.fabricationPerSqftOverride) && raw.fabricationPerSqftOverride >= 0
       ? raw.fabricationPerSqftOverride
       : null;
+  const installationPerSqft =
+    typeof raw.installationPerSqft === "number" && Number.isFinite(raw.installationPerSqft) && raw.installationPerSqft >= 0
+      ? raw.installationPerSqft
+      : 0;
   const sinkCutoutEach =
     typeof raw.sinkCutoutEach === "number" && Number.isFinite(raw.sinkCutoutEach) && raw.sinkCutoutEach >= 0
       ? raw.sinkCutoutEach
       : 0;
-  const splashPerSqft =
-    typeof raw.splashPerSqft === "number" && Number.isFinite(raw.splashPerSqft) && raw.splashPerSqft >= 0
-      ? raw.splashPerSqft
+  const splashPerLf =
+    typeof rawRecord.splashPerLf === "number" && Number.isFinite(rawRecord.splashPerLf) && rawRecord.splashPerLf >= 0
+      ? rawRecord.splashPerLf
+      : typeof rawRecord.splashPerSqft === "number" &&
+          Number.isFinite(rawRecord.splashPerSqft) &&
+          rawRecord.splashPerSqft >= 0
+        ? rawRecord.splashPerSqft
       : 0;
   const profilePerLf =
     typeof raw.profilePerLf === "number" && Number.isFinite(raw.profilePerLf) && raw.profilePerLf >= 0
@@ -246,8 +285,9 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
   return {
     materialMarkup,
     fabricationPerSqftOverride,
+    installationPerSqft,
     sinkCutoutEach,
-    splashPerSqft,
+    splashPerLf,
     profilePerLf,
     miterPerLf,
     materialChargeMode,
@@ -257,7 +297,7 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
 
 /**
  * Installed-style commercial breakdown for Layout Studio: material (with optional full-slab billing),
- * fabrication on countertop sq ft only, plus sink / splash / profile add-ons.
+ * fabrication and installation on fabricated sq ft (pieces + splash), plus sink / splash / profile add-ons.
  */
 export function computeCommercialLayoutQuote(input: {
   option: JobComparisonOptionRecord;
@@ -301,6 +341,12 @@ export function computeCommercialLayoutQuote(input: {
   const usedSf = Number.isFinite(jobSquareFootage) && jobSquareFootage > 0 ? jobSquareFootage : 0;
   const ctSf = Math.max(0, Number.isFinite(countertopSqFt) ? countertopSqFt : 0);
   const splashSf = Math.max(0, Number.isFinite(splashAreaSqFt) ? splashAreaSqFt : 0);
+  const fabricatedSf = ctSf + splashSf;
+  const splashLf = splashLinearFeetFromPieces(pieces, pixelsPerInch);
+  const installationPerSqft =
+    Number.isFinite(settings.installationPerSqft) && settings.installationPerSqft >= 0
+      ? settings.installationPerSqft
+      : 0;
 
   let catalogMaterialPerSqft: number | null = null;
 
@@ -350,14 +396,18 @@ export function computeCommercialLayoutQuote(input: {
     }
   } else if (unit === "sqft") {
     const perSqftMarked = catalogLinePrice * markup;
+    const oneSlabSf = slabAreaSqFt(slabs);
+    const supplierMaterialAreaSqFt = slabsN * oneSlabSf;
+    rawMaterialTotal = supplierSqftMaterialTotal({
+      catalogLinePrice,
+      slabAreaSqFt: supplierMaterialAreaSqFt,
+      usedAreaSqFt: usedSf,
+    });
     if (settings.materialChargeMode === "sqft_used") {
       materialAreaSqFt = usedSf;
-      rawMaterialTotal = usedSf * catalogLinePrice;
       materialTotal = usedSf * perSqftMarked;
     } else {
-      const oneSlabSf = slabAreaSqFt(slabs);
       materialAreaSqFt = slabsN * oneSlabSf;
-      rawMaterialTotal = usedSf * catalogLinePrice;
       materialTotal = materialAreaSqFt * catalogLinePrice * markup;
     }
   } else if (unit === "slab") {
@@ -382,15 +432,17 @@ export function computeCommercialLayoutQuote(input: {
     return null;
   }
 
-  const fabricationTotal = ctSf * fabPerSqft;
+  const fabricationTotal = fabricatedSf * fabPerSqft;
+  const installationTotal = fabricatedSf * installationPerSqft;
   const sinkAddOnTotal = Math.max(0, sinkCount) * settings.sinkCutoutEach;
-  const splashAddOnTotal = splashSf * settings.splashPerSqft;
+  const splashAddOnTotal = splashLf * settings.splashPerLf;
   const profileAddOnTotal = Math.max(0, profileEdgeLf) * settings.profilePerLf;
   const miterAddOnTotal = Math.max(0, miterEdgeLf) * settings.miterPerLf;
 
   const grandTotal =
     materialTotal +
     fabricationTotal +
+    installationTotal +
     sinkAddOnTotal +
     splashAddOnTotal +
     profileAddOnTotal +
@@ -400,6 +452,7 @@ export function computeCommercialLayoutQuote(input: {
     materialTotal,
     rawMaterialTotal,
     fabricationTotal,
+    installationTotal,
     sinkAddOnTotal,
     splashAddOnTotal,
     profileAddOnTotal,
@@ -409,6 +462,8 @@ export function computeCommercialLayoutQuote(input: {
     catalogMaterialPerSqft,
     materialAreaSqFt,
     countertopSqFt: ctSf,
+    fabricatedSqFt: fabricatedSf,
+    splashLinearFeet: splashLf,
     materialChargeMode: settings.materialChargeMode,
   };
 }

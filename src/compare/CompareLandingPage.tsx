@@ -115,6 +115,7 @@ export function CompareLandingPage() {
         onSubmit={async (values: CustomerFormValues) => {
           if (!user?.uid) throw new Error("Not signed in");
           await createCustomer(user.uid, {
+            customerType: values.customerType,
             businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),
             lastName: values.lastName.trim(),
