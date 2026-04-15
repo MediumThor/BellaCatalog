@@ -93,7 +93,7 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
         </h2>
         <p className="ls-muted ls-quote-settings-lead">
           Defaults for this job’s commercial summary. Fabrication applies to countertop piece area only (excludes
-          splash strips). Material billing mode is set next to the summary.
+          splash strips). Material billing now comes from each layout’s `Slab pricing` choices.
         </p>
 
         <div className="ls-quote-settings-fields">

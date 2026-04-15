@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { CatalogItem } from "../types/catalog";
+import { CatalogCollectionButton } from "./CatalogCollectionButton";
 import { CompareBagButton } from "./CompareBagButton";
 import { FavoriteStar } from "./FavoriteStar";
 import { PriceBadgeGroup } from "./PriceBadgeGroup";
@@ -45,6 +46,8 @@ type Props = {
   compareBagEnabled?: boolean;
   compareBagIds?: Set<string>;
   onToggleCompareBag?: (id: string) => void;
+  collectionMembershipCounts?: Record<string, number>;
+  onOpenCollections?: (item: CatalogItem) => void;
 };
 
 function GridViewInner({
@@ -61,6 +64,8 @@ function GridViewInner({
   compareBagEnabled,
   compareBagIds,
   onToggleCompareBag,
+  collectionMembershipCounts,
+  onOpenCollections,
 }: Props) {
   return (
     <div className="catalog-grid" role="list">
@@ -70,6 +75,7 @@ function GridViewInner({
         const productHref =
           item.productPageUrl?.trim() || item.sourceUrl?.trim() || "";
         const favorite = favoriteIds.has(item.id);
+        const collectionCount = collectionMembershipCounts?.[item.id] ?? 0;
         const sizeLine = primarySizeLine(item);
         const tagGroups = buildCatalogTagGroups(item);
         return (
@@ -84,11 +90,30 @@ function GridViewInner({
               <div className="catalog-grid-card__fav">
                 <div className="catalog-grid-card__quick-actions">
                   {compareBagEnabled && compareBagIds && onToggleCompareBag ? (
-                    <CompareBagButton
-                      selected={compareBagIds.has(item.id)}
-                      onToggle={() => onToggleCompareBag(item.id)}
-                      label={item.displayName}
-                    />
+                    <div className="catalog-grid-card__selection-stack">
+                      <CompareBagButton
+                        selected={compareBagIds.has(item.id)}
+                        onToggle={() => onToggleCompareBag(item.id)}
+                        label={item.displayName}
+                      />
+                      {onOpenCollections ? (
+                        <CatalogCollectionButton
+                          active={collectionCount > 0}
+                          count={collectionCount}
+                          onClick={() => onOpenCollections(item)}
+                          label={item.displayName}
+                        />
+                      ) : null}
+                    </div>
+                  ) : onOpenCollections ? (
+                    <div className="catalog-grid-card__selection-stack">
+                      <CatalogCollectionButton
+                        active={collectionCount > 0}
+                        count={collectionCount}
+                        onClick={() => onOpenCollections(item)}
+                        label={item.displayName}
+                      />
+                    </div>
                   ) : null}
                   <FavoriteStar
                     active={favorite}

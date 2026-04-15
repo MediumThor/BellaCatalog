@@ -1,4 +1,16 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   customerDisplayName,
@@ -10,46 +22,81 @@ import {
 } from "../../../types/compareQuote";
 import { updateJob } from "../../../services/compareQuoteFirestore";
 import { createDefaultLayoutState } from "../constants";
+import { recomputeDraftSummary } from "../services/persistLayout";
 import { uploadJobLayoutSource, uploadJobLayoutSourcePreviewPng } from "../services/layoutStorage";
 import { useLayoutStudio } from "../hooks/useLayoutStudio";
 import type {
   FaucetEvenHoleBias,
   LayoutPiece,
+  LayoutPoint,
   LayoutSlab,
   LayoutStudioMode,
   LShapeOrientationDeg,
   ManualPieceDimensions,
   PiecePlacement,
   PieceSinkCutout,
+  SavedOptionLayoutPlacement,
   SavedLayoutStudioState,
   SlabCloneEntry,
   SnapAlignmentMode,
   TraceTool,
 } from "../types";
 import { layoutSourceKindFromFile, isAcceptedLayoutSourceFile } from "../utils/sourceKind";
-import { renderPdfFileFirstPageToDataUrl } from "../utils/pdfSource";
+import {
+  inspectPdfFilePages,
+  renderPdfFilePageToDataUrl,
+  renderPdfFilePagesToDataUrls,
+  renderPdfUrlPageToDataUrl,
+} from "../utils/pdfSource";
 import { pixelsPerInchFromSegment } from "../utils/calibration";
 import { ensurePlacementsForPieces } from "../utils/placements";
 import { computeSlabAutoNest } from "../utils/slabAutoNest";
 import { applyManualDimensionsToPiece } from "../utils/manualPieces";
+import {
+  buildStackedPdfPages,
+  normalizedSourcePages,
+  piecesHaveAnyScale,
+  sourcePlanDimensions,
+} from "../utils/sourcePages";
 import {
   SPLASH_PLAN_OFFSET_IN,
   buildSplashRectanglePoints,
   planDisplayPoints,
   rotatePlanPieceAroundCentroid,
 } from "../utils/blankPlanGeometry";
-import { normalizeClosedRing } from "../utils/geometry";
+import { boundsOfPoints, normalizeClosedRing } from "../utils/geometry";
+import {
+  piecePolygonInches,
+  planCentroidForSlabPlacement,
+  worldDisplayToSlabInches,
+} from "../utils/pieceInches";
 import { isMiterStripPiece, isPlanStripPiece } from "../utils/pieceRoles";
 import { removeCornerFilletsBatch } from "../utils/blankPlanEdgeArc";
-import { anyPiecesOverlap } from "../utils/blankPlanOverlap";
-import { hasFlushSnapJoinCandidate } from "../utils/blankPlanPolygonOps";
 import {
+  anyPiecesOverlap,
+  countertopOverlapsOtherCountertops,
+} from "../utils/blankPlanOverlap";
+import {
+  hasFlushSnapJoinCandidate,
+  seamGeometryFromAxisAlignedEdge,
+  splitWorldRingAtHorizontalSeam,
+  splitWorldRingAtVerticalSeam,
+} from "../utils/blankPlanPolygonOps";
+import {
+  assignSinksToSplitPieces,
   clampSinkCenter,
   isSinkFullyInsidePiece,
   sinkPlacementFromEdgeInCanonical,
   sinkRotationDegFromEdge,
 } from "../utils/pieceSinks";
+import { defaultNonSplashPieceName } from "../utils/pieceLabels";
+import {
+  buildSourcePlanEditorFrames,
+  planEditorPiecesToSourcePieces,
+  sourcePiecesToPlanEditorPieces,
+} from "../utils/sourcePlanEditor";
 import { collectQuoteReadinessIssues } from "../utils/quoteReadiness";
+import { slabsForOption } from "../utils/slabDimensions";
 import {
   BlankPlanWorkspace,
   BLANK_VIEW_ZOOM_MAX,
@@ -61,13 +108,15 @@ import { ManualLShapeSheet, ManualRectangleSheet } from "./ManualPieceSheets";
 import { AddSinkModal } from "./AddSinkModal";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
 import { PlaceLayoutPreview3D } from "./PlaceLayoutPreview3D";
-import { PlaceWorkspace } from "./PlaceWorkspace";
+import { PlaceWorkspace, type PlaceSeamRequest } from "./PlaceWorkspace";
 import { DEFAULT_SLAB_THICKNESS_IN, parseThicknessToInches } from "../utils/parseThicknessInches";
 import { LayoutQuoteModal } from "./LayoutQuoteModal";
+import { QuotePhaseAllMaterialsView } from "./QuotePhaseAllMaterialsView";
 import { QuotePhaseView } from "./QuotePhaseView";
 import { LayoutQuoteSettingsModal } from "./LayoutQuoteSettingsModal";
 import { mergeCustomerExclusions, mergeLayoutQuoteSettings } from "../utils/commercialQuote";
 import { StudioEntryHub } from "./StudioEntryHub";
+import { UploadProgressRing } from "./UploadProgressRing";
 import {
   TraceWorkspace,
   TRACE_VIEW_ZOOM_MAX,
@@ -75,7 +124,9 @@ import {
   traceViewZoomDisplayPct,
 } from "./TraceWorkspace";
 import {
+  IconBack,
   IconDimensions,
+  IconPieceList,
   IconPieceLabels,
   IconRedo,
   IconRotateCCW,
@@ -85,21 +136,377 @@ import {
   IconToolOrtho,
   IconToolPolygon,
   IconToolRect,
+  IconToolChamfer,
   IconToolConnectCorner,
   IconToolCornerRadius,
   IconToolJoin,
+  IconToolSeam,
   IconToolSnapLines,
   IconUndo,
   IconZoomFitSelection,
   IconZoomIn,
   IconFullscreenEnter,
   IconFullscreenExit,
+  IconSettings,
   IconZoomMarquee,
   IconZoomOut,
   IconZoomResetView,
   IconAutoNestBird,
 } from "./PlanToolbarIcons";
 import "../layoutStudio.css";
+
+function formatUploadSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+const TRACE_BUTTON_ZOOM_STEP = 0.5;
+const BACK_NAV_SAVE_MIN_MS = 3000;
+const SOURCE_PLAN_EDITOR_VIEW_ZOOM_MIN = 0.05;
+const SOURCE_PLAN_EDITOR_ARRANGE_GAP_IN = 12;
+const SOURCE_PLAN_EDITOR_ARRANGE_ROW_MAX_WIDTH_IN = 180;
+const CALIBRATION_POPUP_MARGIN_PX = 16;
+const CALIBRATION_POPUP_MAX_WIDTH_PX = 360;
+const QUOTE_ALL_USED_MATERIALS_SCOPE = "all_used";
+
+function defaultCalibrationPopupPos() {
+  if (typeof window === "undefined") {
+    return { x: CALIBRATION_POPUP_MARGIN_PX, y: CALIBRATION_POPUP_MARGIN_PX };
+  }
+  const popupWidth = Math.min(
+    CALIBRATION_POPUP_MAX_WIDTH_PX,
+    Math.max(220, window.innerWidth - CALIBRATION_POPUP_MARGIN_PX * 2),
+  );
+  return {
+    x: Math.max(
+      CALIBRATION_POPUP_MARGIN_PX,
+      Math.round(window.innerWidth - popupWidth - CALIBRATION_POPUP_MARGIN_PX),
+    ),
+    y: Math.max(CALIBRATION_POPUP_MARGIN_PX, Math.round(window.innerHeight * 0.2)),
+  };
+}
+
+function nextTraceButtonZoomIn(current: number): number {
+  const bucket = Math.floor(current / TRACE_BUTTON_ZOOM_STEP + 1e-6);
+  return Math.min(TRACE_VIEW_ZOOM_MAX, (bucket + 1) * TRACE_BUTTON_ZOOM_STEP);
+}
+
+function nextTraceButtonZoomOut(current: number): number {
+  const bucket = Math.ceil(current / TRACE_BUTTON_ZOOM_STEP - 1e-6);
+  return Math.max(TRACE_VIEW_ZOOM_MIN, (bucket - 1) * TRACE_BUTTON_ZOOM_STEP);
+}
+
+function formatPieceSizeInches(value: number): string {
+  return `${(Math.round(value * 10) / 10).toFixed(1)}"`;
+}
+
+type PieceSizeSummary = {
+  overallLabel: string | null;
+  detailLabel: string | null;
+  needsScale: boolean;
+};
+
+function describePieceSize(
+  piece: LayoutPiece,
+  pixelsPerInch: number | null,
+  allPieces: readonly LayoutPiece[],
+  isBlankWorkspace: boolean,
+): PieceSizeSummary {
+  const localInches = piecePolygonInches(piece, pixelsPerInch, allPieces);
+  const bounds = boundsOfPoints(localInches);
+  if (!bounds) {
+    return {
+      overallLabel: null,
+      detailLabel: null,
+      needsScale: !isBlankWorkspace,
+    };
+  }
+  const widthIn = bounds.maxX - bounds.minX;
+  const depthIn = bounds.maxY - bounds.minY;
+  let detailLabel: string | null = null;
+  if (piece.manualDimensions?.kind === "rectangle") {
+    detailLabel = `Rectangle ${formatPieceSizeInches(piece.manualDimensions.widthIn)} x ${formatPieceSizeInches(piece.manualDimensions.depthIn)}`;
+  } else if (piece.manualDimensions?.kind === "lShape") {
+    detailLabel =
+      `Leg A ${formatPieceSizeInches(piece.manualDimensions.legAIn)} · ` +
+      `Leg B ${formatPieceSizeInches(piece.manualDimensions.legBIn)} · ` +
+      `Depth ${formatPieceSizeInches(piece.manualDimensions.depthIn)}`;
+  }
+  return {
+    overallLabel: `${formatPieceSizeInches(widthIn)} W x ${formatPieceSizeInches(depthIn)} D`,
+    detailLabel,
+    needsScale: false,
+  };
+}
+
+function resolvedPieceSourcePageIndex(
+  piece: LayoutPiece,
+  allPieces: readonly LayoutPiece[],
+): number | null {
+  if (piece.sourcePageIndex != null) return piece.sourcePageIndex;
+  const seen = new Set<string>([piece.id]);
+  let parentId = piece.splashMeta?.parentPieceId ?? null;
+  while (parentId) {
+    if (seen.has(parentId)) break;
+    seen.add(parentId);
+    const parent = allPieces.find((candidate) => candidate.id === parentId) ?? null;
+    if (!parent) break;
+    if (parent.sourcePageIndex != null) return parent.sourcePageIndex;
+    parentId = parent.splashMeta?.parentPieceId ?? null;
+  }
+  return null;
+}
+
+function pieceBelongsToSourcePage(
+  piece: LayoutPiece,
+  allPieces: readonly LayoutPiece[],
+  pageIndex: number,
+  singleSourcePage: boolean,
+): boolean {
+  const resolvedPageIndex = resolvedPieceSourcePageIndex(piece, allPieces);
+  return resolvedPageIndex === pageIndex || (resolvedPageIndex == null && singleSourcePage);
+}
+
+function formatPiecePageLabel(
+  piece: LayoutPiece,
+  allPieces: readonly LayoutPiece[],
+  isBlankWorkspace: boolean,
+  sourcePageCount: number,
+  sourcePageNumberByIndex: Record<number, number>,
+): string | null {
+  if (isBlankWorkspace) return null;
+  const resolvedPageIndex = resolvedPieceSourcePageIndex(piece, allPieces);
+  if (resolvedPageIndex == null) {
+    return sourcePageCount <= 1 ? "Page 1" : "Page —";
+  }
+  return `Page ${sourcePageNumberByIndex[resolvedPageIndex] ?? resolvedPageIndex + 1}`;
+}
+
+function resolvedPieceMaterialOptionId(
+  piece: LayoutPiece,
+  allPieces: readonly LayoutPiece[],
+): string | null {
+  if (piece.materialOptionId != null) return piece.materialOptionId;
+  const seen = new Set<string>([piece.id]);
+  let parentId = piece.splashMeta?.parentPieceId ?? null;
+  while (parentId) {
+    if (seen.has(parentId)) break;
+    seen.add(parentId);
+    const parent = allPieces.find((candidate) => candidate.id === parentId) ?? null;
+    if (!parent) break;
+    if (parent.materialOptionId != null) return parent.materialOptionId;
+    parentId = parent.splashMeta?.parentPieceId ?? null;
+  }
+  return null;
+}
+
+function optionPlacementStateForArea(
+  option: JobComparisonOptionRecord,
+  areaId?: string | null,
+): SavedOptionLayoutPlacement | null {
+  return (areaId ? option.layoutAreaStates?.[areaId]?.layoutStudioPlacement ?? null : null) ?? option.layoutStudioPlacement ?? null;
+}
+
+function layoutSlabsForOptionPlacement(
+  option: JobComparisonOptionRecord,
+  slabClones?: readonly SlabCloneEntry[] | null,
+): LayoutSlab[] {
+  const base = slabsForOption(option);
+  if (!base.length || !slabClones?.length) return base;
+  const primary = base[0];
+  return [
+    ...base,
+    ...slabClones.map((clone) => ({
+      ...primary,
+      id: clone.id,
+      label: clone.label,
+    })),
+  ];
+}
+
+function resolvedPieceMaterialRoot(
+  piece: LayoutPiece,
+  allPieces: readonly LayoutPiece[],
+): LayoutPiece {
+  let current = piece;
+  const seen = new Set<string>([piece.id]);
+  let parentId = piece.splashMeta?.parentPieceId ?? null;
+  while (parentId) {
+    if (seen.has(parentId)) break;
+    seen.add(parentId);
+    const parent = allPieces.find((candidate) => candidate.id === parentId) ?? null;
+    if (!parent) break;
+    current = parent;
+    parentId = parent.splashMeta?.parentPieceId ?? null;
+  }
+  return current;
+}
+
+function mergePlacementsForPieceIds(
+  placements: readonly PiecePlacement[],
+  replacements: readonly PiecePlacement[],
+  pieceIds: ReadonlySet<string>,
+): PiecePlacement[] {
+  const replacementsByPieceId = new Map(replacements.map((placement) => [placement.pieceId, placement]));
+  return placements.map((placement) =>
+    pieceIds.has(placement.pieceId)
+      ? replacementsByPieceId.get(placement.pieceId) ?? placement
+      : placement,
+  );
+}
+
+function nextPieceName(pieces: LayoutPiece[], offset = 0): string {
+  const n = pieces.filter((piece) => !isPlanStripPiece(piece)).length;
+  return defaultNonSplashPieceName(n + offset);
+}
+
+function edgeMidpoint(points: LayoutPoint[], edgeIndex: number): LayoutPoint {
+  const ring = normalizeClosedRing(points);
+  const n = ring.length;
+  if (n === 0) return { x: 0, y: 0 };
+  const a = ring[((edgeIndex % n) + n) % n]!;
+  const b = ring[(((edgeIndex % n) + n) % n + 1) % n]!;
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function splitPlacedPieceAtSeam(args: {
+  pieces: LayoutPiece[];
+  placements: PiecePlacement[];
+  pixelsPerInch: number | null;
+  request: PlaceSeamRequest;
+}): { pieces: LayoutPiece[]; placements: PiecePlacement[]; selectedPieceId: string } | null {
+  const { pieces, placements, pixelsPerInch, request } = args;
+  const targetPiece = pieces.find((piece) => piece.id === request.pieceId);
+  if (!targetPiece || isPlanStripPiece(targetPiece)) return null;
+
+  const world = planDisplayPoints(targetPiece, pieces);
+  const ring = normalizeClosedRing(world);
+  if (ring.length < 2) return null;
+
+  const edgeIndex = ((request.edgeIndex % ring.length) + ring.length) % ring.length;
+  const geometry = seamGeometryFromAxisAlignedEdge(world, edgeIndex);
+  if (!geometry) return null;
+
+  const dimA = Number(request.dimA);
+  const dimB = Number(request.dimB);
+  if (!Number.isFinite(dimA) || !Number.isFinite(dimB) || dimA <= 0 || dimB <= 0) {
+    return null;
+  }
+
+  const seamHint = edgeMidpoint(world, edgeIndex);
+  const minDim = 0.125;
+
+  let split: [LayoutPoint[], LayoutPoint[]] | null = null;
+  if (geometry.kind === "vertical") {
+    const total = geometry.xMax - geometry.xMin;
+    if (Math.abs(dimA + dimB - total) > 0.08 || dimA < minDim || dimB < minDim) return null;
+    split = splitWorldRingAtVerticalSeam(world, geometry.xMin + dimA, seamHint.y);
+  } else {
+    const total = geometry.yMax - geometry.yMin;
+    if (Math.abs(dimA + dimB - total) > 0.08 || dimA < minDim || dimB < minDim) return null;
+    split = splitWorldRingAtHorizontalSeam(world, geometry.yMin + dimA, seamHint.x);
+  }
+  if (!split) return null;
+
+  const [ringA, ringB] = split;
+  const ox = targetPiece.planTransform?.x ?? 0;
+  const oy = targetPiece.planTransform?.y ?? 0;
+  const localA = ringA.map((point) => ({ x: point.x - ox, y: point.y - oy }));
+  const localB = ringB.map((point) => ({ x: point.x - ox, y: point.y - oy }));
+  const idA = crypto.randomUUID();
+  const idB = crypto.randomUUID();
+
+  const existingSinks = targetPiece.sinks ?? [];
+  const legacyCount =
+    existingSinks.length > 0 ? 0 : Math.max(0, Math.floor(targetPiece.sinkCount || 0));
+  const { sinksA, sinksB } =
+    existingSinks.length > 0
+      ? assignSinksToSplitPieces(existingSinks, ringA, ringB, ox, oy)
+      : {
+          sinksA: [] as typeof existingSinks,
+          sinksB: [] as typeof existingSinks,
+        };
+  const splitLegacy = legacyCount > 0;
+  const sinkCountA = splitLegacy ? Math.floor(legacyCount / 2) : 0;
+  const sinkCountB = splitLegacy ? legacyCount - sinkCountA : 0;
+
+  const newA: LayoutPiece = {
+    ...targetPiece,
+    id: idA,
+    name: nextPieceName(pieces),
+    points: localA,
+    sinkCount: splitLegacy ? sinkCountA : 0,
+    sinks: existingSinks.length > 0 ? sinksA : undefined,
+    manualDimensions: undefined,
+    shapeKind: "polygon",
+    edgeTags: undefined,
+  };
+  const newB: LayoutPiece = {
+    ...targetPiece,
+    id: idB,
+    name: nextPieceName(pieces, 1),
+    points: localB,
+    sinkCount: splitLegacy ? sinkCountB : 0,
+    sinks: existingSinks.length > 0 ? sinksB : undefined,
+    manualDimensions: undefined,
+    shapeKind: "polygon",
+    edgeTags: undefined,
+  };
+
+  const nextPieces = pieces
+    .filter((piece) => piece.id !== targetPiece.id)
+    .concat([newA, newB]);
+
+  if (
+    countertopOverlapsOtherCountertops(nextPieces, idA, idB) ||
+    countertopOverlapsOtherCountertops(nextPieces, idB, idA)
+  ) {
+    return null;
+  }
+
+  const basePlacements = ensurePlacementsForPieces(pieces, placements);
+  const targetPlacement = basePlacements.find((placement) => placement.pieceId === targetPiece.id);
+  if (!targetPlacement) return null;
+
+  const makePlacement = (piece: LayoutPiece): PiecePlacement => {
+    const nextPlacement: PiecePlacement = {
+      ...targetPlacement,
+      id: crypto.randomUUID(),
+      pieceId: piece.id,
+    };
+    if (!targetPlacement.placed || !targetPlacement.slabId) return nextPlacement;
+    const centroidWorld = planCentroidForSlabPlacement(piece, nextPieces);
+    const slabPoint = worldDisplayToSlabInches(
+      centroidWorld.x,
+      centroidWorld.y,
+      targetPiece,
+      targetPlacement,
+      pixelsPerInch,
+      pieces,
+    );
+    return {
+      ...nextPlacement,
+      x: slabPoint.x,
+      y: slabPoint.y,
+    };
+  };
+
+  const nextPlacements = basePlacements.flatMap((placement) =>
+    placement.pieceId === targetPiece.id
+      ? [makePlacement(newA), makePlacement(newB)]
+      : [placement]
+  );
+
+  return { pieces: nextPieces, placements: nextPlacements, selectedPieceId: idA };
+}
 
 type Props = {
   job: JobRecord;
@@ -109,8 +516,11 @@ type Props = {
   options: JobComparisonOptionRecord[];
   activeOption: JobComparisonOptionRecord | null;
   onOptionChange: (optionId: string) => void;
+  onRemoveMaterialOption?: (optionId: string) => void;
+  onOpenAddMaterials?: () => void;
   ownerUserId: string;
   onBack: () => void | Promise<void>;
+  defaultPlanCanvasExpanded?: boolean;
 };
 
 export function LayoutStudioScreen({
@@ -121,10 +531,14 @@ export function LayoutStudioScreen({
   options,
   activeOption,
   onOptionChange,
+  onRemoveMaterialOption,
+  onOpenAddMaterials,
   ownerUserId,
   onBack,
+  defaultPlanCanvasExpanded = false,
 }: Props) {
   const optionId = activeOption?.id;
+  const uploadedPdfFileRef = useRef<{ uploadedAt: string; file: File } | null>(null);
   const { draft, updateDraft, setDraft, save, saveQuotePhase, saveStatus, saveError, layoutSlabs } =
     useLayoutStudio({
       job,
@@ -159,10 +573,13 @@ export function LayoutStudioScreen({
   const [calibrationMode, setCalibrationMode] = useState(false);
   const [calibrationStep, setCalibrationStep] = useState<"idle" | "a" | "b">("idle");
   const [calibrationPopupOpen, setCalibrationPopupOpen] = useState(false);
-  const [calibrationPopupPos, setCalibrationPopupPos] = useState({ x: 13, y: 13 });
+  const [calibrationPopupPos, setCalibrationPopupPos] = useState(() => defaultCalibrationPopupPos());
   const [distanceInput, setDistanceInput] = useState("");
   const [distanceUnit, setDistanceUnit] = useState<"in" | "ft" | "mm" | "cm">("in");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStage, setUploadStage] = useState<"uploading" | "processing">("uploading");
+  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [rectSheetOpen, setRectSheetOpen] = useState(false);
   const [lSheetOpen, setLSheetOpen] = useState(false);
@@ -205,6 +622,8 @@ export function LayoutStudioScreen({
   const [placeSplitView, setPlaceSplitView] = useState(true);
   /** Layout tab: constrain slab piece drags to horizontal or vertical only. */
   const [placeOrthoMove, setPlaceOrthoMove] = useState(false);
+  /** Layout tab: click red slab edges to split a placed piece with a seam. */
+  const [placeSeamMode, setPlaceSeamMode] = useState(false);
   /** Place phase: confirm before removing a duplicate slab instance. */
   const [removeSlabConfirmId, setRemoveSlabConfirmId] = useState<string | null>(null);
   /** Auto nest pieces on the active slab (min gap inches). */
@@ -224,19 +643,26 @@ export function LayoutStudioScreen({
     setBlankViewZoom(z);
   }, []);
   const [traceViewZoom, setTraceViewZoom] = useState(1);
+  const [sourceCanvasMode, setSourceCanvasMode] = useState<"trace" | "plan">("trace");
+  const [sourcePlanEditorPieces, setSourcePlanEditorPieces] = useState<LayoutPiece[]>([]);
+  const skipSourcePlanEditorDraftSyncRef = useRef(false);
   const onTraceViewZoomChange = useCallback((z: number) => {
     setTraceViewZoom(z);
   }, []);
-  const stepTraceZoomIn = useCallback(
-    () => setTraceViewZoom((z) => Math.min(TRACE_VIEW_ZOOM_MAX, z < 1 ? z + 0.5 : z * 2)),
-    []
-  );
-  const stepTraceZoomOut = useCallback(
-    () => setTraceViewZoom((z) => Math.max(TRACE_VIEW_ZOOM_MIN, z > 1 ? z / 2 : z - 0.5)),
-    []
-  );
+  const stepTraceZoomIn = useCallback(() => setTraceViewZoom((z) => nextTraceButtonZoomIn(z)), []);
+  const stepTraceZoomOut = useCallback(() => setTraceViewZoom((z) => nextTraceButtonZoomOut(z)), []);
   const [traceResetViewTick, setTraceResetViewTick] = useState(0);
   const [traceZoomToSelectedTick, setTraceZoomToSelectedTick] = useState(0);
+  const [activeSourcePageIndex, setActiveSourcePageIndex] = useState(0);
+  const [activePdfPageImageUrl, setActivePdfPageImageUrl] = useState<string | null>(null);
+  const [pdfPageThumbUrls, setPdfPageThumbUrls] = useState<Record<number, string>>({});
+  const [pdfRenderFailedPages, setPdfRenderFailedPages] = useState<Record<number, true>>({});
+  const [pdfRenderBusy, setPdfRenderBusy] = useState(false);
+  const [pdfRenderStatusText, setPdfRenderStatusText] = useState<string | null>(null);
+  const [backNavigationPending, setBackNavigationPending] = useState(false);
+  const [backNavigationStartedAt, setBackNavigationStartedAt] = useState<number | null>(null);
+  const [backNavigationProgress, setBackNavigationProgress] = useState<number | null>(null);
+  const [phaseTransitionPending, setPhaseTransitionPending] = useState<LayoutStudioMode | null>(null);
   const calibrationPopupDragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -244,35 +670,106 @@ export function LayoutStudioScreen({
     originX: number;
     originY: number;
   } | null>(null);
+  const [inspectorPanelPos, setInspectorPanelPos] = useState({ x: 13, y: 76 });
+  const inspectorPanelDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const [pieceListOpen, setPieceListOpen] = useState(false);
+  const [pieceListPanelPos, setPieceListPanelPos] = useState({ x: 14, y: 14 });
+  const pieceListPanelDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const [materialMenuOpen, setMaterialMenuOpen] = useState(false);
+  const materialMenuRef = useRef<HTMLDivElement | null>(null);
+  const materialMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const materialMenuPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [materialMenuPopoverStyle, setMaterialMenuPopoverStyle] = useState<CSSProperties | null>(null);
+  const [quoteMaterialScope, setQuoteMaterialScope] = useState<"active" | "all_used">("active");
   const [planBoxZoomActive, setPlanBoxZoomActive] = useState(false);
   /** Blank plan: overlay full-screen drawing (toolbar + canvas + inspector). */
-  const [planCanvasExpanded, setPlanCanvasExpanded] = useState(false);
+  const [planCanvasExpanded, setPlanCanvasExpanded] = useState(
+    () => defaultPlanCanvasExpanded && mode === "trace"
+  );
+  const placeSlabRegionRef = useRef<HTMLDivElement | null>(null);
+  const [placeSlabRegionViewportHeight, setPlaceSlabRegionViewportHeight] = useState<number | null>(
+    null,
+  );
+  const placeSplitContainerRef = useRef<HTMLDivElement | null>(null);
+  const [placeSplitLeftPct, setPlaceSplitLeftPct] = useState(48);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const entryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const pendingDuplicateFitRef = useRef(false);
 
   const handleBack = useCallback(async () => {
-    const ok = await save(draftRef.current);
-    if (!ok) return;
-    await onBack();
-  }, [onBack, save]);
+    if (backNavigationPending) return;
+    setBackNavigationPending(true);
+    const startedAt = Date.now();
+    setBackNavigationStartedAt(startedAt);
+    setBackNavigationProgress(0);
+    let navigated = false;
+    try {
+      const ok = await save(draftRef.current);
+      const elapsedMs = Date.now() - startedAt;
+      const remainingMs = Math.max(0, BACK_NAV_SAVE_MIN_MS - elapsedMs);
+      if (remainingMs > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingMs));
+      }
+      if (!ok) return;
+      setBackNavigationProgress(100);
+      await onBack();
+      navigated = true;
+    } finally {
+      if (!navigated) {
+        setBackNavigationPending(false);
+        setBackNavigationStartedAt(null);
+        setBackNavigationProgress(null);
+      }
+    }
+  }, [backNavigationPending, onBack, save]);
+
+  useEffect(() => {
+    if (!backNavigationPending || backNavigationStartedAt == null) {
+      setBackNavigationStartedAt(null);
+      setBackNavigationProgress(null);
+      return;
+    }
+    const updateProgress = () => {
+      const elapsedMs = Date.now() - backNavigationStartedAt;
+      const nextProgress = Math.min(99, Math.max(0, Math.round((elapsedMs / BACK_NAV_SAVE_MIN_MS) * 100)));
+      setBackNavigationProgress((prev) => (prev == null ? nextProgress : Math.max(prev, nextProgress)));
+    };
+    updateProgress();
+    const intervalId = window.setInterval(updateProgress, 50);
+    return () => window.clearInterval(intervalId);
+  }, [backNavigationPending, backNavigationStartedAt]);
 
   const selectMaterialOption = useCallback(
     async (nextId: string) => {
-      if (nextId === activeOption?.id) return;
+      if (nextId === activeOption?.id) {
+        setMaterialMenuOpen(false);
+        return;
+      }
       const ok = await save(draftRef.current);
       if (!ok) return;
+      setMaterialMenuOpen(false);
       onOptionChange(nextId);
     },
-    [activeOption?.id, onOptionChange, save]
+    [activeOption?.id, onOptionChange, save],
   );
 
-  const workspaceKind = useMemo((): "source" | "blank" | undefined => {
+  const workspaceKind = useMemo((): "source" | "blank" => {
     if (draft.workspaceKind === "blank" || draft.workspaceKind === "source") return draft.workspaceKind;
     if (draft.source) return "source";
-    if (draft.pieces.length > 0) return "blank";
-    return undefined;
-  }, [draft.workspaceKind, draft.source, draft.pieces.length]);
+    return "blank";
+  }, [draft.workspaceKind, draft.source]);
 
   const showEntryHub = workspaceKind === undefined;
 
@@ -299,14 +796,476 @@ export function LayoutStudioScreen({
     [job.id, mergedCustomerExclusions]
   );
 
+  const sourcePages = useMemo(
+    () => normalizedSourcePages(draft.source, draft.calibration),
+    [draft.calibration, draft.source],
+  );
+  const sourcePagesKey = useMemo(
+    () =>
+      sourcePages
+        .map(
+          (page) =>
+            `${page.index}:${page.pageNumber}:${page.originX}:${page.originY}:${page.previewImageUrl ?? ""}:${page.previewStoragePath ?? ""}`,
+        )
+        .join("|"),
+    [sourcePages],
+  );
+  const sourcePageNumberByIndex = useMemo(
+    () => Object.fromEntries(sourcePages.map((page) => [page.index, page.pageNumber])),
+    [sourcePages],
+  );
+  const activeSourcePage = useMemo(
+    () => sourcePages.find((page) => page.index === activeSourcePageIndex) ?? sourcePages[0] ?? null,
+    [activeSourcePageIndex, sourcePages],
+  );
+  const activeCalibration = activeSourcePage?.calibration ?? draft.calibration;
+  const sourceDims = useMemo(
+    () => sourcePlanDimensions(draft.source, draft.calibration),
+    [draft.calibration, draft.source],
+  );
+  const activeTraceBounds = useMemo(
+    () =>
+      activeSourcePage
+        ? {
+            minX: activeSourcePage.originX,
+            minY: activeSourcePage.originY,
+            width: activeSourcePage.widthPx,
+            height: activeSourcePage.heightPx,
+          }
+        : sourceDims.widthPx > 0 && sourceDims.heightPx > 0
+          ? {
+              minX: 0,
+              minY: 0,
+              width: sourceDims.widthPx,
+              height: sourceDims.heightPx,
+            }
+          : null,
+    [activeSourcePage, sourceDims.heightPx, sourceDims.widthPx],
+  );
   const displayUrl =
-    draft.source?.kind === "pdf" ? draft.source.previewImageUrl ?? draft.source.fileUrl : draft.source?.fileUrl ?? null;
-  const isPdfSource = draft.source?.kind === "pdf" && !draft.source?.previewImageUrl;
+    draft.source?.kind === "pdf" ? activePdfPageImageUrl : draft.source?.fileUrl ?? null;
+  const isPdfSource = false;
   const isBlankWorkspace = workspaceKind === "blank";
+  const activeSessionPdfFile =
+    draft.source?.kind === "pdf" && uploadedPdfFileRef.current?.uploadedAt === draft.source.uploadedAt
+      ? uploadedPdfFileRef.current.file
+      : null;
+  const pdfSourceStoragePath = draft.source?.kind === "pdf" ? draft.source.fileStoragePath ?? null : null;
+  const showSourceOnPlanCanvas = !isBlankWorkspace && sourceCanvasMode === "trace";
+  const usesBlankPlanCanvas = isBlankWorkspace || sourceCanvasMode === "plan";
+  const sourcePlanEditorActive = !isBlankWorkspace && sourceCanvasMode === "plan";
+  const planCanvasDisplayUrl = showSourceOnPlanCanvas ? displayUrl : null;
+  const planCanvasBounds = showSourceOnPlanCanvas
+    ? activeTraceBounds
+    : sourceDims.widthPx > 0 && sourceDims.heightPx > 0
+      ? {
+          minX: 0,
+          minY: 0,
+          width: sourceDims.widthPx,
+          height: sourceDims.heightPx,
+        }
+      : activeTraceBounds;
+  const sourcePlanEditorFrames = useMemo(
+    () => buildSourcePlanEditorFrames(sourcePages, draft.calibration.pixelsPerInch),
+    [draft.calibration.pixelsPerInch, sourcePages],
+  );
+  const sourcePlanEditorDefaultPageIndex = activeSourcePage?.index ?? sourcePages[0]?.index ?? 0;
+  const sourcePlanEditorDisplayPieces = useMemo(
+    () =>
+      sourcePiecesToPlanEditorPieces(
+        draft.pieces,
+        sourcePlanEditorFrames,
+        sourcePlanEditorDefaultPageIndex,
+        draft.calibration.pixelsPerInch,
+      ),
+    [
+      draft.calibration.pixelsPerInch,
+      draft.pieces,
+      sourcePlanEditorDefaultPageIndex,
+      sourcePlanEditorFrames,
+    ],
+  );
+  const traceSourcePageIndex = activeSourcePage?.index ?? sourcePages[0]?.index ?? 0;
+  const tracePagePieces = useMemo(() => {
+    if (isBlankWorkspace) return draft.pieces;
+    const singleSourcePage = sourcePages.length <= 1;
+    return draft.pieces.filter((piece) =>
+      pieceBelongsToSourcePage(piece, draft.pieces, traceSourcePageIndex, singleSourcePage),
+    );
+  }, [draft.pieces, isBlankWorkspace, sourcePages.length, traceSourcePageIndex]);
+  const pieceCountBySourcePageIndex = useMemo(() => {
+    const counts = new Map<number, number>();
+    const singleSourcePage = sourcePages.length <= 1;
+    for (const page of sourcePages) {
+      counts.set(
+        page.index,
+        draft.pieces.filter((piece) =>
+          pieceBelongsToSourcePage(piece, draft.pieces, page.index, singleSourcePage),
+        ).length,
+      );
+    }
+    return counts;
+  }, [draft.pieces, sourcePages]);
+  const traceSelectedPieceId = tracePagePieces.some((piece) => piece.id === selectedPieceId) ? selectedPieceId : null;
+  const planCanvasPieces = sourcePlanEditorActive
+    ? sourcePlanEditorPieces.length > 0 || draft.pieces.length === 0
+      ? sourcePlanEditorPieces
+      : sourcePlanEditorDisplayPieces
+    : draft.pieces;
+  const activeMaterialPieceIds = useMemo(() => {
+    if (!activeOption?.id) {
+      return new Set(draft.pieces.map((piece) => piece.id));
+    }
+    return new Set(
+      draft.pieces
+        .filter((piece) => resolvedPieceMaterialOptionId(piece, draft.pieces) === activeOption.id)
+        .map((piece) => piece.id),
+    );
+  }, [activeOption?.id, draft.pieces]);
+  const materialPieceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const option of options) counts.set(option.id, 0);
+    for (const piece of draft.pieces) {
+      const optionId = resolvedPieceMaterialOptionId(piece, draft.pieces);
+      if (!optionId) continue;
+      counts.set(optionId, (counts.get(optionId) ?? 0) + 1);
+    }
+    return counts;
+  }, [draft.pieces, options]);
+  const usedMaterialOptions = useMemo(
+    () => options.filter((option) => (materialPieceCounts.get(option.id) ?? 0) > 0),
+    [materialPieceCounts, options],
+  );
+  const canQuoteAllUsedMaterials = usedMaterialOptions.length > 1;
+  const totalUsedMaterialPieceCount = useMemo(
+    () => usedMaterialOptions.reduce((sum, option) => sum + (materialPieceCounts.get(option.id) ?? 0), 0),
+    [materialPieceCounts, usedMaterialOptions],
+  );
+  const quoteShowingAllUsedMaterials = mode === "quote" && quoteMaterialScope === QUOTE_ALL_USED_MATERIALS_SCOPE;
+  const activeMaterialPlacements = useMemo(
+    () => draft.placements.filter((placement) => activeMaterialPieceIds.has(placement.pieceId)),
+    [activeMaterialPieceIds, draft.placements],
+  );
+  const placeVisiblePieces = useMemo(
+    () => draft.pieces.filter((piece) => activeMaterialPieceIds.has(piece.id)),
+    [activeMaterialPieceIds, draft.pieces],
+  );
+  const placeSelectedPieceId =
+    selectedPieceId != null && activeMaterialPieceIds.has(selectedPieceId) ? selectedPieceId : null;
+  const layoutPreviewUsesPlanSpace =
+    isBlankWorkspace || piecesHaveAnyScale(placeVisiblePieces, draft.calibration.pixelsPerInch);
+  const layoutPreviewWorkspaceKind: "blank" | "source" = layoutPreviewUsesPlanSpace ? "blank" : "source";
+  const layoutPreviewPieces = layoutPreviewUsesPlanSpace
+    ? isBlankWorkspace
+      ? draft.pieces
+      : sourcePlanEditorDisplayPieces
+    : draft.pieces;
+  const layoutPreviewVisiblePieces = useMemo(
+    () => layoutPreviewPieces.filter((piece) => activeMaterialPieceIds.has(piece.id)),
+    [activeMaterialPieceIds, layoutPreviewPieces],
+  );
+  const quoteAllMaterialsSections = useMemo(
+    () =>
+      usedMaterialOptions
+        .map((option) => {
+          const pieces = draft.pieces.filter((piece) => resolvedPieceMaterialOptionId(piece, draft.pieces) === option.id);
+          if (!pieces.length) return null;
+          const pieceIds = new Set(pieces.map((piece) => piece.id));
+          const previewUsesPlanSpace =
+            isBlankWorkspace || piecesHaveAnyScale(pieces, draft.calibration.pixelsPerInch);
+          const previewWorkspaceKind: "blank" | "source" = previewUsesPlanSpace ? "blank" : "source";
+          const previewSourcePieces = previewUsesPlanSpace
+            ? isBlankWorkspace
+              ? draft.pieces
+              : sourcePlanEditorDisplayPieces
+            : draft.pieces;
+          const placementState =
+            option.id === activeOption?.id
+              ? {
+                  placements: draft.placements,
+                  slabClones: draft.slabClones,
+                  preview: draft.preview,
+                  updatedAt: draft.updatedAt,
+                }
+              : optionPlacementStateForArea(option, activeAreaId);
+          const slabs =
+            option.id === activeOption?.id
+              ? layoutSlabs
+              : layoutSlabsForOptionPlacement(option, placementState?.slabClones ?? null);
+          const filteredPlacements = (placementState?.placements ?? []).filter((placement) => pieceIds.has(placement.pieceId));
+          const sectionDraft = recomputeDraftSummary(
+            {
+              ...draft,
+              pieces,
+              placements: filteredPlacements,
+              slabClones: placementState?.slabClones ?? [],
+              preview: placementState?.preview ?? {},
+            },
+            option,
+            slabs,
+          );
+          return {
+            option,
+            draft: sectionDraft,
+            pieces: sectionDraft.pieces,
+            placements: sectionDraft.placements,
+            slabs,
+            previewWorkspaceKind,
+            previewPieces: previewSourcePieces.filter((piece) => pieceIds.has(piece.id)),
+          };
+        })
+        .filter((section): section is NonNullable<typeof section> => section != null),
+    [activeAreaId, activeOption?.id, draft, isBlankWorkspace, layoutSlabs, sourcePlanEditorDisplayPieces, usedMaterialOptions],
+  );
+
+  useEffect(() => {
+    if (quoteMaterialScope === QUOTE_ALL_USED_MATERIALS_SCOPE && !canQuoteAllUsedMaterials) {
+      setQuoteMaterialScope("active");
+    }
+  }, [canQuoteAllUsedMaterials, quoteMaterialScope]);
+  const onActiveMaterialPlacementsChange = useCallback(
+    (nextPlacements: PiecePlacement[]) => {
+      updateDraft((d) => ({
+        ...d,
+        placements: mergePlacementsForPieceIds(d.placements, nextPlacements, activeMaterialPieceIds),
+      }));
+    },
+    [activeMaterialPieceIds, updateDraft],
+  );
+
+  useEffect(() => {
+    setActiveSourcePageIndex((prev) =>
+      sourcePages.some((page) => page.index === prev) ? prev : (sourcePages[0]?.index ?? 0),
+    );
+  }, [sourcePagesKey, sourcePages]);
+
+  useEffect(() => {
+    if (!sourcePlanEditorActive) {
+      setSourcePlanEditorPieces([]);
+      skipSourcePlanEditorDraftSyncRef.current = false;
+      return;
+    }
+    if (skipSourcePlanEditorDraftSyncRef.current) {
+      skipSourcePlanEditorDraftSyncRef.current = false;
+      return;
+    }
+    setSourcePlanEditorPieces(sourcePlanEditorDisplayPieces);
+  }, [
+    draft.calibration.pixelsPerInch,
+    draft.pieces,
+    sourcePlanEditorDisplayPieces,
+    sourcePlanEditorActive,
+    sourcePlanEditorDefaultPageIndex,
+    sourcePlanEditorFrames,
+  ]);
+
+  useEffect(() => {
+    setPdfRenderFailedPages({});
+  }, [draft.source?.fileUrl, draft.source?.uploadedAt, pdfSourceStoragePath]);
+
+  useEffect(() => {
+    if (draft.source?.kind !== "pdf" || !activeSourcePage) {
+      setActivePdfPageImageUrl(null);
+      setPdfRenderBusy(false);
+      setPdfRenderStatusText(null);
+      return;
+    }
+    let cancelled = false;
+    const persistedPreviewUrl =
+      activeSourcePage.previewImageUrl ??
+      (activeSourcePage.index === 0 ? draft.source.previewImageUrl ?? null : null);
+    if (persistedPreviewUrl) {
+      setActivePdfPageImageUrl(persistedPreviewUrl);
+      setPdfRenderBusy(false);
+      setPdfRenderStatusText(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!draft.source.fileUrl) {
+      setActivePdfPageImageUrl(null);
+      setPdfRenderBusy(false);
+      setPdfRenderStatusText(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    const cachedPageImage = pdfPageThumbUrls[activeSourcePage.index];
+    if (cachedPageImage) {
+      setActivePdfPageImageUrl(cachedPageImage);
+      setPdfRenderBusy(false);
+      setPdfRenderStatusText(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (pdfRenderFailedPages[activeSourcePage.index]) {
+      setActivePdfPageImageUrl(null);
+      setPdfRenderBusy(false);
+      setPdfRenderStatusText(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setPdfRenderBusy(true);
+    setPdfRenderStatusText(`Rendering page ${activeSourcePage.pageNumber}...`);
+    setActivePdfPageImageUrl(null);
+    const renderPromise = activeSessionPdfFile
+      ? renderPdfFilePageToDataUrl(activeSessionPdfFile, activeSourcePage.pageNumber, 2).then(
+          ({ dataUrl, width, height }) => ({ dataUrl, width, height }),
+        )
+      : renderPdfUrlPageToDataUrl(draft.source.fileUrl, activeSourcePage.pageNumber, 2, {
+          storagePath: pdfSourceStoragePath,
+        });
+    void renderPromise
+      .then(({ dataUrl }) => {
+        if (!cancelled) {
+          setActivePdfPageImageUrl(dataUrl);
+          setPdfPageThumbUrls((prev) =>
+            prev[activeSourcePage.index] ? prev : { ...prev, [activeSourcePage.index]: dataUrl },
+          );
+          setPdfRenderBusy(false);
+          setPdfRenderStatusText(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setActivePdfPageImageUrl(null);
+          setPdfRenderBusy(false);
+          setPdfRenderStatusText(null);
+          setPdfRenderFailedPages((prev) =>
+            prev[activeSourcePage.index] ? prev : { ...prev, [activeSourcePage.index]: true },
+          );
+          setUploadError(
+            err instanceof Error
+              ? `Could not render PDF page ${activeSourcePage.pageNumber}: ${err.message}. If this page was saved without a preview image, re-upload the PDF once to regenerate it.`
+              : `Could not render PDF page ${activeSourcePage.pageNumber}. If this page was saved without a preview image, re-upload the PDF once to regenerate it.`,
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSessionPdfFile,
+    activeSourcePage,
+    draft.source?.fileUrl,
+    draft.source?.kind,
+    draft.source?.previewImageUrl,
+    pdfRenderFailedPages,
+    pdfPageThumbUrls,
+    pdfSourceStoragePath,
+  ]);
+
+  useEffect(() => {
+    const pdfFileUrl = draft.source?.kind === "pdf" ? draft.source.fileUrl : null;
+    if ((!pdfFileUrl && !activeSessionPdfFile) || sourcePages.length <= 1) {
+      setPdfPageThumbUrls((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      for (const page of sourcePages) {
+        if (cancelled) return;
+        const persistedPreviewUrl =
+          page.previewImageUrl ?? (page.index === 0 ? draft.source?.previewImageUrl ?? null : null);
+        if (persistedPreviewUrl) {
+          setPdfPageThumbUrls((prev) =>
+            prev[page.index] ? prev : { ...prev, [page.index]: persistedPreviewUrl },
+          );
+          continue;
+        }
+        if (pdfRenderFailedPages[page.index]) continue;
+        if (pdfPageThumbUrls[page.index]) continue;
+        try {
+          const { dataUrl } = activeSessionPdfFile
+            ? await renderPdfFilePageToDataUrl(activeSessionPdfFile, page.pageNumber, 0.4)
+            : await renderPdfUrlPageToDataUrl(pdfFileUrl!, page.pageNumber, 0.4, {
+                storagePath: pdfSourceStoragePath,
+              });
+          if (cancelled) return;
+          setPdfPageThumbUrls((prev) =>
+            prev[page.index] ? prev : { ...prev, [page.index]: dataUrl },
+          );
+        } catch {
+          if (cancelled) return;
+          setPdfRenderFailedPages((prev) => (prev[page.index] ? prev : { ...prev, [page.index]: true }));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSessionPdfFile,
+    draft.source?.fileUrl,
+    draft.source?.kind,
+    draft.source?.previewImageUrl,
+    pdfRenderFailedPages,
+    pdfPageThumbUrls,
+    pdfSourceStoragePath,
+    sourcePages,
+    sourcePagesKey,
+  ]);
+
+  const goToSourcePage = useCallback(
+    (pageIndex: number) => {
+      const nextPage = sourcePages.find((page) => page.index === pageIndex);
+      if (!nextPage || nextPage.index === activeSourcePage?.index) return;
+      const selectedPiece =
+        selectedPieceId != null
+          ? draft.pieces.find((piece) => piece.id === selectedPieceId)
+          : null;
+      const selectedPiecePageIndex =
+        selectedPiece != null ? resolvedPieceSourcePageIndex(selectedPiece, draft.pieces) : null;
+      if (
+        selectedPiece &&
+        selectedPiecePageIndex != null &&
+        selectedPiecePageIndex !== nextPage.index
+      ) {
+        setSelectedPieceId(null);
+      }
+      setActiveSourcePageIndex(nextPage.index);
+      setTraceViewZoom(1);
+      setPlanBoxZoomActive(false);
+      setTraceResetViewTick((t) => t + 1);
+    },
+    [activeSourcePage?.index, draft.pieces, selectedPieceId, sourcePages],
+  );
+  const switchSourceCanvasMode = useCallback((nextMode: "trace" | "plan") => {
+    setSourceCanvasMode(nextMode);
+    setPlanBoxZoomActive(false);
+    if (nextMode === "trace") {
+      setTraceViewZoom(1);
+      setTraceResetViewTick((t) => t + 1);
+      return;
+    }
+    setPlanFitAllPiecesTick((t) => t + 1);
+  }, []);
+
+  const activeSourcePagePos = useMemo(
+    () => sourcePages.findIndex((page) => page.index === activeSourcePage?.index),
+    [activeSourcePage?.index, sourcePages],
+  );
 
   const startBlankLayout = () => {
     setUndoStack([]);
     setRedoStack([]);
+    uploadedPdfFileRef.current = null;
+    setActiveSourcePageIndex(0);
+    setActivePdfPageImageUrl(null);
+    setPdfPageThumbUrls({});
+    setPdfRenderBusy(false);
+    setPdfRenderStatusText(null);
+    setSourcePlanEditorPieces([]);
+    skipSourcePlanEditorDraftSyncRef.current = false;
+    setSourceCanvasMode("trace");
+    setTraceViewZoom(1);
+    setTraceResetViewTick((t) => t + 1);
+    setTraceZoomToSelectedTick(0);
+    setPlanBoxZoomActive(false);
+    setSelectedEdge(null);
+    setSelectedFilletEdges([]);
     updateDraft(() => ({
       ...createDefaultLayoutState(),
       workspaceKind: "blank",
@@ -338,6 +1297,38 @@ export function LayoutStudioScreen({
       });
     },
     [updateDraft]
+  );
+
+  const patchActiveSourcePage = useCallback(
+    (
+      d: SavedLayoutStudioState,
+      updater: (
+        page: NonNullable<ReturnType<typeof normalizedSourcePages>[number]>,
+      ) => NonNullable<ReturnType<typeof normalizedSourcePages>[number]>,
+    ): SavedLayoutStudioState => {
+      if (!d.source) return d;
+      const pages = normalizedSourcePages(d.source, d.calibration);
+      if (pages.length === 0) return d;
+      const targetIndex =
+        pages.find((page) => page.index === activeSourcePageIndex)?.index ?? pages[0]!.index;
+      const nextPages = pages.map((page) =>
+        page.index === targetIndex ? updater(page) : page,
+      );
+      const dims = sourcePlanDimensions({ ...d.source, pages: nextPages }, d.calibration);
+      const nextCalibration =
+        nextPages.find((page) => page.index === targetIndex)?.calibration ?? d.calibration;
+      return {
+        ...d,
+        source: {
+          ...d.source,
+          pages: nextPages,
+          sourceWidthPx: dims.widthPx,
+          sourceHeightPx: dims.heightPx,
+        },
+        calibration: nextCalibration,
+      };
+    },
+    [activeSourcePageIndex],
   );
 
   const undo = useCallback(() => {
@@ -452,31 +1443,35 @@ export function LayoutStudioScreen({
   }, [mode]);
 
   useLayoutEffect(() => {
-    if (!isBlankWorkspace || mode !== "trace") {
+    if (!usesBlankPlanCanvas || mode !== "trace") {
       planBlankInitialFitDoneRef.current = false;
       return;
     }
-    if (draft.pieces.length === 0) {
+    if (planCanvasPieces.length === 0) {
       planBlankInitialFitDoneRef.current = false;
       return;
     }
     if (planBlankInitialFitDoneRef.current) return;
     planBlankInitialFitDoneRef.current = true;
     setPlanFitAllPiecesTick((t) => t + 1);
-  }, [isBlankWorkspace, mode, draft.pieces.length]);
+  }, [mode, planCanvasPieces.length, usesBlankPlanCanvas]);
 
   useLayoutEffect(() => {
     if (!pendingDuplicateFitRef.current) return;
-    if (!isBlankWorkspace || mode !== "trace") {
+    if (!usesBlankPlanCanvas || mode !== "trace") {
       pendingDuplicateFitRef.current = false;
       return;
     }
     pendingDuplicateFitRef.current = false;
     blankPlanRef.current?.fitAllPiecesInView();
-  }, [draft.pieces.length, isBlankWorkspace, mode]);
+  }, [mode, planCanvasPieces.length, usesBlankPlanCanvas]);
 
   useEffect(() => {
     if (mode !== "place") setLayoutPreviewModalOpen(false);
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "place") setPlaceSeamMode(false);
   }, [mode]);
 
   useEffect(() => {
@@ -502,19 +1497,38 @@ export function LayoutStudioScreen({
     [activeOption?.thickness]
   );
 
+  const activeMaterialQuoteDraft = useMemo(
+    () =>
+      recomputeDraftSummary(
+        {
+          ...draft,
+          pieces: placeVisiblePieces,
+          placements: activeMaterialPlacements,
+        },
+        activeOption,
+        layoutSlabs,
+      ),
+    [activeMaterialPlacements, activeOption, draft, layoutSlabs, placeVisiblePieces],
+  );
+
   const executeQuoteTransition = useCallback(async () => {
-    const ok = await saveQuotePhase();
-    if (!ok) return;
-    setMode("quote");
-    setQuoteGateOpen(false);
-    setQuoteGateIssues([]);
+    setPhaseTransitionPending("quote");
+    try {
+      const ok = await saveQuotePhase();
+      if (!ok) return;
+      setMode("quote");
+      setQuoteGateOpen(false);
+      setQuoteGateIssues([]);
+    } finally {
+      setPhaseTransitionPending(null);
+    }
   }, [saveQuotePhase]);
 
   const beginQuoteTransition = useCallback(() => {
     if (showEntryHub) return;
     if (!activeOption) return;
     const issues = collectQuoteReadinessIssues({
-      draft,
+      draft: activeMaterialQuoteDraft,
       workspaceKind,
       slabsLength: layoutSlabs.length,
       option: activeOption,
@@ -525,28 +1539,40 @@ export function LayoutStudioScreen({
       return;
     }
     void executeQuoteTransition().catch(() => {});
-  }, [draft, executeQuoteTransition, activeOption, showEntryHub, layoutSlabs.length, workspaceKind]);
+  }, [
+    activeMaterialQuoteDraft,
+    executeQuoteTransition,
+    activeOption,
+    showEntryHub,
+    layoutSlabs.length,
+    workspaceKind,
+  ]);
 
   const handleModeChange = useCallback(
     (m: LayoutStudioMode) => {
-      if (m === mode) return;
+      if (m === mode || phaseTransitionPending) return;
       if (m === "quote") {
         beginQuoteTransition();
         return;
       }
       void (async () => {
-        if (!showEntryHub) {
-          const ok = await save(draftRef.current);
-          if (!ok) return;
-        }
-        setMode(m);
-        if (m === "place" && layoutSlabs.length) {
-          const slab = layoutSlabs[0];
-          setActiveSlabId((prev) => prev ?? slab.id);
+        setPhaseTransitionPending(m);
+        try {
+          if (!showEntryHub) {
+            const ok = await save(draftRef.current);
+            if (!ok) return;
+          }
+          setMode(m);
+          if (m === "place" && layoutSlabs.length) {
+            const slab = layoutSlabs[0];
+            setActiveSlabId((prev) => prev ?? slab.id);
+          }
+        } finally {
+          setPhaseTransitionPending(null);
         }
       })();
     },
-    [mode, beginQuoteTransition, showEntryHub, save, layoutSlabs]
+    [mode, phaseTransitionPending, beginQuoteTransition, showEntryHub, save, layoutSlabs]
   );
 
   /** Default slab centroid position (stagger) — matches prior auto-place spacing. */
@@ -611,28 +1637,236 @@ export function LayoutStudioScreen({
     [updateDraftWithUndo]
   );
 
+  const mergeTracePagePieces = useCallback(
+    (d: SavedLayoutStudioState, nextPagePieces: LayoutPiece[]): LayoutPiece[] => {
+      if (isBlankWorkspace) return nextPagePieces;
+      const pages = normalizedSourcePages(d.source, d.calibration);
+      const singleSourcePage = pages.length <= 1;
+      const activePageIndex =
+        pages.find((page) => page.index === traceSourcePageIndex)?.index ?? pages[0]?.index ?? traceSourcePageIndex;
+      const remainingPieces = d.pieces.filter(
+        (piece) => !pieceBelongsToSourcePage(piece, d.pieces, activePageIndex, singleSourcePage),
+      );
+      return [
+        ...remainingPieces,
+        ...nextPagePieces.map((piece) =>
+          piece.sourcePageIndex == null && !singleSourcePage ? { ...piece, sourcePageIndex: activePageIndex } : piece,
+        ),
+      ];
+    },
+    [isBlankWorkspace, traceSourcePageIndex],
+  );
+
+  const onTracePiecesChange = useCallback(
+    (pieces: LayoutPiece[]) => {
+      updateDraftWithUndo((d) => ({ ...d, pieces: mergeTracePagePieces(d, pieces) }));
+    },
+    [mergeTracePagePieces, updateDraftWithUndo],
+  );
+
+  const onTracePiecesChangeLive = useCallback(
+    (pieces: LayoutPiece[]) => {
+      updateDraft((d) => ({ ...d, pieces: mergeTracePagePieces(d, pieces) }));
+    },
+    [mergeTracePagePieces, updateDraft],
+  );
+
+  const syncSourcePlanEditorPiecesToDraft = useCallback(
+    (pieces: LayoutPiece[], withUndo: boolean) => {
+      skipSourcePlanEditorDraftSyncRef.current = true;
+      setSourcePlanEditorPieces(pieces);
+      const nextSourcePieces = planEditorPiecesToSourcePieces(
+        pieces,
+        sourcePlanEditorFrames,
+        sourcePlanEditorDefaultPageIndex,
+        draft.calibration.pixelsPerInch,
+      );
+      if (withUndo) {
+        updateDraftWithUndo((d) => ({ ...d, pieces: nextSourcePieces }));
+      } else {
+        updateDraft((d) => ({ ...d, pieces: nextSourcePieces }));
+      }
+    },
+    [
+      draft.calibration.pixelsPerInch,
+      sourcePlanEditorDefaultPageIndex,
+      sourcePlanEditorFrames,
+      updateDraft,
+      updateDraftWithUndo,
+    ],
+  );
+
+  const commitSourcePlanEditorPiecesWithUndo = useCallback(
+    (
+      pieces: LayoutPiece[],
+      patch: (d: SavedLayoutStudioState, nextSourcePieces: LayoutPiece[]) => SavedLayoutStudioState,
+    ) => {
+      skipSourcePlanEditorDraftSyncRef.current = true;
+      setSourcePlanEditorPieces(pieces);
+      const nextSourcePieces = planEditorPiecesToSourcePieces(
+        pieces,
+        sourcePlanEditorFrames,
+        sourcePlanEditorDefaultPageIndex,
+        draft.calibration.pixelsPerInch,
+      );
+      updateDraftWithUndo((d) => patch(d, nextSourcePieces));
+    },
+    [
+      draft.calibration.pixelsPerInch,
+      sourcePlanEditorDefaultPageIndex,
+      sourcePlanEditorFrames,
+      updateDraftWithUndo,
+    ],
+  );
+
+  const onPlanCanvasPiecesChangeLive = useCallback(
+    (pieces: LayoutPiece[]) => {
+      if (sourcePlanEditorActive) {
+        syncSourcePlanEditorPiecesToDraft(pieces, false);
+        return;
+      }
+      onPiecesChangeLive(pieces);
+    },
+    [onPiecesChangeLive, sourcePlanEditorActive, syncSourcePlanEditorPiecesToDraft],
+  );
+
+  const onPlanCanvasPiecesChange = useCallback(
+    (pieces: LayoutPiece[]) => {
+      if (sourcePlanEditorActive) {
+        syncSourcePlanEditorPiecesToDraft(pieces, true);
+        return;
+      }
+      onPiecesChange(pieces);
+    },
+    [onPiecesChange, sourcePlanEditorActive, syncSourcePlanEditorPiecesToDraft],
+  );
+
+  const arrangeSourcePlanEditorPieces = useCallback(() => {
+    if (!sourcePlanEditorActive || planCanvasPieces.length === 0) return;
+    const piecesById = new Map(planCanvasPieces.map((piece) => [piece.id, piece]));
+    const childIdsByParent = new Map<string, string[]>();
+    for (const piece of planCanvasPieces) {
+      const parentId = piece.splashMeta?.parentPieceId;
+      if (!parentId || !piecesById.has(parentId)) continue;
+      const list = childIdsByParent.get(parentId);
+      if (list) list.push(piece.id);
+      else childIdsByParent.set(parentId, [piece.id]);
+    }
+    const collectGroupIds = (rootId: string): string[] => {
+      const out: string[] = [rootId];
+      const stack = [rootId];
+      while (stack.length > 0) {
+        const currentId = stack.pop()!;
+        const childIds = childIdsByParent.get(currentId) ?? [];
+        for (const childId of childIds) {
+          out.push(childId);
+          stack.push(childId);
+        }
+      }
+      return out;
+    };
+    const rootPieces = planCanvasPieces.filter((piece) => {
+      const parentId = piece.splashMeta?.parentPieceId;
+      return !parentId || !piecesById.has(parentId);
+    });
+    if (rootPieces.length === 0) return;
+    /**
+     * Arrange whole traced pages as a single unit so page-specific layouts keep their
+     * internal relationships. Splash/miter strips already move with their parent root,
+     * so grouping root pieces by source page keeps the entire page intact.
+     */
+    const pageGroups: LayoutPiece[][] = [];
+    const pageGroupIndexByKey = new Map<string, number>();
+    for (const rootPiece of rootPieces) {
+      const resolvedPageIndex = resolvedPieceSourcePageIndex(rootPiece, planCanvasPieces);
+      const pageKey = resolvedPageIndex == null ? "__unassigned__" : `page:${resolvedPageIndex}`;
+      const existingIndex = pageGroupIndexByKey.get(pageKey);
+      if (existingIndex != null) {
+        pageGroups[existingIndex]!.push(rootPiece);
+        continue;
+      }
+      pageGroupIndexByKey.set(pageKey, pageGroups.length);
+      pageGroups.push([rootPiece]);
+    }
+    let cursorX = 0;
+    let cursorY = 0;
+    let rowHeight = 0;
+    const nextRootTransforms = new Map<string, { x: number; y: number }>();
+    for (const pageGroup of pageGroups) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const rootPiece of pageGroup) {
+        const groupPieces = collectGroupIds(rootPiece.id)
+          .map((id) => piecesById.get(id))
+          .filter((piece): piece is LayoutPiece => piece != null);
+        for (const groupPiece of groupPieces) {
+          const bounds = boundsOfPoints(planDisplayPoints(groupPiece, planCanvasPieces));
+          if (!bounds) continue;
+          minX = Math.min(minX, bounds.minX);
+          minY = Math.min(minY, bounds.minY);
+          maxX = Math.max(maxX, bounds.maxX);
+          maxY = Math.max(maxY, bounds.maxY);
+        }
+      }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+        continue;
+      }
+      const groupWidth = Math.max(1, maxX - minX);
+      const groupHeight = Math.max(1, maxY - minY);
+      if (cursorX > 0 && cursorX + groupWidth > SOURCE_PLAN_EDITOR_ARRANGE_ROW_MAX_WIDTH_IN) {
+        cursorX = 0;
+        cursorY += rowHeight + SOURCE_PLAN_EDITOR_ARRANGE_GAP_IN;
+        rowHeight = 0;
+      }
+      const dx = cursorX - minX;
+      const dy = cursorY - minY;
+      for (const rootPiece of pageGroup) {
+        nextRootTransforms.set(rootPiece.id, {
+          x: (rootPiece.planTransform?.x ?? 0) + dx,
+          y: (rootPiece.planTransform?.y ?? 0) + dy,
+        });
+      }
+      cursorX += groupWidth + SOURCE_PLAN_EDITOR_ARRANGE_GAP_IN;
+      rowHeight = Math.max(rowHeight, groupHeight);
+    }
+    if (nextRootTransforms.size === 0) return;
+    onPlanCanvasPiecesChange(
+      planCanvasPieces.map((piece) =>
+        nextRootTransforms.has(piece.id)
+          ? { ...piece, planTransform: nextRootTransforms.get(piece.id)! }
+          : piece,
+      ),
+    );
+    setPlanFitAllPiecesTick((t) => t + 1);
+  }, [onPlanCanvasPiecesChange, planCanvasPieces, sourcePlanEditorActive]);
+
   const beginCalibration = useCallback(() => {
+    if (!isBlankWorkspace) {
+      setSourceCanvasMode("trace");
+      setTraceViewZoom(1);
+      setPlanBoxZoomActive(false);
+      setTraceResetViewTick((t) => t + 1);
+    }
     setCalibrationPopupOpen(true);
     setCalibrationMode(true);
     setCalibrationStep("a");
-    updateDraftWithUndo((d) => ({
-      ...d,
-      calibration: {
-        ...d.calibration,
-        pointA: null,
-        pointB: null,
-        isCalibrated: false,
-        pixelsPerInch: null,
-      },
-    }));
-  }, [updateDraftWithUndo]);
-
-  const onPlacementsChange = useCallback(
-    (placements: PiecePlacement[]) => {
-      updateDraft((d) => ({ ...d, placements }));
-    },
-    [updateDraft]
-  );
+    updateDraftWithUndo((d) =>
+      patchActiveSourcePage(d, (page) => ({
+        ...page,
+        calibration: {
+          ...(page.calibration ?? d.calibration),
+          pointA: null,
+          pointB: null,
+          isCalibrated: false,
+          pixelsPerInch: null,
+          realDistance: null,
+          unit: null,
+        },
+      })),
+    );
+  }, [isBlankWorkspace, patchActiveSourcePage, updateDraftWithUndo]);
 
   const MAX_LAYOUT_SLABS = 20;
   const primarySlabIdForPlace = layoutSlabs[0]?.id ?? null;
@@ -700,15 +1934,22 @@ export function LayoutStudioScreen({
   const canAutoNestPlace = useMemo(() => {
     if (!activeOption || layoutSlabs.length === 0) return false;
     const ppi = draft.calibration.pixelsPerInch;
-    if (!ppi || ppi <= 0) return false;
+    if (!piecesHaveAnyScale(placeVisiblePieces, ppi)) return false;
     const sid = activeSlabId ?? layoutSlabs[0]?.id ?? null;
     if (!sid) return false;
-    return draft.placements.some((p) => p.placed && p.slabId === sid);
-  }, [activeOption, activeSlabId, draft.calibration.pixelsPerInch, draft.placements, layoutSlabs]);
+    return activeMaterialPlacements.some((p) => p.placed && p.slabId === sid);
+  }, [
+    activeOption,
+    activeMaterialPlacements,
+    activeSlabId,
+    draft.calibration.pixelsPerInch,
+    layoutSlabs,
+    placeVisiblePieces,
+  ]);
 
   const applySlabAutoNest = useCallback(() => {
     const ppi = draft.calibration.pixelsPerInch;
-    if (!ppi || ppi <= 0) return;
+    if (!piecesHaveAnyScale(placeVisiblePieces, ppi)) return;
     const slabId = activeSlabId ?? layoutSlabs[0]?.id ?? null;
     if (!slabId) return;
     const slab = layoutSlabs.find((s) => s.id === slabId);
@@ -731,8 +1972,8 @@ export function LayoutStudioScreen({
     }
 
     const { placements: nextPl, warnings } = computeSlabAutoNest({
-      pieces: draft.pieces,
-      placements: draft.placements,
+      pieces: placeVisiblePieces,
+      placements: activeMaterialPlacements,
       pixelsPerInch: ppi,
       slabId,
       slabWidthIn: slab.widthIn,
@@ -743,7 +1984,7 @@ export function LayoutStudioScreen({
 
     updateDraftWithUndo((d) => ({
       ...d,
-      placements: nextPl,
+      placements: mergePlacementsForPieceIds(d.placements, nextPl, activeMaterialPieceIds),
     }));
     setAutoNestModalOpen(false);
     if (warnings.length) {
@@ -758,10 +1999,11 @@ export function LayoutStudioScreen({
     activeSlabId,
     autoNestMinGapStr,
     autoNestEdgeInsetStr,
+    activeMaterialPieceIds,
+    activeMaterialPlacements,
     draft.calibration.pixelsPerInch,
-    draft.pieces,
-    draft.placements,
     layoutSlabs,
+    placeVisiblePieces,
     updateDraftWithUndo,
   ]);
 
@@ -789,25 +2031,179 @@ export function LayoutStudioScreen({
   }, [autoNestFeedback]);
 
   const selectedPiece = draft.pieces.find((p) => p.id === selectedPieceId) ?? null;
+  const selectedPieceSize = useMemo(() => {
+    if (!selectedPiece) return null;
+    return describePieceSize(selectedPiece, draft.calibration.pixelsPerInch, draft.pieces, isBlankWorkspace);
+  }, [draft.calibration.pixelsPerInch, draft.pieces, isBlankWorkspace, selectedPiece]);
+  const materialOptionsById = useMemo(
+    () => new Map(options.map((option) => [option.id, option])),
+    [options],
+  );
+  const pieceListSourcePieces = sourcePlanEditorActive ? planCanvasPieces : draft.pieces;
+  const inspectorSelectedPiece = useMemo(
+    () =>
+      selectedPiece ? pieceListSourcePieces.find((piece) => piece.id === selectedPiece.id) ?? selectedPiece : null,
+    [pieceListSourcePieces, selectedPiece],
+  );
+  const selectedPieceMaterialRoot = useMemo(
+    () =>
+      inspectorSelectedPiece
+        ? resolvedPieceMaterialRoot(inspectorSelectedPiece, pieceListSourcePieces)
+        : null,
+    [inspectorSelectedPiece, pieceListSourcePieces],
+  );
+  const selectedPieceMaterialOptionId = useMemo(
+    () =>
+      inspectorSelectedPiece
+        ? resolvedPieceMaterialOptionId(inspectorSelectedPiece, pieceListSourcePieces)
+        : null,
+    [inspectorSelectedPiece, pieceListSourcePieces],
+  );
+  const selectedPieceMaterialOption = selectedPieceMaterialOptionId
+    ? materialOptionsById.get(selectedPieceMaterialOptionId) ?? null
+    : null;
+  const selectedPieceHasLinkedChildren = useMemo(
+    () =>
+      inspectorSelectedPiece != null &&
+      pieceListSourcePieces.some((piece) => piece.splashMeta?.parentPieceId === inspectorSelectedPiece.id),
+    [inspectorSelectedPiece, pieceListSourcePieces],
+  );
+  const pieceListEntries = useMemo(
+    () => {
+      const piecesById = new Map(pieceListSourcePieces.map((piece) => [piece.id, piece]));
+      const childPiecesByParent = new Map<string, LayoutPiece[]>();
+      for (const piece of pieceListSourcePieces) {
+        const parentId = piece.splashMeta?.parentPieceId;
+        if (!parentId || !piecesById.has(parentId)) continue;
+        const list = childPiecesByParent.get(parentId);
+        if (list) list.push(piece);
+        else childPiecesByParent.set(parentId, [piece]);
+      }
+      return pieceListSourcePieces
+        .filter((piece) => {
+          const parentId = piece.splashMeta?.parentPieceId;
+          return !parentId || !piecesById.has(parentId);
+        })
+        .map((piece, index) => {
+        const size = describePieceSize(piece, draft.calibration.pixelsPerInch, pieceListSourcePieces, isBlankWorkspace);
+        const trimmedName = piece.name.trim();
+        const trimmedNotes = piece.notes?.trim() ?? "";
+          const sinkNames = (piece.sinks ?? [])
+            .map((sink) => sink.name.trim())
+            .filter((name) => name.length > 0);
+          const stripChildren = childPiecesByParent.get(piece.id) ?? [];
+          const splashNames = stripChildren
+            .filter((child) => child.pieceRole === "splash")
+            .map((child, splashIndex) => child.name.trim() || `Splash ${splashIndex + 1}`);
+          const miterNames = stripChildren
+            .filter((child) => child.pieceRole === "miter")
+            .map((child, miterIndex) => child.name.trim() || `Miter ${miterIndex + 1}`);
+          const materialOptionId = resolvedPieceMaterialOptionId(piece, pieceListSourcePieces);
+          const materialOption = materialOptionId ? materialOptionsById.get(materialOptionId) ?? null : null;
+          return {
+            id: piece.id,
+            name: trimmedName || `Piece ${index + 1}`,
+            sizeLabel: size.overallLabel ?? (size.needsScale ? "Set scale to view size" : "Size unavailable"),
+            sizeDetail: size.detailLabel,
+            notes: trimmedNotes || "No notes",
+            sinkNames,
+            splashNames,
+            miterNames,
+            materialLabel: materialOption?.productName ?? (options.length > 0 ? "Unassigned" : "No materials added"),
+            materialAssigned: materialOption != null,
+            pageLabel: formatPiecePageLabel(
+              piece,
+              pieceListSourcePieces,
+              isBlankWorkspace,
+              sourcePages.length,
+              sourcePageNumberByIndex,
+            ),
+          };
+        });
+    },
+    [
+      draft.calibration.pixelsPerInch,
+      isBlankWorkspace,
+      materialOptionsById,
+      options.length,
+      pieceListSourcePieces,
+      sourcePageNumberByIndex,
+      sourcePages.length,
+    ],
+  );
+  const assignMaterialToPieceGroup = useCallback(
+    (rootPieceId: string, materialOptionId: string | null) => {
+      const applyAssignment = (pieces: readonly LayoutPiece[]): LayoutPiece[] => {
+        const affectedIds = new Set<string>();
+        const stack = [rootPieceId];
+        while (stack.length > 0) {
+          const currentId = stack.pop()!;
+          if (affectedIds.has(currentId)) continue;
+          affectedIds.add(currentId);
+          for (const piece of pieces) {
+            if (piece.splashMeta?.parentPieceId === currentId) {
+              stack.push(piece.id);
+            }
+          }
+        }
+        return pieces.map((piece) =>
+          affectedIds.has(piece.id) ? { ...piece, materialOptionId } : piece,
+        );
+      };
+      if (sourcePlanEditorActive) {
+        const nextPlanPieces = applyAssignment(planCanvasPieces);
+        commitSourcePlanEditorPiecesWithUndo(nextPlanPieces, (d, nextSourcePieces) => ({
+          ...d,
+          pieces: nextSourcePieces,
+        }));
+        return;
+      }
+      updateDraftWithUndo((d) => ({
+        ...d,
+        pieces: applyAssignment(d.pieces),
+      }));
+    },
+    [commitSourcePlanEditorPiecesWithUndo, planCanvasPieces, sourcePlanEditorActive, updateDraftWithUndo],
+  );
 
   const joinAvailable = useMemo(
-    () => hasFlushSnapJoinCandidate(draft.pieces),
-    [draft.pieces]
+    () => hasFlushSnapJoinCandidate(usesBlankPlanCanvas ? planCanvasPieces : draft.pieces),
+    [draft.pieces, planCanvasPieces, usesBlankPlanCanvas]
   );
 
   useEffect(() => {
     if (!joinAvailable && tool === "join") setTool("select");
   }, [joinAvailable, tool]);
 
+  const coordPerInchForPiece = useCallback(
+    (piece: LayoutPiece | null | undefined): number | null => {
+      if (!piece) return null;
+      if (usesBlankPlanCanvas) return 1;
+      const ppi =
+        piece.sourcePixelsPerInch ??
+        activeCalibration.pixelsPerInch ??
+        draft.calibration.pixelsPerInch ??
+        null;
+      return ppi && ppi > 0 ? ppi : null;
+    },
+    [activeCalibration.pixelsPerInch, draft.calibration.pixelsPerInch, usesBlankPlanCanvas],
+  );
+
+  const addSinkWorkingPieces = sourcePlanEditorActive ? planCanvasPieces : draft.pieces;
+
   const addSinkPreviewRotationDeg = useMemo(() => {
     if (!addSinkEdge) return 0;
-    const pc = draft.pieces.find((p) => p.id === addSinkEdge.pieceId);
+    const pc = addSinkWorkingPieces.find((p) => p.id === addSinkEdge.pieceId);
     if (!pc) return 0;
-    return sinkRotationDegFromEdge(pc, addSinkEdge.edgeIndex, draft.pieces) ?? 0;
-  }, [addSinkEdge, draft.pieces]);
+    return sinkRotationDegFromEdge(pc, addSinkEdge.edgeIndex, addSinkWorkingPieces) ?? 0;
+  }, [addSinkEdge, addSinkWorkingPieces]);
 
   const updateSelectedPiece = (patch: Partial<LayoutPiece>) => {
     if (!selectedPieceId) return;
+    if (sourcePlanEditorActive) {
+      onPlanCanvasPiecesChange(planCanvasPieces.map((p) => (p.id === selectedPieceId ? { ...p, ...patch } : p)));
+      return;
+    }
     updateDraftWithUndo((d) => ({
       ...d,
       pieces: d.pieces.map((p) => (p.id === selectedPieceId ? { ...p, ...patch } : p)),
@@ -816,6 +2212,14 @@ export function LayoutStudioScreen({
 
   const removeSinkFromSelected = (sinkId: string) => {
     if (!selectedPieceId) return;
+    if (sourcePlanEditorActive) {
+      onPlanCanvasPiecesChange(
+        planCanvasPieces.map((p) =>
+          p.id === selectedPieceId ? { ...p, sinks: (p.sinks ?? []).filter((s) => s.id !== sinkId) } : p,
+        ),
+      );
+      return;
+    }
     updateDraftWithUndo((d) => ({
       ...d,
       pieces: d.pieces.map((p) =>
@@ -833,15 +2237,21 @@ export function LayoutStudioScreen({
     spreadIn: PieceSinkCutout["spreadIn"];
     evenHoleBias: FaucetEvenHoleBias;
   }) => {
-    if (!isBlankWorkspace || !addSinkEdge) return;
-    const piece = draft.pieces.find((p) => p.id === addSinkEdge.pieceId);
+    if (!addSinkEdge) return;
+    const workingPieces = sourcePlanEditorActive ? planCanvasPieces : draft.pieces;
+    const piece = workingPieces.find((p) => p.id === addSinkEdge.pieceId);
     if (!piece || isPlanStripPiece(piece)) return;
-    const coordPerInch = 1;
+    const coordPerInch = coordPerInchForPiece(piece);
+    if (!coordPerInch || coordPerInch <= 0) {
+      window.alert("Set scale on this page before adding sinks in trace mode.");
+      return;
+    }
     const pl = sinkPlacementFromEdgeInCanonical(
       piece,
       addSinkEdge.edgeIndex,
-      draft.pieces,
-      input.templateKind
+      workingPieces,
+      input.templateKind,
+      coordPerInch,
     );
     if (!pl) {
       window.alert("Could not align the sink to that edge.");
@@ -862,47 +2272,55 @@ export function LayoutStudioScreen({
     const clamped = clampSinkCenter(
       sink,
       piece,
-      draft.pieces,
+      workingPieces,
       coordPerInch,
       sink.centerX,
       sink.centerY
     );
     sink = { ...sink, ...clamped };
-    if (!isSinkFullyInsidePiece(sink, piece, draft.pieces, coordPerInch)) {
+    if (!isSinkFullyInsidePiece(sink, piece, workingPieces, coordPerInch)) {
       window.alert(
         "That sink doesn’t fit entirely inside this piece. Enlarge the piece, choose a different edge, or pick a smaller template."
       );
       return;
     }
-    updateDraftWithUndo((d) => ({
-      ...d,
-      pieces: d.pieces.map((p) =>
-        p.id === piece.id ? { ...p, sinks: [...(p.sinks ?? []), sink], sinkCount: 0 } : p
-      ),
-    }));
+    const nextPieces = workingPieces.map((p) =>
+      p.id === piece.id ? { ...p, sinks: [...(p.sinks ?? []), sink], sinkCount: 0 } : p,
+    );
+    if (sourcePlanEditorActive) {
+      onPlanCanvasPiecesChange(nextPieces);
+      return;
+    }
+    updateDraftWithUndo((d) => ({ ...d, pieces: nextPieces }));
   };
 
   const duplicateSelected = () => {
-    if (!selectedPiece) return;
+    const workingPieces = sourcePlanEditorActive ? planCanvasPieces : draft.pieces;
+    const pieceToDuplicate =
+      sourcePlanEditorActive
+        ? workingPieces.find((p) => p.id === selectedPieceId) ?? null
+        : selectedPiece;
+    if (!pieceToDuplicate) return;
     const nid = crypto.randomUUID();
-    const offsetStep = isBlankWorkspace ? 6 : 24;
-    const baseTransform = selectedPiece.planTransform ?? { x: 0, y: 0 };
+    const offsetStep = usesBlankPlanCanvas ? 6 : 24;
+    const baseTransform = pieceToDuplicate.planTransform ?? { x: 0, y: 0 };
     const baseCopy: LayoutPiece = {
-      ...selectedPiece,
+      ...pieceToDuplicate,
       id: nid,
-      name: `${selectedPiece.name} copy`,
-      points: selectedPiece.points.map((q) => ({ ...q })),
-      sinks: selectedPiece.sinks?.map((s) => ({ ...s, id: crypto.randomUUID() })),
-      manualDimensions: selectedPiece.manualDimensions
-        ? selectedPiece.manualDimensions.kind === "rectangle"
-          ? { ...selectedPiece.manualDimensions }
-          : { ...selectedPiece.manualDimensions }
+      name: `${pieceToDuplicate.name} copy`,
+      materialOptionId: resolvedPieceMaterialOptionId(pieceToDuplicate, workingPieces),
+      points: pieceToDuplicate.points.map((q) => ({ ...q })),
+      sinks: pieceToDuplicate.sinks?.map((s) => ({ ...s, id: crypto.randomUUID() })),
+      manualDimensions: pieceToDuplicate.manualDimensions
+        ? pieceToDuplicate.manualDimensions.kind === "rectangle"
+          ? { ...pieceToDuplicate.manualDimensions }
+          : { ...pieceToDuplicate.manualDimensions }
         : undefined,
       splashMeta: undefined,
-      pieceRole: isPlanStripPiece(selectedPiece) ? "countertop" : selectedPiece.pieceRole,
-      edgeTags: selectedPiece.edgeTags
+      pieceRole: isPlanStripPiece(pieceToDuplicate) ? "countertop" : pieceToDuplicate.pieceRole,
+      edgeTags: pieceToDuplicate.edgeTags
         ? (() => {
-            const { miterEdgeIndices: _omitMiter, ...restEt } = selectedPiece.edgeTags;
+            const { miterEdgeIndices: _omitMiter, ...restEt } = pieceToDuplicate.edgeTags;
             return { ...restEt, splashEdges: [] };
           })()
         : undefined,
@@ -917,30 +2335,49 @@ export function LayoutStudioScreen({
           y: baseTransform.y + offsetStep * step,
         },
       };
-      if (!anyPiecesOverlap([...draft.pieces, candidate])) {
+      if (!anyPiecesOverlap([...workingPieces, candidate])) {
         copy = candidate;
         break;
       }
       copy = candidate;
     }
-    updateDraftWithUndo((d) => ({
-      ...d,
-      pieces: [...d.pieces, copy],
-      placements: [
-        ...d.placements,
-        {
-          id: crypto.randomUUID(),
-          pieceId: nid,
-          slabId: null,
-          x: 0,
-          y: 0,
-          rotation: 0,
-          placed: false,
-        },
-      ],
-    }));
+    if (sourcePlanEditorActive) {
+      commitSourcePlanEditorPiecesWithUndo([...workingPieces, copy], (d, nextSourcePieces) => ({
+        ...d,
+        pieces: nextSourcePieces,
+        placements: [
+          ...d.placements,
+          {
+            id: crypto.randomUUID(),
+            pieceId: nid,
+            slabId: null,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            placed: false,
+          },
+        ],
+      }));
+    } else {
+      updateDraftWithUndo((d) => ({
+        ...d,
+        pieces: [...d.pieces, copy],
+        placements: [
+          ...d.placements,
+          {
+            id: crypto.randomUUID(),
+            pieceId: nid,
+            slabId: null,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            placed: false,
+          },
+        ],
+      }));
+    }
     setSelectedPieceId(nid);
-    if (isBlankWorkspace) {
+    if (usesBlankPlanCanvas) {
       pendingDuplicateFitRef.current = true;
       setPlanFitAllPiecesTick((t) => t + 1);
     }
@@ -982,49 +2419,70 @@ export function LayoutStudioScreen({
 
   const updatePlacementRotationLive = useCallback(
     (deg: number) => {
-      if (!selectedPieceId) return;
+      if (!placeSelectedPieceId) return;
       updateDraft((d) => ({
         ...d,
         placements: d.placements.map((p) =>
-          p.pieceId === selectedPieceId ? { ...p, rotation: deg } : p
+          p.pieceId === placeSelectedPieceId ? { ...p, rotation: deg } : p
         ),
       }));
     },
-    [selectedPieceId, updateDraft]
+    [placeSelectedPieceId, updateDraft]
   );
 
   const rotateSelectedPlacementOnSlabBy = useCallback(
     (deltaDeg: number) => {
-      if (!selectedPieceId) return;
+      if (!placeSelectedPieceId) return;
       updateDraftWithUndo((d) => {
-        const pl = d.placements.find((p) => p.pieceId === selectedPieceId);
+        const pl = d.placements.find((p) => p.pieceId === placeSelectedPieceId);
         if (!pl?.placed || !pl.slabId) return d;
         const r = ((pl.rotation ?? 0) + deltaDeg) % 360;
         const rotation = r < 0 ? r + 360 : r;
         return {
           ...d,
           placements: d.placements.map((p) =>
-            p.pieceId === selectedPieceId ? { ...p, rotation } : p
+            p.pieceId === placeSelectedPieceId ? { ...p, rotation } : p
           ),
         };
       });
     },
-    [selectedPieceId, updateDraftWithUndo]
+    [placeSelectedPieceId, updateDraftWithUndo]
   );
 
   const removeSelectedPieceFromSlab = useCallback(() => {
-    if (!selectedPieceId) return;
+    if (!placeSelectedPieceId) return;
     updateDraftWithUndo((d) => {
-      const pl = d.placements.find((p) => p.pieceId === selectedPieceId);
+      const pl = d.placements.find((p) => p.pieceId === placeSelectedPieceId);
       if (!pl?.placed || !pl.slabId) return d;
       return {
         ...d,
         placements: d.placements.map((p) =>
-          p.pieceId === selectedPieceId ? { ...p, placed: false, slabId: null } : p
+          p.pieceId === placeSelectedPieceId ? { ...p, placed: false, slabId: null } : p
         ),
       };
     });
-  }, [selectedPieceId, updateDraftWithUndo]);
+  }, [placeSelectedPieceId, updateDraftWithUndo]);
+
+  const placeSeamOnSlab = useCallback(
+    (request: PlaceSeamRequest): boolean => {
+      const split = splitPlacedPieceAtSeam({
+        pieces: draftRef.current.pieces,
+        placements: draftRef.current.placements,
+        pixelsPerInch: draftRef.current.calibration.pixelsPerInch,
+        request,
+      });
+      if (!split) return false;
+      updateDraftWithUndo((d) => ({
+        ...d,
+        pieces: split.pieces,
+        placements: split.placements,
+      }));
+      setSelectedPieceId(split.selectedPieceId);
+      setSelectedEdge(null);
+      return true;
+    },
+    [updateDraftWithUndo]
+  );
 
   const rotateSelectedPlanPiece = (deltaDeg: number) => {
     if (!selectedPieceId) return;
@@ -1070,10 +2528,16 @@ export function LayoutStudioScreen({
     if (!edge) return;
     const h = parseFloat(splashHeightInput);
     if (!Number.isFinite(h) || h <= 0) return;
-    const parent = draft.pieces.find((p) => p.id === edge.pieceId);
+    const workingPieces = usesBlankPlanCanvas ? planCanvasPieces : draft.pieces;
+    const parent = workingPieces.find((p) => p.id === edge.pieceId);
     if (!parent || isPlanStripPiece(parent)) return;
-    const disp = planDisplayPoints(parent);
-    const pts = buildSplashRectanglePoints(disp, edge.edgeIndex, h);
+    const coordPerInch = coordPerInchForPiece(parent);
+    if (!coordPerInch || coordPerInch <= 0) {
+      window.alert("Set scale on this page before adding splash or miter pieces in trace mode.");
+      return;
+    }
+    const disp = planDisplayPoints(parent, workingPieces);
+    const pts = buildSplashRectanglePoints(disp, edge.edgeIndex, h, coordPerInch);
     const ox = parent.planTransform?.x ?? 0;
     const oy = parent.planTransform?.y ?? 0;
     const canonical = pts.map((p) => ({ x: p.x - ox, y: p.y - oy }));
@@ -1081,16 +2545,19 @@ export function LayoutStudioScreen({
     const n = ring.length;
     const a = ring[edge.edgeIndex];
     const b = ring[(edge.edgeIndex + 1) % n];
-    const widthIn = Math.hypot(b.x - a.x, b.y - a.y);
+    const widthIn = Math.hypot(b.x - a.x, b.y - a.y) / coordPerInch;
     const splashId = crypto.randomUUID();
     const stripRole = edgeStripKind === "miter" ? "miter" : "splash";
     const newPiece: LayoutPiece = {
       id: splashId,
       name: edgeStripKind === "miter" ? `${parent.name} miter` : `${parent.name} splash`,
+      materialOptionId: resolvedPieceMaterialOptionId(parent, workingPieces),
       points: canonical,
       sinkCount: 0,
       shapeKind: "rectangle",
       source: "manual",
+      sourcePageIndex: parent.sourcePageIndex,
+      sourcePixelsPerInch: parent.sourcePixelsPerInch,
       pieceRole: stripRole,
       splashMeta: {
         parentPieceId: parent.id,
@@ -1108,45 +2575,62 @@ export function LayoutStudioScreen({
             }
           : undefined,
     };
-    updateDraftWithUndo((d) => ({
-      ...d,
-      pieces: [
-        ...d.pieces.map((p) => {
-          if (p.id !== parent.id) return p;
-          const rest = (p.edgeTags?.splashEdges ?? []).filter((e) => e.edgeIndex !== edge.edgeIndex);
-          const miterMerged =
-            edgeStripKind === "miter"
-              ? [...new Set([...(p.edgeTags?.miterEdgeIndices ?? []), edge.edgeIndex])].sort(
-                  (a, b) => a - b
-                )
-              : p.edgeTags?.miterEdgeIndices;
-          return {
-            ...p,
-            edgeTags: {
-              ...p.edgeTags,
-              ...(miterMerged?.length ? { miterEdgeIndices: miterMerged } : {}),
-              splashEdges: [
-                ...rest,
-                { edgeIndex: edge.edgeIndex, splashPieceId: splashId, heightIn: h },
-              ],
-            },
-          };
-        }),
-        newPiece,
-      ],
-      placements: [
-        ...d.placements,
-        {
-          id: crypto.randomUUID(),
-          pieceId: splashId,
-          slabId: null,
-          x: 0,
-          y: 0,
-          rotation: 0,
-          placed: false,
-        },
-      ],
-    }));
+    const nextPieces = [
+      ...workingPieces.map((p) => {
+        if (p.id !== parent.id) return p;
+        const rest = (p.edgeTags?.splashEdges ?? []).filter((e) => e.edgeIndex !== edge.edgeIndex);
+        const miterMerged =
+          edgeStripKind === "miter"
+            ? [...new Set([...(p.edgeTags?.miterEdgeIndices ?? []), edge.edgeIndex])].sort(
+                (a, b) => a - b,
+              )
+            : p.edgeTags?.miterEdgeIndices;
+        return {
+          ...p,
+          edgeTags: {
+            ...p.edgeTags,
+            ...(miterMerged?.length ? { miterEdgeIndices: miterMerged } : {}),
+            splashEdges: [...rest, { edgeIndex: edge.edgeIndex, splashPieceId: splashId, heightIn: h }],
+          },
+        };
+      }),
+      newPiece,
+    ];
+    if (sourcePlanEditorActive) {
+      commitSourcePlanEditorPiecesWithUndo(nextPieces, (d, nextSourcePieces) => ({
+        ...d,
+        pieces: nextSourcePieces,
+        placements: [
+          ...d.placements,
+          {
+            id: crypto.randomUUID(),
+            pieceId: splashId,
+            slabId: null,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            placed: false,
+          },
+        ],
+      }));
+    } else {
+      updateDraftWithUndo((d) => ({
+        ...d,
+        pieces: nextPieces,
+        placements: [
+          ...d.placements,
+          {
+            id: crypto.randomUUID(),
+            pieceId: splashId,
+            slabId: null,
+            x: 0,
+            y: 0,
+            rotation: 0,
+            placed: false,
+          },
+        ],
+      }));
+    }
     setSplashModalOpen(false);
     setSplashTargetEdge(null);
     setEdgeStripKind("splash");
@@ -1165,48 +2649,192 @@ export function LayoutStudioScreen({
       );
       if (!ok) return;
     }
+    /**
+     * Reset source-canvas UI before swapping workspaces so importing from Blank starts
+     * from the same trace-state as a fresh source-backed session.
+     */
+    setSourcePlanEditorPieces([]);
+    skipSourcePlanEditorDraftSyncRef.current = false;
+    setSourceCanvasMode("trace");
+    setTraceViewZoom(1);
+    setTraceResetViewTick((t) => t + 1);
+    setTraceZoomToSelectedTick(0);
+    setPlanBoxZoomActive(false);
+    setSelectedEdge(null);
+    setSelectedFilletEdges([]);
+    setTool("select");
+    const kind = layoutSourceKindFromFile(file);
     setUploading(true);
+    setUploadStage("uploading");
+    setUploadProgress(0);
+    setUploadStatusText(`Starting upload • ${formatUploadSize(file.size)}`);
+    setPdfRenderBusy(false);
+    setPdfRenderStatusText(null);
+    setPdfRenderFailedPages({});
+    uploadedPdfFileRef.current = null;
     try {
-      const kind = layoutSourceKindFromFile(file);
-      const { downloadUrl } = await uploadJobLayoutSource(ownerUserId, job.id, file);
+      const { downloadUrl, storagePath } = await uploadJobLayoutSource(ownerUserId, job.id, file, {
+        onProgress: ({ percent }) => {
+          setUploadStage("uploading");
+          setUploadProgress(percent);
+          setUploadStatusText(
+            percent >= 99
+              ? "Finalizing secure upload..."
+              : `${Math.round(percent)}% of ${formatUploadSize(file.size)} uploaded`,
+          );
+        },
+      });
+      setUploadStage("processing");
+      setUploadProgress(100);
+      setUploadStatusText(kind === "pdf" ? "Reading PDF pages and building frames..." : "Preparing image...");
       const uploadedAt = new Date().toISOString();
       setUndoStack([]);
       setRedoStack([]);
+      setSelectedPieceId(null);
+      setActivePdfPageImageUrl(null);
+      setPdfPageThumbUrls({});
+      setSourceCanvasMode("trace");
 
       if (kind === "pdf") {
-        const { pngBlob, width, height } = await renderPdfFileFirstPageToDataUrl(file, 2);
-        const { downloadUrl: previewImageUrl } = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, pngBlob);
-        updateDraft((d) => ({
-          ...d,
-          workspaceKind: "source",
-          pieces: [],
-          placements: [],
-          slabClones: [],
-          source: {
-            kind: "pdf",
-            fileUrl: downloadUrl,
-            previewImageUrl,
-            fileName: file.name,
-            uploadedAt,
-            sourceWidthPx: width,
-            sourceHeightPx: height,
-          },
-          calibration: {
-            ...d.calibration,
-            isCalibrated: false,
-            pointA: null,
-            pointB: null,
-            realDistance: null,
-            unit: null,
-            pixelsPerInch: null,
-          },
-        }));
+        uploadedPdfFileRef.current = { uploadedAt, file };
+        setUploadStatusText("Inspecting PDF pages...");
+        const pageManifest = await inspectPdfFilePages(file);
+        setUploadStatusText(`Building ${pageManifest.length} page ${pageManifest.length === 1 ? "frame" : "frames"}...`);
+        const stacked = buildStackedPdfPages(
+          pageManifest.map((page) => ({
+            pageNumber: page.pageNumber,
+            widthPx: page.width,
+            heightPx: page.height,
+          })),
+        );
+        setActiveSourcePageIndex(stacked.pages[0]?.index ?? 0);
+        try {
+          const renderedPages = await renderPdfFilePagesToDataUrls(
+            file,
+            stacked.pages.map((page) => page.pageNumber),
+            1.5,
+            ({ pageNumber, renderedCount, totalCount }) => {
+              setUploadProgress((renderedCount / Math.max(totalCount, 1)) * 100);
+              setUploadStatusText(`Rendering page ${pageNumber} of ${totalCount}...`);
+            },
+          );
+          const pageMap = new Map(renderedPages.map((page) => [page.pageNumber, page.dataUrl]));
+          const thumbMap = Object.fromEntries(
+            stacked.pages
+              .map((page) => {
+                const dataUrl = pageMap.get(page.pageNumber);
+                return dataUrl ? [page.index, dataUrl] : null;
+              })
+              .filter((entry): entry is [number, string] => entry != null),
+          );
+          let persistedPreviews = new Map<number, { downloadUrl: string; storagePath: string }>();
+          setUploadStatusText(
+            `Saving ${renderedPages.length} page ${renderedPages.length === 1 ? "preview" : "previews"}...`,
+          );
+          const persistedPreviewResults = await Promise.allSettled(
+            renderedPages.map(async (page) => {
+              const uploadedPreview = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, page.pngBlob, {
+                nameHint: `pdf-page-${page.pageNumber}`,
+              });
+              return [page.pageNumber, uploadedPreview] as const;
+            }),
+          );
+          persistedPreviews = new Map(
+            persistedPreviewResults.flatMap((result) =>
+              result.status === "fulfilled" ? [[result.value[0], result.value[1]]] : [],
+            ),
+          );
+          const previewFailureCount = persistedPreviewResults.filter(
+            (result) => result.status === "rejected",
+          ).length;
+          if (previewFailureCount > 0) {
+            setUploadError(
+              `${previewFailureCount} PDF page ${
+                previewFailureCount === 1 ? "preview" : "previews"
+              } could not be saved. Re-upload the plan if a page later reopens without its cached preview.`,
+            );
+          }
+          const persistedPages = stacked.pages.map((page) => ({
+            ...page,
+            previewImageUrl: persistedPreviews.get(page.pageNumber)?.downloadUrl,
+            previewStoragePath: persistedPreviews.get(page.pageNumber)?.storagePath,
+          }));
+          setPdfPageThumbUrls(thumbMap);
+          if (stacked.pages[0]) {
+            setActivePdfPageImageUrl(thumbMap[stacked.pages[0].index] ?? null);
+          }
+          setUploadStatusText("Building plan workspace...");
+          updateDraft((d) => ({
+            ...d,
+            workspaceKind: "source",
+            pieces: [],
+            placements: [],
+            slabClones: [],
+            source: {
+              kind: "pdf",
+              fileUrl: downloadUrl,
+              fileStoragePath: storagePath,
+              previewImageUrl: persistedPages[0]?.previewImageUrl,
+              previewStoragePath: persistedPages[0]?.previewStoragePath,
+              fileName: file.name,
+              uploadedAt,
+              pages: persistedPages,
+              sourceWidthPx: stacked.totalWidth,
+              sourceHeightPx: stacked.totalHeight,
+            },
+            calibration: {
+              ...d.calibration,
+              isCalibrated: false,
+              pointA: null,
+              pointB: null,
+              realDistance: null,
+              unit: null,
+              pixelsPerInch: null,
+            },
+          }));
+        } catch (err) {
+          setActivePdfPageImageUrl(null);
+          setPdfPageThumbUrls({});
+          setUploadError(
+            err instanceof Error
+              ? `PDF uploaded, but the page previews could not be rendered: ${err.message}`
+              : "PDF uploaded, but the page previews could not be rendered.",
+          );
+          updateDraft((d) => ({
+            ...d,
+            workspaceKind: "source",
+            pieces: [],
+            placements: [],
+            slabClones: [],
+            source: {
+              kind: "pdf",
+              fileUrl: downloadUrl,
+              fileStoragePath: storagePath,
+              fileName: file.name,
+              uploadedAt,
+              pages: stacked.pages,
+              sourceWidthPx: stacked.totalWidth,
+              sourceHeightPx: stacked.totalHeight,
+            },
+            calibration: {
+              ...d.calibration,
+              isCalibrated: false,
+              pointA: null,
+              pointB: null,
+              realDistance: null,
+              unit: null,
+              pixelsPerInch: null,
+            },
+          }));
+        }
       } else {
+        uploadedPdfFileRef.current = null;
         await new Promise<void>((resolve, reject) => {
           const img = new Image();
           const o = URL.createObjectURL(file);
           img.onload = () => {
             URL.revokeObjectURL(o);
+            setUploadStatusText("Preparing plan canvas...");
             updateDraft((d) => ({
               ...d,
               workspaceKind: "source",
@@ -1216,8 +2844,28 @@ export function LayoutStudioScreen({
               source: {
                 kind: "image",
                 fileUrl: downloadUrl,
+                fileStoragePath: storagePath,
                 fileName: file.name,
                 uploadedAt,
+                pages: [
+                  {
+                    index: 0,
+                    pageNumber: 1,
+                    widthPx: img.naturalWidth,
+                    heightPx: img.naturalHeight,
+                    originX: 0,
+                    originY: 0,
+                    calibration: {
+                      ...d.calibration,
+                      isCalibrated: false,
+                      pointA: null,
+                      pointB: null,
+                      realDistance: null,
+                      unit: null,
+                      pixelsPerInch: null,
+                    },
+                  },
+                ],
                 sourceWidthPx: img.naturalWidth,
                 sourceHeightPx: img.naturalHeight,
               },
@@ -1247,45 +2895,66 @@ export function LayoutStudioScreen({
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
+      setUploadStage("uploading");
+      setUploadStatusText(null);
     }
   };
 
   const onCalibrationPoint = (p: { x: number; y: number }) => {
     if (calibrationStep === "a") {
-      updateDraftWithUndo((d) => ({
-        ...d,
-        calibration: { ...d.calibration, pointA: p, pointB: null },
-      }));
+      updateDraftWithUndo((d) =>
+        patchActiveSourcePage(d, (page) => ({
+          ...page,
+          calibration: { ...(page.calibration ?? d.calibration), pointA: p, pointB: null },
+        })),
+      );
       setCalibrationStep("b");
       return;
     }
     if (calibrationStep === "b") {
-      updateDraftWithUndo((d) => ({
-        ...d,
-        calibration: { ...d.calibration, pointB: p },
-      }));
+      updateDraftWithUndo((d) =>
+        patchActiveSourcePage(d, (page) => ({
+          ...page,
+          calibration: { ...(page.calibration ?? d.calibration), pointB: p },
+        })),
+      );
       setCalibrationStep("idle");
       setCalibrationMode(false);
     }
   };
 
   const applyCalibration = () => {
-    const a = draft.calibration.pointA;
-    const b = draft.calibration.pointB;
+    const a = activeCalibration.pointA;
+    const b = activeCalibration.pointB;
     const raw = parseFloat(distanceInput);
     if (!a || !b || !Number.isFinite(raw) || raw <= 0) return;
     const ppi = pixelsPerInchFromSegment(a, b, raw, distanceUnit);
     if (ppi == null) return;
-    updateDraftWithUndo((d) => ({
-      ...d,
-      calibration: {
-        ...d.calibration,
-        isCalibrated: true,
-        realDistance: raw,
-        unit: distanceUnit,
-        pixelsPerInch: ppi,
-      },
-    }));
+    updateDraftWithUndo((d) => {
+      const singleSourcePage = normalizedSourcePages(d.source, d.calibration).length === 1;
+      return {
+        ...patchActiveSourcePage(d, (page) => ({
+        ...page,
+        calibration: {
+          ...(page.calibration ?? d.calibration),
+          isCalibrated: true,
+          realDistance: raw,
+          unit: distanceUnit,
+          pixelsPerInch: ppi,
+        },
+      })),
+        pieces: d.pieces.map((piece) =>
+          pieceBelongsToSourcePage(piece, d.pieces, activeSourcePageIndex, singleSourcePage)
+            ? {
+                ...piece,
+                sourcePageIndex: activeSourcePageIndex,
+                sourcePixelsPerInch: ppi,
+              }
+            : piece,
+        ),
+      };
+    });
     setCalibrationPopupOpen(false);
     setCalibrationMode(false);
     setCalibrationStep("idle");
@@ -1299,7 +2968,7 @@ export function LayoutStudioScreen({
 
   useEffect(() => {
     if (!calibrationPopupOpen) return;
-    setCalibrationPopupPos({ x: 13, y: 13 });
+    setCalibrationPopupPos(defaultCalibrationPopupPos());
   }, [calibrationPopupOpen, planCanvasExpanded]);
 
   useEffect(() => {
@@ -1324,6 +2993,129 @@ export function LayoutStudioScreen({
     };
   }, []);
 
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      const drag = inspectorPanelDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      setInspectorPanelPos({
+        x: Math.max(8, drag.originX - (e.clientX - drag.startX)),
+        y: Math.max(56, drag.originY + (e.clientY - drag.startY)),
+      });
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const drag = inspectorPanelDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      inspectorPanelDragRef.current = null;
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      const drag = pieceListPanelDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      setPieceListPanelPos({
+        x: Math.max(8, drag.originX - (e.clientX - drag.startX)),
+        y: Math.max(8, drag.originY - (e.clientY - drag.startY)),
+      });
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      const drag = pieceListPanelDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      pieceListPanelDragRef.current = null;
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!materialMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (target && materialMenuRef.current?.contains(target)) return;
+      if (target && materialMenuPopoverRef.current?.contains(target)) return;
+      setMaterialMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMaterialMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [materialMenuOpen]);
+
+  useLayoutEffect(() => {
+    if (!materialMenuOpen) {
+      setMaterialMenuPopoverStyle(null);
+      return;
+    }
+    if (typeof window === "undefined") return;
+
+    const updatePopoverPosition = () => {
+      const trigger = materialMenuTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const viewportPadding = 12;
+      const availableWidth = Math.max(220, window.innerWidth - viewportPadding * 2);
+      const preferredWidth = Math.max(rect.width, 390);
+      const popoverWidth = Math.min(preferredWidth, availableWidth);
+      const left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        Math.max(viewportPadding, window.innerWidth - popoverWidth - viewportPadding),
+      );
+      const top = rect.bottom + 8;
+      const maxHeight = Math.max(220, window.innerHeight - top - viewportPadding);
+      setMaterialMenuPopoverStyle({
+        position: "fixed",
+        top,
+        left,
+        width: popoverWidth,
+        maxWidth: `calc(100vw - ${viewportPadding * 2}px)`,
+        maxHeight,
+        overflowY: "auto",
+      });
+    };
+
+    updatePopoverPosition();
+    window.addEventListener("resize", updatePopoverPosition);
+    window.addEventListener("scroll", updatePopoverPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePopoverPosition);
+      window.removeEventListener("scroll", updatePopoverPosition, true);
+    };
+  }, [materialMenuOpen]);
+
+  const renderMaterialMenuPopover = useCallback(
+    (children: ReactNode, ariaLabel = "Area materials") => {
+      if (!materialMenuOpen || typeof document === "undefined") return null;
+      return createPortal(
+        <div
+          ref={materialMenuPopoverRef}
+          className="ls-material-menu-popover glass-panel"
+          role="dialog"
+          aria-label={ariaLabel}
+          style={materialMenuPopoverStyle ?? undefined}
+        >
+          {children}
+        </div>,
+        document.body,
+      );
+    },
+    [materialMenuOpen, materialMenuPopoverStyle],
+  );
+
   const beginCalibrationPopupDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     calibrationPopupDragRef.current = {
       pointerId: e.pointerId,
@@ -1334,9 +3126,29 @@ export function LayoutStudioScreen({
     };
   }, [calibrationPopupPos.x, calibrationPopupPos.y]);
 
-  const placementForSelected = draft.placements.find((p) => p.pieceId === selectedPieceId);
+  const beginInspectorPanelDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    inspectorPanelDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: inspectorPanelPos.x,
+      originY: inspectorPanelPos.y,
+    };
+  }, [inspectorPanelPos.x, inspectorPanelPos.y]);
+
+  const beginPieceListPanelDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    pieceListPanelDragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: pieceListPanelPos.x,
+      originY: pieceListPanelPos.y,
+    };
+  }, [pieceListPanelPos.x, pieceListPanelPos.y]);
+
+  const placementForSelected = activeMaterialPlacements.find((p) => p.pieceId === placeSelectedPieceId);
   const canRotatePlacementOnSlab = !!(
-    selectedPieceId &&
+    placeSelectedPieceId &&
     placementForSelected?.placed &&
     placementForSelected?.slabId
   );
@@ -1344,6 +3156,35 @@ export function LayoutStudioScreen({
 
   const applyManualDimensions = (next: ManualPieceDimensions) => {
     if (!selectedPieceId) return;
+    if (sourcePlanEditorActive) {
+      const piece = planCanvasPieces.find((p) => p.id === selectedPieceId);
+      if (!piece) return;
+      const anchor = piece.planTransform ?? piece.points[0] ?? { x: 0, y: 0 };
+      const localized: LayoutPiece = {
+        ...piece,
+        points: piece.points.map((point) => ({ x: point.x - anchor.x, y: point.y - anchor.y })),
+        sinks: piece.sinks?.map((sink) => ({
+          ...sink,
+          centerX: sink.centerX - anchor.x,
+          centerY: sink.centerY - anchor.y,
+        })),
+        edgeArcCircleIn: piece.edgeArcCircleIn?.map((circle) =>
+          circle
+            ? {
+                ...circle,
+                cx: circle.cx - anchor.x,
+                cy: circle.cy - anchor.y,
+              }
+            : null,
+        ),
+        planTransform: { x: anchor.x, y: anchor.y },
+      };
+      const nextPiece = applyManualDimensionsToPiece(localized, next);
+      onPlanCanvasPiecesChange(
+        planCanvasPieces.map((p) => (p.id === selectedPieceId ? nextPiece : p)),
+      );
+      return;
+    }
     updateDraftWithUndo((d) => ({
       ...d,
       pieces: d.pieces.map((p) =>
@@ -1358,14 +3199,14 @@ export function LayoutStudioScreen({
   }, [tool]);
 
   useEffect(() => {
-    if (!isBlankWorkspace) {
+    if (!usesBlankPlanCanvas) {
       setSelectedEdge(null);
       setSelectedFilletEdges([]);
     }
-  }, [isBlankWorkspace]);
+  }, [usesBlankPlanCanvas]);
 
   useEffect(() => {
-    if (!isBlankWorkspace || mode !== "trace") return;
+    if (!usesBlankPlanCanvas || mode !== "trace") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       if (tool !== "select") return;
@@ -1377,7 +3218,8 @@ export function LayoutStudioScreen({
         return;
       }
       e.preventDefault();
-      const r = removeCornerFilletsBatch(draftRef.current.pieces, targets);
+      const workingPieces = sourcePlanEditorActive ? planCanvasPieces : draftRef.current.pieces;
+      const r = removeCornerFilletsBatch(workingPieces, targets);
       if (!r.ok) {
         window.alert(r.reason);
         return;
@@ -1386,19 +3228,17 @@ export function LayoutStudioScreen({
         window.alert("Removing these radii would cause a piece to overlap another.");
         return;
       }
-      updateDraftWithUndo((d) => ({ ...d, pieces: r.pieces }));
+      if (sourcePlanEditorActive) {
+        onPlanCanvasPiecesChange(r.pieces);
+      } else {
+        updateDraftWithUndo((d) => ({ ...d, pieces: r.pieces }));
+      }
       setSelectedFilletEdges([]);
       setSelectedEdge(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isBlankWorkspace, mode, tool, updateDraftWithUndo]);
-
-  useEffect(() => {
-    if (mode !== "trace") {
-      setPlanCanvasExpanded(false);
-    }
-  }, [mode]);
+  }, [mode, onPlanCanvasPiecesChange, planCanvasPieces, sourcePlanEditorActive, tool, updateDraftWithUndo, usesBlankPlanCanvas]);
 
   useEffect(() => {
     if (!planCanvasExpanded) {
@@ -1428,6 +3268,107 @@ export function LayoutStudioScreen({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [planCanvasExpanded]);
 
+  useLayoutEffect(() => {
+    if (mode !== "place" || !planCanvasExpanded || !placeSplitView) {
+      setPlaceSlabRegionViewportHeight(null);
+      return;
+    }
+
+    let frameId = 0;
+    const measure = () => {
+      const region = placeSlabRegionRef.current;
+      if (!region) return;
+      const rect = region.getBoundingClientRect();
+      const nextHeight = Math.max(180, Math.floor(window.innerHeight - rect.top - 8));
+      setPlaceSlabRegionViewportHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frameId);
+      frameId = window.requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => scheduleMeasure()) : null;
+    const region = placeSlabRegionRef.current;
+    if (resizeObserver && region) {
+      resizeObserver.observe(region);
+      if (region.parentElement) resizeObserver.observe(region.parentElement);
+    }
+    window.addEventListener("resize", scheduleMeasure);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, [mode, planCanvasExpanded, placeSplitView, layoutSlabs.length]);
+
+  const clampPlaceSplitLeftPct = useCallback((value: number) => {
+    return Math.min(72, Math.max(28, value));
+  }, []);
+
+  const updatePlaceSplitLeftPctFromClientX = useCallback(
+    (clientX: number) => {
+      const rect = placeSplitContainerRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      const next = ((clientX - rect.left) / rect.width) * 100;
+      setPlaceSplitLeftPct(clampPlaceSplitLeftPct(next));
+    },
+    [clampPlaceSplitLeftPct],
+  );
+
+  const handlePlaceSplitResizePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!placeSplitView) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const handle = e.currentTarget;
+      try {
+        handle.setPointerCapture(e.pointerId);
+      } catch {
+        /* noop */
+      }
+      updatePlaceSplitLeftPctFromClientX(e.clientX);
+      const onPointerMove = (event: PointerEvent) => {
+        updatePlaceSplitLeftPctFromClientX(event.clientX);
+      };
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        window.removeEventListener("pointercancel", onPointerUp);
+        try {
+          handle.releasePointerCapture(e.pointerId);
+        } catch {
+          /* noop */
+        }
+      };
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    },
+    [placeSplitView, updatePlaceSplitLeftPctFromClientX],
+  );
+
+  const handlePlaceSplitResizeKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!placeSplitView) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPlaceSplitLeftPct((prev) => clampPlaceSplitLeftPct(prev - 2));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPlaceSplitLeftPct((prev) => clampPlaceSplitLeftPct(prev + 2));
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        setPlaceSplitLeftPct(28);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        setPlaceSplitLeftPct(72);
+      }
+    },
+    [clampPlaceSplitLeftPct, placeSplitView],
+  );
+
   const showLayoutRail = false;
 
   /** Header kicker: customer name · job name (replaces “Layout Studio · …” on every phase). */
@@ -1441,8 +3382,21 @@ export function LayoutStudioScreen({
 
   const tracePieceInspectorPanel =
     selectedPiece && mode === "trace" ? (
-      <div className="ls-inspector ls-inspector--overlay-canvas glass-panel">
-        <p className="ls-card-title">Piece details</p>
+      <div
+        className="ls-inspector ls-inspector--overlay-canvas glass-panel"
+        style={{ right: inspectorPanelPos.x, top: inspectorPanelPos.y }}
+      >
+        <div className="ls-inspector-head">
+          <div
+            className="ls-inspector-handle"
+            onPointerDown={beginInspectorPanelDrag}
+            title="Drag piece details panel"
+          >
+            <p className="ls-card-title">Piece details</p>
+            <p className="ls-muted ls-inspector-sub">Drag to reposition.</p>
+          </div>
+        </div>
+        <div className="ls-inspector-scroll">
         <label className="ls-field">
           Name
           <input
@@ -1451,12 +3405,72 @@ export function LayoutStudioScreen({
             onChange={(e) => updateSelectedPiece({ name: e.target.value })}
           />
         </label>
-        {isBlankWorkspace && !isPlanStripPiece(selectedPiece) ? (
-          <div className="ls-inspector-sinks">
-            <p className="ls-muted ls-sink-hint">
-              To add a sink, select a <strong>line (edge)</strong> on the piece, then choose{" "}
-              <strong>Sink</strong> in the edge menu. The sink aligns to that edge.
+        <label className="ls-field">
+          Notes
+          <textarea
+            className="ls-input ls-input--multiline"
+            value={selectedPiece.notes ?? ""}
+            onChange={(e) => updateSelectedPiece({ notes: e.target.value })}
+            placeholder="Add piece notes for fabrication, layout, or install."
+            rows={4}
+          />
+        </label>
+        <div className="ls-piece-material">
+          <p className="ls-card-title">Material</p>
+          <p className={`ls-piece-material-value${selectedPieceMaterialOption ? "" : " is-unassigned"}`}>
+            {selectedPieceMaterialOption?.productName ?? (options.length > 0 ? "Unassigned" : "No materials added")}
+          </p>
+          {options.length > 0 ? (
+            <label className="ls-field">
+              Assign material
+              <select
+                className="ls-input"
+                value={selectedPieceMaterialOptionId ?? ""}
+                onChange={(e) =>
+                  selectedPieceMaterialRoot
+                    ? assignMaterialToPieceGroup(
+                        selectedPieceMaterialRoot.id,
+                        e.target.value.trim() ? e.target.value : null,
+                      )
+                    : undefined
+                }
+              >
+                <option value="">Unassigned</option>
+                {options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.productName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="ls-muted ls-piece-size-line">Add materials to this area to assign one here.</p>
+          )}
+          {selectedPieceMaterialRoot && selectedPieceMaterialRoot.id !== selectedPiece.id ? (
+            <p className="ls-muted ls-piece-size-line">
+              This strip inherits from its parent piece. Changes here apply to the whole linked group.
             </p>
+          ) : selectedPieceHasLinkedChildren ? (
+            <p className="ls-muted ls-piece-size-line">
+              Changes here also update linked splashes and miters for this piece.
+            </p>
+          ) : null}
+        </div>
+        <div className="ls-piece-size">
+          <p className="ls-card-title">Size</p>
+          {selectedPieceSize?.overallLabel ? (
+            <p className="ls-muted ls-piece-size-line">Overall {selectedPieceSize.overallLabel}</p>
+          ) : selectedPieceSize?.needsScale ? (
+            <p className="ls-muted ls-piece-size-line">Set scale to view this piece size in inches.</p>
+          ) : (
+            <p className="ls-muted ls-piece-size-line">Size unavailable.</p>
+          )}
+          {selectedPieceSize?.detailLabel ? (
+            <p className="ls-muted ls-piece-size-line">{selectedPieceSize.detailLabel}</p>
+          ) : null}
+        </div>
+        {usesBlankPlanCanvas && !isPlanStripPiece(selectedPiece) ? (
+          <div className="ls-inspector-sinks">
             {(selectedPiece.sinks?.length ?? 0) > 0 ? (
               <ul className="ls-sink-list">
                 {selectedPiece.sinks!.map((s) => (
@@ -1619,6 +3633,75 @@ export function LayoutStudioScreen({
             Delete
           </button>
         </div>
+        </div>
+      </div>
+    ) : null;
+
+  const tracePieceListPanel =
+    pieceListOpen && mode === "trace" ? (
+      <div
+        className="ls-piece-list-panel glass-panel"
+        role="dialog"
+        aria-label="Piece list"
+        style={{ right: pieceListPanelPos.x, bottom: pieceListPanelPos.y }}
+      >
+        <div className="ls-piece-list-panel-head">
+          <div
+            className="ls-piece-list-panel-handle"
+            onPointerDown={beginPieceListPanelDrag}
+            title="Drag piece list panel"
+          >
+            <p className="ls-card-title">Piece list</p>
+            <p className="ls-muted ls-piece-list-panel-sub">
+              {pieceListEntries.length} {pieceListEntries.length === 1 ? "piece" : "pieces"}
+            </p>
+          </div>
+          <button type="button" className="ls-btn ls-btn-ghost" onClick={() => setPieceListOpen(false)}>
+            Close
+          </button>
+        </div>
+        <div className="ls-piece-list-panel-scroll">
+          {pieceListEntries.length === 0 ? (
+            <p className="ls-muted ls-piece-list-empty">Add pieces on the canvas to populate this list.</p>
+          ) : (
+            <ul className="ls-piece-list">
+              {pieceListEntries.map((entry) => (
+                <li key={entry.id} className="ls-piece-list-item">
+                  <div className="ls-piece-list-item-head">
+                    <p className="ls-piece-list-name">{entry.name}</p>
+                    {entry.pageLabel ? <span className="ls-piece-list-page">{entry.pageLabel}</span> : null}
+                  </div>
+                  <p className="ls-piece-list-size">{entry.sizeLabel}</p>
+                  {entry.sizeDetail ? <p className="ls-piece-list-detail">{entry.sizeDetail}</p> : null}
+                  <p className={`ls-piece-list-material${entry.materialAssigned ? "" : " is-unassigned"}`}>
+                    Material: {entry.materialLabel}
+                  </p>
+                  {entry.sinkNames.length > 0 ? (
+                    <p className="ls-piece-list-sinks">
+                      {entry.sinkNames.map((sinkName, index) => (
+                        <span key={`${entry.id}-sink-${sinkName}-${index}`} className="ls-piece-list-sink-name">
+                          {index > 0 ? " • " : ""}
+                          {sinkName}
+                        </span>
+                      ))}
+                    </p>
+                  ) : null}
+                  {entry.splashNames.length > 0 ? (
+                    <p className="ls-piece-list-children">
+                      Splash: {entry.splashNames.join(" • ")}
+                    </p>
+                  ) : null}
+                  {entry.miterNames.length > 0 ? (
+                    <p className="ls-piece-list-children">
+                      Miter: {entry.miterNames.join(" • ")}
+                    </p>
+                  ) : null}
+                  <p className="ls-piece-list-notes">{entry.notes}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     ) : null;
 
@@ -1651,10 +3734,10 @@ export function LayoutStudioScreen({
             {calibrationStep === "b" && "Click the second point on your plan."}
           </p>
         ) : null}
-        {draft.calibration.pointA && draft.calibration.pointB && !draft.calibration.isCalibrated ? (
+        {activeCalibration.pointA && activeCalibration.pointB && !activeCalibration.isCalibrated ? (
           <p className="ls-hint">Enter the real-world distance for that segment.</p>
         ) : null}
-        {draft.calibration.pointA && draft.calibration.pointB ? (
+        {activeCalibration.pointA && activeCalibration.pointB ? (
           <div className="ls-calibration-popup-fields">
             <label className="ls-field">
               Distance
@@ -1691,10 +3774,12 @@ export function LayoutStudioScreen({
             <p className="ls-muted ls-calibration-popup-metrics">
               Segment length:{" "}
               {`${Math.hypot(
-                draft.calibration.pointB.x - draft.calibration.pointA.x,
-                draft.calibration.pointB.y - draft.calibration.pointA.y
+                activeCalibration.pointB.x - activeCalibration.pointA.x,
+                activeCalibration.pointB.y - activeCalibration.pointA.y
               ).toFixed(1)} px`}
-              {draft.calibration.pixelsPerInch ? ` · ${draft.calibration.pixelsPerInch.toFixed(2)} px/in` : ""}
+              {activeCalibration.pixelsPerInch
+                ? ` · ${activeCalibration.pixelsPerInch.toFixed(2)} px/in`
+                : ""}
             </p>
           </div>
         ) : (
@@ -1713,7 +3798,7 @@ export function LayoutStudioScreen({
         <button
           type="button"
           className={mode === "trace" ? "is-active" : ""}
-          disabled={saveStatus === "saving"}
+          disabled={saveStatus === "saving" || phaseTransitionPending != null}
           onClick={() => handleModeChange("trace")}
         >
           Plan
@@ -1721,7 +3806,7 @@ export function LayoutStudioScreen({
         <button
           type="button"
           className={mode === "place" ? "is-active" : ""}
-          disabled={saveStatus === "saving"}
+          disabled={saveStatus === "saving" || phaseTransitionPending != null}
           onClick={() => handleModeChange("place")}
         >
           Layout
@@ -1729,34 +3814,215 @@ export function LayoutStudioScreen({
         <button
           type="button"
           className={mode === "quote" ? "is-active" : ""}
-          disabled={saveStatus === "saving"}
+          disabled={saveStatus === "saving" || phaseTransitionPending != null}
           onClick={() => handleModeChange("quote")}
         >
           Quote
         </button>
       </div>
-      {mode === "quote" ? (
-        <div className="ls-phase-quote-actions">
-          <button
-            type="button"
-            className="ls-btn ls-btn-secondary"
-            disabled={saveStatus === "saving"}
-            onClick={() => void save(draftRef.current)}
-          >
-            {saveStatus === "saving" ? "Saving…" : "Save layout"}
-          </button>
-          <button
-            type="button"
-            className="ls-btn ls-btn-primary"
-            disabled={!activeOption}
-            onClick={() => setLayoutQuoteModalOpen(true)}
-          >
-            Export quote
-          </button>
-        </div>
-      ) : null}
     </div>
   );
+
+  const renderLiveSummary = (className: string) => (
+    <div className={className} aria-label="Live summary">
+      <span className="ls-live-summary__label">Live summary</span>
+      <span className="ls-live-summary__item">{draft.summary.areaSqFt.toFixed(1)} sq ft (est.)</span>
+      <span className="ls-live-summary__sep" aria-hidden>
+        •
+      </span>
+      <span className="ls-live-summary__item">
+        {(draft.summary.profileEdgeLf ?? 0) > 0 ? (draft.summary.profileEdgeLf ?? 0).toFixed(1) : "—"} ft profile
+        (est.)
+      </span>
+      <span className="ls-live-summary__sep" aria-hidden>
+        •
+      </span>
+      <span className="ls-live-summary__item">{draft.summary.sinkCount} sinks</span>
+      <span className="ls-live-summary__sep" aria-hidden>
+        •
+      </span>
+      <span className="ls-live-summary__item">{draft.summary.estimatedSlabCount} slabs (est.)</span>
+    </div>
+  );
+
+  const fullScreenPhaseToolbar = planCanvasExpanded
+    ? renderPhaseToolbar("ls-phase-toggle-wrap glass-panel ls-phase-toggle-wrap--fullscreen")
+    : null;
+  const planCanvasLiveSummary =
+    !showEntryHub && mode === "trace" && planCanvasExpanded
+      ? renderLiveSummary("ls-live-summary ls-live-summary--overlay-canvas")
+      : null;
+  const placeMaterialMenu =
+    options.length > 0 ? (
+      <div className="ls-material-menu" ref={materialMenuRef}>
+        <button
+          ref={materialMenuTriggerRef}
+          type="button"
+          className={`ls-btn ls-btn-secondary ls-material-menu-trigger${materialMenuOpen ? " is-open" : ""}`}
+          aria-haspopup="dialog"
+          aria-expanded={materialMenuOpen}
+          onClick={() => setMaterialMenuOpen((open) => !open)}
+        >
+          <span className="ls-material-menu-trigger-label">Materials</span>
+          <span className="ls-material-menu-trigger-value">
+            {quoteShowingAllUsedMaterials ? "All used materials" : activeOption?.productName ?? "Select material"}
+          </span>
+          <span className="ls-material-menu-trigger-caret" aria-hidden>
+            {materialMenuOpen ? "▴" : "▾"}
+          </span>
+        </button>
+        {renderMaterialMenuPopover(
+          <>
+            <div className="ls-material-menu-list">
+              {mode === "quote" && canQuoteAllUsedMaterials ? (
+                <div
+                  className={`ls-material-menu-item ls-material-menu-item--selectable${
+                    quoteShowingAllUsedMaterials ? " is-active" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="ls-material-menu-select"
+                    disabled={saveStatus === "saving"}
+                    onClick={() => {
+                      setQuoteMaterialScope(QUOTE_ALL_USED_MATERIALS_SCOPE);
+                      setMaterialMenuOpen(false);
+                    }}
+                  >
+                    <span className="ls-material-menu-copy">
+                      <span className="ls-material-menu-name">All used materials</span>
+                      <span className="ls-material-menu-count">
+                        {totalUsedMaterialPieceCount} {totalUsedMaterialPieceCount === 1 ? "piece" : "pieces"}
+                      </span>
+                      {quoteShowingAllUsedMaterials ? (
+                        <span className="ls-material-menu-badge">Current</span>
+                      ) : null}
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+              {options.map((option) => (
+                <div
+                  key={option.id}
+                  className={`ls-material-menu-item ls-material-menu-item--selectable${
+                    !quoteShowingAllUsedMaterials && activeOption?.id === option.id ? " is-active" : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="ls-material-menu-select"
+                    disabled={saveStatus === "saving"}
+                    onClick={() => {
+                      if (mode === "quote") setQuoteMaterialScope("active");
+                      void selectMaterialOption(option.id);
+                    }}
+                  >
+                    <span className="ls-material-menu-copy">
+                      <span className="ls-material-menu-name">{option.productName}</span>
+                      <span className="ls-material-menu-count">
+                        {materialPieceCounts.get(option.id) ?? 0}{" "}
+                        {(materialPieceCounts.get(option.id) ?? 0) === 1 ? "piece" : "pieces"}
+                      </span>
+                      {!quoteShowingAllUsedMaterials && activeOption?.id === option.id ? (
+                        <span className="ls-material-menu-badge">Current</span>
+                      ) : null}
+                    </span>
+                  </button>
+                  {onRemoveMaterialOption ? (
+                    <button
+                      type="button"
+                      className="ls-material-menu-remove"
+                      aria-label={`Remove ${option.productName}`}
+                      title={`Remove ${option.productName}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveMaterialOption(option.id);
+                      }}
+                    >
+                      x
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            {onOpenAddMaterials ? (
+              <button
+                type="button"
+                className="ls-material-menu-add"
+                role="menuitem"
+                onClick={() => {
+                  setMaterialMenuOpen(false);
+                  onOpenAddMaterials();
+                }}
+              >
+                + Add material
+              </button>
+            ) : null}
+          </>,
+        )}
+      </div>
+    ) : (
+      <p className="ls-option-strip-hint ls-muted">
+        No slab options on this job yet — add materials from the catalog or “Add product / slab” on the job.
+      </p>
+    );
+  const quoteToolbar = mode === "quote" ? (
+    <div className="ls-plan-toolbar ls-place-toolbar ls-quote-toolbar" role="toolbar" aria-label="Quote toolbar">
+      <div className="ls-plan-toolbar-group">
+        <button
+          type="button"
+          className="ls-plan-toolbar-btn"
+          onClick={() => void handleBack()}
+          disabled={saveStatus === "saving" || backNavigationPending}
+          title="Back to comparison"
+          aria-label="Back to comparison"
+        >
+          <IconBack />
+        </button>
+      </div>
+      <span className="ls-plan-toolbar-divider" aria-hidden />
+      <div className="ls-plan-toolbar-group ls-place-toolbar-group-material">
+        {placeMaterialMenu}
+      </div>
+      <span className="ls-plan-toolbar-spacer" aria-hidden />
+      <div className="ls-plan-toolbar-group ls-place-toolbar-group-actions ls-quote-toolbar-group-actions">
+        <button
+          type="button"
+          className="ls-plan-toolbar-btn"
+          onClick={() => setLayoutQuoteSettingsOpen(true)}
+          title="Quote options"
+          aria-label="Quote options"
+          disabled={!activeOption}
+        >
+          <IconSettings />
+        </button>
+        <button
+          type="button"
+          className="ls-plan-toolbar-btn"
+          onClick={() => setPlanCanvasExpanded((v) => !v)}
+          title={planCanvasExpanded ? "Exit full screen" : "Expand quote workspace"}
+          aria-label={planCanvasExpanded ? "Exit full screen" : "Expand quote workspace"}
+        >
+          {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  const busyOverlayPhaseTransition =
+    phaseTransitionPending != null && !backNavigationPending && !uploading && !pdfRenderBusy;
+  const busyOverlayVisible =
+    backNavigationPending || busyOverlayPhaseTransition || uploading || pdfRenderBusy;
+  const busyOverlaySaving = backNavigationPending && !uploading && !pdfRenderBusy;
+  const backNavigationProgressLabel = Math.round(backNavigationProgress ?? 0);
+  const phaseTransitionLabel =
+    phaseTransitionPending === "trace"
+      ? "Plan"
+      : phaseTransitionPending === "place"
+        ? "Layout"
+        : phaseTransitionPending === "quote"
+          ? "Quote"
+          : "Layout";
 
   return (
     <div
@@ -1766,8 +4032,15 @@ export function LayoutStudioScreen({
     >
       <header className="ls-header glass-panel">
         <div className="ls-header-top">
-          <button type="button" className="ls-back" onClick={() => void handleBack()} disabled={saveStatus === "saving"}>
-            ← Back
+          <button
+            type="button"
+            className={mode === "place" ? "ls-plan-toolbar-btn" : "ls-back"}
+            onClick={() => void handleBack()}
+            disabled={saveStatus === "saving" || backNavigationPending}
+            title={mode === "place" ? "Back to comparison" : undefined}
+            aria-label={mode === "place" ? "Back to comparison" : undefined}
+          >
+            {mode === "place" ? <IconBack /> : "← Back"}
           </button>
           <div className="ls-header-titles">
             <p className="ls-kicker">{layoutStudioJobContextKicker}</p>
@@ -1815,33 +4088,6 @@ export function LayoutStudioScreen({
             {uploadError}
           </p>
         ) : null}
-        <div className="ls-header-toolbar">
-          <div className="ls-header-toolbar-material">
-            {options.length > 0 ? (
-              <div className="ls-option-strip" role="group" aria-label="Material options for this job">
-                <span className="ls-option-strip-label">Material</span>
-                <div className="ls-option-pills">
-                  {options.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      className={`ls-option-pill${activeOption?.id === o.id ? " is-active" : ""}`}
-                      disabled={saveStatus === "saving"}
-                      onClick={() => void selectMaterialOption(o.id)}
-                    >
-                      {o.productName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="ls-option-strip-hint ls-muted">
-                No slab options on this job yet — add materials from the catalog or “Add product / slab” on the job.
-                You can still draw the shared plan below.
-              </p>
-            )}
-          </div>
-        </div>
       </header>
 
       <input
@@ -1916,10 +4162,10 @@ export function LayoutStudioScreen({
                     {calibrationStep === "b" && "Click the second point."}
                   </p>
                 ) : null}
-                {draft.calibration.pointA && draft.calibration.pointB && !draft.calibration.isCalibrated ? (
+                {activeCalibration.pointA && activeCalibration.pointB && !activeCalibration.isCalibrated ? (
                   <p className="ls-hint">Enter the real-world distance for that segment.</p>
                 ) : null}
-                {draft.calibration.pointA && draft.calibration.pointB ? (
+                {activeCalibration.pointA && activeCalibration.pointB ? (
                   <div className="ls-calibration-form">
                     <label className="ls-field">
                       Distance
@@ -1950,14 +4196,14 @@ export function LayoutStudioScreen({
                     </button>
                     <p className="ls-muted">
                       Segment length:{" "}
-                      {draft.calibration.pointA && draft.calibration.pointB
+                      {activeCalibration.pointA && activeCalibration.pointB
                         ? `${Math.hypot(
-                            draft.calibration.pointB.x - draft.calibration.pointA.x,
-                            draft.calibration.pointB.y - draft.calibration.pointA.y
+                            activeCalibration.pointB.x - activeCalibration.pointA.x,
+                            activeCalibration.pointB.y - activeCalibration.pointA.y
                           ).toFixed(1)} px`
                         : "—"}
-                      {draft.calibration.pixelsPerInch
-                        ? ` · ${draft.calibration.pixelsPerInch.toFixed(2)} px/in`
+                      {activeCalibration.pixelsPerInch
+                        ? ` · ${activeCalibration.pixelsPerInch.toFixed(2)} px/in`
                         : ""}
                     </p>
                   </div>
@@ -1971,9 +4217,9 @@ export function LayoutStudioScreen({
         <div className="ls-canvas-column">
           {!planCanvasExpanded ? renderPhaseToolbar() : null}
           <section
-            className={`ls-canvas-shell glass-panel${
+            className={`ls-canvas-shell glass-panel${mode === "trace" ? " ls-canvas-shell--trace" : ""}${
               mode === "place" || mode === "quote" ? " ls-canvas-shell--tall" : ""
-            }`}
+            }${mode === "quote" ? " ls-canvas-shell--quote" : ""}`}
           >
           {mode === "trace" && !showEntryHub ? (
             <input
@@ -1993,20 +4239,43 @@ export function LayoutStudioScreen({
           {mode === "quote" ? (
             activeOption ? (
               <>
-                <QuotePhaseView
-                  job={job}
-                  option={activeOption}
-                  draft={draft}
-                  slabs={layoutSlabs}
-                  activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
-                  onActiveSlab={(id) => setActiveSlabId(id)}
-                  showPieceLabels={showPieceLabels}
-                  quoteSettings={mergedQuoteSettings}
-                  onSaveQuoteSettings={saveLayoutQuoteSettings}
-                  onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
-                  customerExclusions={mergedCustomerExclusions}
-                  onSetCustomerExclusion={setCustomerExclusion}
-                />
+                {planCanvasExpanded ? fullScreenPhaseToolbar : null}
+                {quoteToolbar}
+                {quoteShowingAllUsedMaterials ? (
+                  <QuotePhaseAllMaterialsView
+                    job={job}
+                    materials={quoteAllMaterialsSections}
+                    pixelsPerInch={draft.calibration.pixelsPerInch}
+                    tracePlanWidth={draft.source?.sourceWidthPx ?? null}
+                    tracePlanHeight={draft.source?.sourceHeightPx ?? null}
+                    showPieceLabels={showPieceLabels}
+                    quoteSettings={mergedQuoteSettings}
+                    onSaveQuoteSettings={saveLayoutQuoteSettings}
+                    onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
+                    customerExclusions={mergedCustomerExclusions}
+                    onSetCustomerExclusion={setCustomerExclusion}
+                  />
+                ) : (
+                  <QuotePhaseView
+                    job={job}
+                    option={activeOption}
+                    draft={activeMaterialQuoteDraft}
+                    pieces={placeVisiblePieces}
+                    placements={activeMaterialPlacements}
+                    previewPieces={layoutPreviewVisiblePieces}
+                    previewWorkspaceKind={layoutPreviewWorkspaceKind}
+                    slabs={layoutSlabs}
+                    activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
+                    onActiveSlab={(id) => setActiveSlabId(id)}
+                    showPieceLabels={showPieceLabels}
+                    fullscreen={planCanvasExpanded}
+                    quoteSettings={mergedQuoteSettings}
+                    onSaveQuoteSettings={saveLayoutQuoteSettings}
+                    onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
+                    customerExclusions={mergedCustomerExclusions}
+                    onSetCustomerExclusion={setCustomerExclusion}
+                  />
+                )}
                 <div className="ls-canvas-footer ls-quote-export-footer">
                   <button
                     type="button"
@@ -2019,17 +4288,21 @@ export function LayoutStudioScreen({
                 </div>
               </>
             ) : (
-              <div className="ls-phase-empty ls-phase-empty--quote glass-panel">
-                <p className="ls-phase-empty-kicker">Quote</p>
-                <h2 className="ls-phase-empty-title">Select a material option</h2>
-                <p className="ls-muted">
-                  Add a slab or product to this job from the catalog, then return here to review option-specific
-                  pricing and placement. Your shared plan is already saved on the job.
-                </p>
-                <Link className="ls-btn ls-btn-primary" to={`/compare/jobs/${job.id}/add`}>
-                  Add product / slab
-                </Link>
-              </div>
+              <>
+                {planCanvasExpanded ? fullScreenPhaseToolbar : null}
+                {quoteToolbar}
+                <div className="ls-phase-empty ls-phase-empty--quote glass-panel">
+                  <p className="ls-phase-empty-kicker">Quote</p>
+                  <h2 className="ls-phase-empty-title">Select a material option</h2>
+                  <p className="ls-muted">
+                    Add a slab or product to this job from the catalog, then return here to review option-specific
+                    pricing and placement. Your shared plan is already saved on the job.
+                  </p>
+                  <Link className="ls-btn ls-btn-primary" to={`/compare/jobs/${job.id}/add`}>
+                    Add product / slab
+                  </Link>
+                </div>
+              </>
             )
           ) : mode === "trace" ? (
             isBlankWorkspace ? (
@@ -2039,114 +4312,44 @@ export function LayoutStudioScreen({
                 aria-modal={planCanvasExpanded ? true : undefined}
                 aria-label={planCanvasExpanded ? "Plan canvas — full screen" : undefined}
               >
+                {fullScreenPhaseToolbar}
                 <div className="ls-plan-toolbar" role="toolbar" aria-label="Plan canvas tools">
                   <div className="ls-plan-toolbar-group">
+                    {planCanvasExpanded ? (
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={() => void handleBack()}
+                        disabled={saveStatus === "saving" || backNavigationPending}
+                        title="Back to comparison"
+                        aria-label="Back to comparison"
+                      >
+                        <IconBack />
+                      </button>
+                    ) : null}
                     <label
                       className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
                       htmlFor="ls-main-upload"
                       title="Add a PDF or image (replaces blank layout)"
                       aria-label="Add a PDF or image plan"
                     >
-                      <span>{uploading ? "Uploading…" : "PDF"}</span>
+                      <span>PDF</span>
                     </label>
                   </div>
                   <span className="ls-plan-toolbar-divider" aria-hidden />
-                  <div className="ls-plan-toolbar-group" role="group" aria-label="Add piece">
+                  <div className="ls-plan-toolbar-group" role="group" aria-label="Pointer tool">
                     <button
                       type="button"
-                      className="ls-plan-toolbar-btn"
-                      onClick={() => setRectSheetOpen(true)}
-                      title="Rectangle — width & depth"
-                      aria-label="Add rectangle — width and depth"
+                      className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "select" ? " is-active" : ""}`}
+                      aria-pressed={tool === "select"}
+                      onClick={() => setTool("select")}
+                      title="Select"
+                      aria-label="Select"
                     >
-                      <IconToolRect />
-                    </button>
-                    <button
-                      type="button"
-                      className="ls-plan-toolbar-btn"
-                      onClick={() => setLSheetOpen(true)}
-                      title="L-shape — legs & depth"
-                      aria-label="Add L-shape — legs and depth"
-                    >
-                      <IconToolLShape />
+                      <IconSelectCursor />
                     </button>
                   </div>
-                  <div className="ls-plan-toolbar-section" role="group" aria-label="Draw tools">
-                    {(
-                      [
-                        ["select", IconSelectCursor, "Select"],
-                        ["rect", IconToolRect, "Rectangle (drag)"],
-                        ["lShape", IconToolLShape, "L-shape (drag)"],
-                        ["polygon", IconToolPolygon, "Polygon"],
-                        ["orthoDraw", IconToolOrtho, "Ortho draw"],
-                        ["snapLines", IconToolSnapLines, "Snap lines"],
-                      ] as const
-                    ).map(([id, Icon, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === id ? " is-active" : ""}`}
-                        aria-pressed={tool === id}
-                        onClick={() => {
-                          if (id === "orthoDraw" && tool === "orthoDraw") {
-                            blankPlanRef.current?.cancelOrthoDraw();
-                            return;
-                          }
-                          setTool(id);
-                        }}
-                        title={label}
-                        aria-label={label}
-                      >
-                        <Icon />
-                      </button>
-                    ))}
-                    <div className="ls-plan-toolbar-group ls-plan-toolbar-group--seam-join">
-                      <button
-                        type="button"
-                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "join" ? " is-active" : ""}`}
-                        aria-pressed={tool === "join"}
-                        disabled={!joinAvailable}
-                        onClick={() => {
-                          if (!joinAvailable) return;
-                          setTool((t) => (t === "join" ? "select" : "join"));
-                        }}
-                        title={
-                          joinAvailable
-                            ? "Join — merge along one flush edge (full or L-shape; click piece 1, then piece 2)"
-                            : "Join — snap two pieces flush with Snap lines first"
-                        }
-                        aria-label="Join pieces"
-                      >
-                        <IconToolJoin />
-                      </button>
-                      <button
-                        type="button"
-                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "cornerRadius" ? " is-active" : ""}`}
-                        aria-pressed={tool === "cornerRadius"}
-                        onClick={() =>
-                          setTool((t) => (t === "cornerRadius" ? "select" : "cornerRadius"))
-                        }
-                        title="Corner radius — choose radius, then two adjacent edges (convex or inside corners)"
-                        aria-label="Corner radius"
-                      >
-                        <IconToolCornerRadius />
-                      </button>
-                      <button
-                        type="button"
-                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "connectCorner" ? " is-active" : ""}`}
-                        aria-pressed={tool === "connectCorner"}
-                        onClick={() =>
-                          setTool((t) => (t === "connectCorner" ? "select" : "connectCorner"))
-                        }
-                        title="Connect — remove edge arcs at a 90° corner (click one edge, then the adjacent edge)"
-                        aria-label="Connect corner — remove arcs"
-                      >
-                        <IconToolConnectCorner />
-                      </button>
-                    </div>
-                  </div>
-                  <span className="ls-plan-toolbar-divider" aria-hidden />
-                  <div className="ls-plan-toolbar-group">
+                  <div className="ls-plan-toolbar-group" role="group" aria-label="Undo and redo">
                     <button
                       type="button"
                       className="ls-plan-toolbar-btn"
@@ -2168,6 +4371,123 @@ export function LayoutStudioScreen({
                       <IconRedo />
                     </button>
                   </div>
+                  <div className="ls-plan-toolbar-group" role="group" aria-label="Add piece">
+                    <button
+                      type="button"
+                      className="ls-plan-toolbar-btn"
+                      onClick={() => setRectSheetOpen(true)}
+                      title="Rectangle — width & depth"
+                      aria-label="Add rectangle — width and depth"
+                    >
+                      <IconToolRect />
+                    </button>
+                  </div>
+                  <div className="ls-plan-toolbar-section" role="group" aria-label="Draw tools">
+                    <div className="ls-segmented ls-segmented--tool-tabs ls-plan-toolbar-tool-tabs" role="tablist" aria-label="Shape drawing tools">
+                      {(
+                        [
+                          ["rect", IconToolRect, "Rectangle (drag)"],
+                          ["polygon", IconToolPolygon, "Polygon"],
+                          ["orthoDraw", IconToolOrtho, "Ortho draw"],
+                        ] as const
+                      ).map(([id, Icon, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className={tool === id ? "is-active" : ""}
+                          aria-pressed={tool === id}
+                          onClick={() => {
+                            if (id === "orthoDraw" && tool === "orthoDraw") {
+                              blankPlanRef.current?.cancelOrthoDraw();
+                              return;
+                            }
+                            setTool(id);
+                          }}
+                          title={label}
+                          aria-label={label}
+                        >
+                          <Icon />
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-tool-tab-action"
+                        onClick={() => setLSheetOpen(true)}
+                        title="L-shape — legs & depth"
+                        aria-label="Add L-shape — legs and depth"
+                      >
+                        <IconToolLShape />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "snapLines" ? " is-active" : ""}`}
+                      aria-pressed={tool === "snapLines"}
+                      onClick={() => setTool("snapLines")}
+                      title="Snap lines"
+                      aria-label="Snap lines"
+                    >
+                      <IconToolSnapLines />
+                    </button>
+                    <div className="ls-plan-toolbar-group ls-plan-toolbar-group--seam-join">
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "join" ? " is-active" : ""}`}
+                        aria-pressed={tool === "join"}
+                        disabled={!joinAvailable}
+                        onClick={() => {
+                          if (!joinAvailable) return;
+                          setTool((t) => (t === "join" ? "select" : "join"));
+                        }}
+                        title={
+                          joinAvailable
+                            ? "Join — merge along one flush edge (full or L-shape; click piece 1, then piece 2)"
+                            : "Join — snap two pieces flush with Snap lines first"
+                        }
+                        aria-label="Join pieces"
+                      >
+                        <IconToolJoin />
+                      </button>
+                      <div
+                        className="ls-segmented ls-segmented--tool-tabs ls-plan-toolbar-tool-tabs"
+                        role="tablist"
+                        aria-label="Corner tools"
+                      >
+                        {(
+                          [
+                            [
+                              "cornerRadius",
+                              IconToolCornerRadius,
+                              "Corner radius — choose radius, then two adjacent edges (convex or inside corners)",
+                            ],
+                            [
+                              "connectCorner",
+                              IconToolConnectCorner,
+                              "Connect — remove edge arcs at a 90° corner (click one edge, then the adjacent edge)",
+                            ],
+                            [
+                              "chamferCorner",
+                              IconToolChamfer,
+                              "Chamfer — choose size, then two adjacent edges to cut the corner",
+                            ],
+                          ] as const
+                        ).map(([id, Icon, label]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={tool === id ? "is-active" : ""}
+                            aria-pressed={tool === id}
+                            onClick={() => setTool((t) => (t === id ? "select" : id))}
+                            title={label}
+                            aria-label={label}
+                          >
+                            <Icon />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="ls-plan-toolbar-divider" aria-hidden />
                   <div className="ls-plan-toolbar-group">
                     <button
                       type="button"
@@ -2188,6 +4508,16 @@ export function LayoutStudioScreen({
                       aria-label="Piece labels"
                     >
                       <IconPieceLabels />
+                    </button>
+                    <button
+                      type="button"
+                      className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${pieceListOpen ? " is-active" : ""}`}
+                      aria-pressed={pieceListOpen}
+                      onClick={() => setPieceListOpen((open) => !open)}
+                      title="Piece list"
+                      aria-label="Piece list"
+                    >
+                      <IconPieceList />
                     </button>
                   </div>
                   {selectedPieceId ? (
@@ -2275,50 +4605,54 @@ export function LayoutStudioScreen({
                 </div>
                 <div className="ls-trace-canvas-with-inspector">
                   <div className="ls-trace-canvas-main ls-trace-canvas-main--plan-host">
-                    <BlankPlanWorkspace
-                    ref={blankPlanRef}
-                    zoomUiPlacement="toolbar"
-                    onViewZoomChange={onBlankViewZoomChange}
-                    onBoxZoomModeChange={setPlanBoxZoomActive}
-                    tool={tool}
-                    pieces={draft.pieces}
-                    selectedPieceId={selectedPieceId}
-                    selectedEdge={selectedEdge}
-                    selectedFilletEdges={selectedFilletEdges}
-                    showLabels={showPieceLabels}
-                    showEdgeDimensions={showEdgeDimensions}
-                    snapAlignmentMode={snapAlignmentMode}
-                    onSelectPiece={(id) => {
-                      setSelectedPieceId(id);
-                      setSelectedFilletEdges([]);
-                    }}
-                    onSelectEdge={(sel) => {
-                      setSelectedEdge(sel);
-                      if (sel) setSelectedFilletEdges([]);
-                    }}
-                    onSelectFilletEdges={setSelectedFilletEdges}
-                    onPiecesChange={onPiecesChange}
-                    onRequestSplashForEdge={(sel, kind) => {
-                      setSplashTargetEdge(sel);
-                      setEdgeStripKind(kind);
-                      setSplashHeightInput("4");
-                      setSplashModalOpen(true);
-                    }}
-                    onRequestAddSinkForEdge={(sel) => {
-                      setSelectedPieceId(sel.pieceId);
-                      setAddSinkEdge(sel);
-                      setAddSinkModalOpen(true);
-                    }}
-                    onToggleProfileEdge={toggleProfileEdge}
-                    onSetSplashBottomEdge={setSplashBottomEdge}
-                    onPiecesChangeLive={onPiecesChangeLive}
-                    onPieceDragStart={pushUndoSnapshot}
-                    slabs={layoutSlabs}
-                    placements={draft.placements}
-                    pixelsPerInch={draft.calibration.pixelsPerInch}
-                    fitAllPiecesSignal={planFitAllPiecesTick}
-                    onTraceToolChange={setTool}
-                  />
+                    <div className="ls-plan-canvas-stage">
+                      <BlankPlanWorkspace
+                      ref={blankPlanRef}
+                      zoomUiPlacement="toolbar"
+                      onViewZoomChange={onBlankViewZoomChange}
+                      onBoxZoomModeChange={setPlanBoxZoomActive}
+                      tool={tool}
+                      pieces={draft.pieces}
+                      selectedPieceId={selectedPieceId}
+                      selectedEdge={selectedEdge}
+                      selectedFilletEdges={selectedFilletEdges}
+                      showLabels={showPieceLabels}
+                      sourcePageNumberByIndex={sourcePageNumberByIndex}
+                      showEdgeDimensions={showEdgeDimensions}
+                      snapAlignmentMode={snapAlignmentMode}
+                      onSelectPiece={(id) => {
+                        setSelectedPieceId(id);
+                        setSelectedFilletEdges([]);
+                      }}
+                      onSelectEdge={(sel) => {
+                        setSelectedEdge(sel);
+                        if (sel) setSelectedFilletEdges([]);
+                      }}
+                      onSelectFilletEdges={setSelectedFilletEdges}
+                      onPiecesChange={onPiecesChange}
+                      onRequestSplashForEdge={(sel, kind) => {
+                        setSplashTargetEdge(sel);
+                        setEdgeStripKind(kind);
+                        setSplashHeightInput("4");
+                        setSplashModalOpen(true);
+                      }}
+                      onRequestAddSinkForEdge={(sel) => {
+                        setSelectedPieceId(sel.pieceId);
+                        setAddSinkEdge(sel);
+                        setAddSinkModalOpen(true);
+                      }}
+                      onToggleProfileEdge={toggleProfileEdge}
+                      onSetSplashBottomEdge={setSplashBottomEdge}
+                      onPiecesChangeLive={onPiecesChangeLive}
+                      onPieceDragStart={pushUndoSnapshot}
+                      slabs={layoutSlabs}
+                      placements={draft.placements}
+                      pixelsPerInch={draft.calibration.pixelsPerInch}
+                      fitAllPiecesSignal={planFitAllPiecesTick}
+                      onTraceToolChange={setTool}
+                      fitViewportWidth={planCanvasExpanded}
+                    />
+                    {planCanvasLiveSummary}
                     <button
                       type="button"
                       className="ls-plan-canvas-expand-fab"
@@ -2328,7 +4662,9 @@ export function LayoutStudioScreen({
                     >
                       {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
                     </button>
+                    </div>
                     {tracePieceInspectorPanel}
+                    {tracePieceListPanel}
                   </div>
                 </div>
               </div>
@@ -2339,112 +4675,46 @@ export function LayoutStudioScreen({
                 aria-modal={planCanvasExpanded ? true : undefined}
                 aria-label={planCanvasExpanded ? "Plan canvas — full screen" : undefined}
               >
+              {fullScreenPhaseToolbar}
               <div className="ls-trace-canvas-with-inspector">
                 <div className="ls-trace-canvas-main ls-trace-canvas-main--plan-host">
                   <div className="ls-plan-toolbar" role="toolbar" aria-label="Plan canvas tools">
                     <div className="ls-plan-toolbar-group">
+                    {planCanvasExpanded ? (
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={() => void handleBack()}
+                        disabled={saveStatus === "saving" || backNavigationPending}
+                        title="Back to comparison"
+                        aria-label="Back to comparison"
+                      >
+                        <IconBack />
+                      </button>
+                    ) : null}
                       <label
                         className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
                         htmlFor="ls-main-upload"
                         title="Upload PDF or image plan"
                         aria-label="Upload PDF or image plan"
                       >
-                        <span>{uploading ? "Uploading…" : "PDF"}</span>
+                        <span>PDF</span>
                       </label>
                     </div>
                     <span className="ls-plan-toolbar-divider" aria-hidden />
-                    <div className="ls-plan-toolbar-group" role="group" aria-label="Add piece">
+                    <div className="ls-plan-toolbar-group" role="group" aria-label="Pointer tool">
                       <button
                         type="button"
-                        className="ls-plan-toolbar-btn"
-                        onClick={() => setTool("rect")}
-                        title="Rectangle — width & depth"
-                        aria-label="Add rectangle — width and depth"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "select" ? " is-active" : ""}`}
+                        aria-pressed={tool === "select"}
+                        onClick={() => setTool("select")}
+                        title="Select"
+                        aria-label="Select"
                       >
-                        <IconToolRect />
-                      </button>
-                      <button
-                        type="button"
-                        className="ls-plan-toolbar-btn"
-                        onClick={() => setTool("lShape")}
-                        title="L-shape — legs & depth"
-                        aria-label="Add L-shape — legs and depth"
-                      >
-                        <IconToolLShape />
+                        <IconSelectCursor />
                       </button>
                     </div>
-                    <div className="ls-plan-toolbar-section" role="group" aria-label="Trace tools">
-                      {(
-                        [
-                          ["select", IconSelectCursor, "Select"],
-                          ["rect", IconToolRect, "Rectangle (drag)"],
-                          ["lShape", IconToolLShape, "L-shape (drag)"],
-                          ["polygon", IconToolPolygon, "Polygon"],
-                          ["orthoDraw", IconToolOrtho, "Ortho draw"],
-                          ["snapLines", IconToolSnapLines, "Snap lines"],
-                        ] as const
-                      ).map(([id, Icon, label]) => (
-                        <button
-                          key={id}
-                          type="button"
-                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === id ? " is-active" : ""}`}
-                          aria-pressed={tool === id}
-                          onClick={() => {
-                            if (id === "orthoDraw" && tool === "orthoDraw") {
-                              setTool("select");
-                              return;
-                            }
-                            setTool(id);
-                          }}
-                          title={label}
-                          aria-label={label}
-                        >
-                          <Icon />
-                        </button>
-                      ))}
-                      <div className="ls-plan-toolbar-group ls-plan-toolbar-group--seam-join">
-                        <button
-                          type="button"
-                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "join" ? " is-active" : ""}`}
-                          aria-pressed={tool === "join"}
-                          disabled={!joinAvailable}
-                          onClick={() => {
-                            if (!joinAvailable) return;
-                            setTool((t) => (t === "join" ? "select" : "join"));
-                          }}
-                          title={
-                            joinAvailable
-                              ? "Join — merge along one flush edge (full or L-shape; click piece 1, then piece 2)"
-                              : "Join — snap two pieces flush with Snap lines first"
-                          }
-                          aria-label="Join pieces"
-                        >
-                          <IconToolJoin />
-                        </button>
-                        <button
-                          type="button"
-                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "cornerRadius" ? " is-active" : ""}`}
-                          aria-pressed={tool === "cornerRadius"}
-                          onClick={() => setTool((t) => (t === "cornerRadius" ? "select" : "cornerRadius"))}
-                          title="Corner radius — choose radius, then two adjacent edges (convex or inside corners)"
-                          aria-label="Corner radius"
-                        >
-                          <IconToolCornerRadius />
-                        </button>
-                        <button
-                          type="button"
-                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "connectCorner" ? " is-active" : ""}`}
-                          aria-pressed={tool === "connectCorner"}
-                          onClick={() => setTool((t) => (t === "connectCorner" ? "select" : "connectCorner"))}
-                          title="Connect — remove edge arcs at a 90° corner (click one edge, then the adjacent edge)"
-                          aria-label="Connect corner — remove arcs"
-                        >
-                          <IconToolConnectCorner />
-                        </button>
-                      </div>
-                    </div>
-                    <span className="ls-plan-toolbar-divider" aria-hidden />
-                    <div className="ls-plan-toolbar-group">
+                    <div className="ls-plan-toolbar-group" role="group" aria-label="Undo and redo">
                       <button
                         type="button"
                         className="ls-plan-toolbar-btn"
@@ -2466,6 +4736,133 @@ export function LayoutStudioScreen({
                         <IconRedo />
                       </button>
                     </div>
+                    <div className="ls-plan-toolbar-group" role="group" aria-label="Add piece">
+                      <button
+                        type="button"
+                        className="ls-plan-toolbar-btn"
+                        onClick={() => {
+                          if (sourcePlanEditorActive) {
+                            setRectSheetOpen(true);
+                            return;
+                          }
+                          setTool("rect");
+                        }}
+                        title="Rectangle — width & depth"
+                        aria-label="Add rectangle — width and depth"
+                      >
+                        <IconToolRect />
+                      </button>
+                    </div>
+                    <div className="ls-plan-toolbar-section" role="group" aria-label="Trace tools">
+                      <div className="ls-segmented ls-segmented--tool-tabs ls-plan-toolbar-tool-tabs" role="tablist" aria-label="Shape drawing tools">
+                        {(
+                          [
+                            ["rect", IconToolRect, "Rectangle (drag)"],
+                            ["polygon", IconToolPolygon, "Polygon"],
+                            ["orthoDraw", IconToolOrtho, "Ortho draw"],
+                          ] as const
+                        ).map(([id, Icon, label]) => (
+                          <button
+                            key={id}
+                            type="button"
+                            className={tool === id ? "is-active" : ""}
+                            aria-pressed={tool === id}
+                            onClick={() => {
+                              if (id === "orthoDraw" && tool === "orthoDraw") {
+                                if (sourcePlanEditorActive) {
+                                  blankPlanRef.current?.cancelOrthoDraw();
+                                } else {
+                                  setTool("select");
+                                }
+                                return;
+                              }
+                              setTool(id);
+                            }}
+                            title={label}
+                            aria-label={label}
+                          >
+                            <Icon />
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="ls-plan-toolbar-tool-tab-action"
+                          onClick={() => setLSheetOpen(true)}
+                          title="L-shape — legs & depth"
+                          aria-label="Add L-shape — legs and depth"
+                        >
+                          <IconToolLShape />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "snapLines" ? " is-active" : ""}`}
+                        aria-pressed={tool === "snapLines"}
+                        onClick={() => setTool("snapLines")}
+                        title="Snap lines"
+                        aria-label="Snap lines"
+                      >
+                        <IconToolSnapLines />
+                      </button>
+                      <div className="ls-plan-toolbar-group ls-plan-toolbar-group--seam-join">
+                        <button
+                          type="button"
+                          className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${tool === "join" ? " is-active" : ""}`}
+                          aria-pressed={tool === "join"}
+                          disabled={!joinAvailable}
+                          onClick={() => {
+                            if (!joinAvailable) return;
+                            setTool((t) => (t === "join" ? "select" : "join"));
+                          }}
+                          title={
+                            joinAvailable
+                              ? "Join — merge along one flush edge (full or L-shape; click piece 1, then piece 2)"
+                              : "Join — snap two pieces flush with Snap lines first"
+                          }
+                          aria-label="Join pieces"
+                        >
+                          <IconToolJoin />
+                        </button>
+                        <div
+                          className="ls-segmented ls-segmented--tool-tabs ls-plan-toolbar-tool-tabs"
+                          role="tablist"
+                          aria-label="Corner tools"
+                        >
+                          {(
+                            [
+                              [
+                                "cornerRadius",
+                                IconToolCornerRadius,
+                                "Corner radius — choose radius, then two adjacent edges (convex or inside corners)",
+                              ],
+                              [
+                                "connectCorner",
+                                IconToolConnectCorner,
+                                "Connect — remove edge arcs at a 90° corner (click one edge, then the adjacent edge)",
+                              ],
+                              [
+                                "chamferCorner",
+                                IconToolChamfer,
+                                "Chamfer — choose size, then two adjacent edges to cut the corner",
+                              ],
+                            ] as const
+                          ).map(([id, Icon, label]) => (
+                            <button
+                              key={id}
+                              type="button"
+                              className={tool === id ? "is-active" : ""}
+                              aria-pressed={tool === id}
+                              onClick={() => setTool((t) => (t === id ? "select" : id))}
+                              title={label}
+                              aria-label={label}
+                            >
+                              <Icon />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="ls-plan-toolbar-divider" aria-hidden />
                     <div className="ls-plan-toolbar-group">
                       <button
                         type="button"
@@ -2486,6 +4883,16 @@ export function LayoutStudioScreen({
                         aria-label="Piece labels"
                       >
                         <IconPieceLabels />
+                      </button>
+                      <button
+                        type="button"
+                        className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${pieceListOpen ? " is-active" : ""}`}
+                        aria-pressed={pieceListOpen}
+                        onClick={() => setPieceListOpen((open) => !open)}
+                        title="Piece list"
+                        aria-label="Piece list"
+                      >
+                        <IconPieceList />
                       </button>
                     </div>
                     {selectedPieceId ? (
@@ -2510,27 +4917,141 @@ export function LayoutStudioScreen({
                         </button>
                       </div>
                     ) : null}
+                    {!isBlankWorkspace ? (
+                      <div className="ls-plan-toolbar-group" role="group" aria-label="Source visibility mode">
+                        <div className="ls-segmented ls-segmented--2 ls-segmented--canvas" role="tablist" aria-label="Trace or plan mode">
+                        <button
+                          type="button"
+                          className={sourceCanvasMode === "trace" ? "is-active" : ""}
+                          aria-pressed={sourceCanvasMode === "trace"}
+                          onClick={() => switchSourceCanvasMode("trace")}
+                          title="Trace mode — show the source PDF or image"
+                          aria-label="Trace mode — show the source PDF or image"
+                        >
+                          Trace
+                        </button>
+                        <button
+                          type="button"
+                          className={sourceCanvasMode === "plan" ? "is-active" : ""}
+                          aria-pressed={sourceCanvasMode === "plan"}
+                          onClick={() => switchSourceCanvasMode("plan")}
+                          title="Plan mode — hide the source PDF or image"
+                          aria-label="Plan mode — hide the source PDF or image"
+                        >
+                          Plan
+                        </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {!isBlankWorkspace ? (
+                      <div className="ls-plan-toolbar-group" role="group" aria-label="Area materials">
+                        <div className="ls-material-menu" ref={materialMenuRef}>
+                          <button
+                            ref={materialMenuTriggerRef}
+                            type="button"
+                            className={`ls-btn ls-btn-secondary ls-material-menu-trigger${materialMenuOpen ? " is-open" : ""}`}
+                            aria-haspopup="menu"
+                            aria-expanded={materialMenuOpen}
+                            onClick={() => setMaterialMenuOpen((open) => !open)}
+                          >
+                            <span className="ls-material-menu-trigger-label">Materials</span>
+                            <span className="ls-material-menu-trigger-caret" aria-hidden>
+                              {materialMenuOpen ? "▴" : "▾"}
+                            </span>
+                          </button>
+                          {renderMaterialMenuPopover(
+                            <>
+                              <div className="ls-material-menu-list">
+                                {options.length > 0 ? (
+                                  options.map((option) => (
+                                    <div
+                                      key={option.id}
+                                      className={`ls-material-menu-item${activeOption?.id === option.id ? " is-active" : ""}`}
+                                    >
+                                      <div className="ls-material-menu-copy">
+                                        <span className="ls-material-menu-name">{option.productName}</span>
+                                        {activeOption?.id === option.id ? (
+                                          <span className="ls-material-menu-badge">Current</span>
+                                        ) : null}
+                                      </div>
+                                      {onRemoveMaterialOption ? (
+                                        <button
+                                          type="button"
+                                          className="ls-material-menu-remove"
+                                          aria-label={`Remove ${option.productName}`}
+                                          title={`Remove ${option.productName}`}
+                                          onClick={() => onRemoveMaterialOption(option.id)}
+                                        >
+                                          x
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="ls-material-menu-empty">No materials added to this area yet.</p>
+                                )}
+                              </div>
+                              {onOpenAddMaterials ? (
+                                <button
+                                  type="button"
+                                  className="ls-material-menu-add"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    setMaterialMenuOpen(false);
+                                    onOpenAddMaterials();
+                                  }}
+                                >
+                                  + Add material
+                                </button>
+                              ) : null}
+                            </>,
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                    {sourcePlanEditorActive ? (
+                      <div className="ls-plan-toolbar-group" role="group" aria-label="Plan arrangement">
+                        <button
+                          type="button"
+                          className="ls-btn ls-btn-secondary"
+                          onClick={arrangeSourcePlanEditorPieces}
+                          title='Arrange pieces close together with about 12" spacing'
+                        >
+                          Arrange
+                        </button>
+                      </div>
+                    ) : null}
                     <span className="ls-plan-toolbar-spacer" aria-hidden />
                     <div className="ls-plan-toolbar-group ls-plan-toolbar-group--zoom" role="group" aria-label="Zoom view">
                       <span className="ls-plan-toolbar-zoom-heading">Zoom</span>
                       <button
                         type="button"
                         className="ls-plan-toolbar-btn"
-                        onClick={stepTraceZoomOut}
-                        disabled={traceViewZoom <= TRACE_VIEW_ZOOM_MIN}
+                        onClick={sourcePlanEditorActive ? () => blankPlanRef.current?.zoomOut() : stepTraceZoomOut}
+                        disabled={
+                          sourcePlanEditorActive
+                            ? blankViewZoom <= SOURCE_PLAN_EDITOR_VIEW_ZOOM_MIN
+                            : traceViewZoom <= TRACE_VIEW_ZOOM_MIN
+                        }
                         title="Zoom out"
                         aria-label="Zoom out"
                       >
                         <IconZoomOut />
                       </button>
                       <span className="ls-plan-toolbar-zoom-pct" aria-live="polite">
-                        {traceViewZoomDisplayPct(traceViewZoom)}%
+                        {sourcePlanEditorActive
+                          ? `${blankPlanZoomDisplayPct(blankViewZoom)}%`
+                          : `${traceViewZoomDisplayPct(traceViewZoom)}%`}
                       </span>
                       <button
                         type="button"
                         className="ls-plan-toolbar-btn"
-                        onClick={stepTraceZoomIn}
-                        disabled={traceViewZoom >= TRACE_VIEW_ZOOM_MAX}
+                        onClick={sourcePlanEditorActive ? () => blankPlanRef.current?.zoomIn() : stepTraceZoomIn}
+                        disabled={
+                          sourcePlanEditorActive
+                            ? blankViewZoom >= BLANK_VIEW_ZOOM_MAX
+                            : traceViewZoom >= TRACE_VIEW_ZOOM_MAX
+                        }
                         title="Zoom in"
                         aria-label="Zoom in"
                       >
@@ -2542,7 +5063,13 @@ export function LayoutStudioScreen({
                         aria-pressed={planBoxZoomActive}
                         title="Drag a box on the plan to zoom to that area"
                         aria-label="Zoom box — drag to frame area"
-                        onClick={() => setPlanBoxZoomActive((v) => !v)}
+                        onClick={() => {
+                          if (sourcePlanEditorActive) {
+                            blankPlanRef.current?.toggleBoxZoom();
+                          } else {
+                            setPlanBoxZoomActive((v) => !v);
+                          }
+                        }}
                       >
                         <IconZoomMarquee />
                       </button>
@@ -2552,19 +5079,29 @@ export function LayoutStudioScreen({
                         disabled={!selectedPieceId}
                         title={selectedPieceId ? "Fit the selected piece in view" : "Select a piece first"}
                         aria-label="Zoom to selected piece"
-                        onClick={() => setTraceZoomToSelectedTick((t) => t + 1)}
+                        onClick={() => {
+                          if (sourcePlanEditorActive) {
+                            blankPlanRef.current?.zoomToSelected();
+                          } else {
+                            setTraceZoomToSelectedTick((t) => t + 1);
+                          }
+                        }}
                       >
                         <IconZoomFitSelection />
                       </button>
                       <button
                         type="button"
                         className="ls-plan-toolbar-btn"
-                        title="Reset view — show the full plan"
-                        aria-label="Reset view — show full plan"
+                        title={sourcePlanEditorActive ? "Center and zoom to show every piece on the plan" : "Reset view — show the full plan"}
+                        aria-label={sourcePlanEditorActive ? "Reset view — show all pieces" : "Reset view — show full plan"}
                         onClick={() => {
-                          setTraceViewZoom(1);
-                          setPlanBoxZoomActive(false);
-                          setTraceResetViewTick((t) => t + 1);
+                          if (sourcePlanEditorActive) {
+                            blankPlanRef.current?.fitAllPiecesInView();
+                          } else {
+                            setTraceViewZoom(1);
+                            setPlanBoxZoomActive(false);
+                            setTraceResetViewTick((t) => t + 1);
+                          }
                         }}
                       >
                         <IconZoomResetView />
@@ -2572,44 +5109,221 @@ export function LayoutStudioScreen({
                     </div>
                     <span className="ls-plan-toolbar-divider" aria-hidden />
                     <span className="ls-plan-toolbar-zoom-heading" aria-live="polite">
-                      {draft.calibration.isCalibrated ? "Scale set" : "Scale needed"}
+                      {activeCalibration.isCalibrated ? "Scale set" : "Scale needed"}
                     </span>
                     <button type="button" className="ls-btn ls-btn-secondary" onClick={beginCalibration}>
                       Set scale
                     </button>
                   </div>
-                  <TraceWorkspace
-                    displayUrl={displayUrl}
-                    isPdfSource={isPdfSource}
-                    fitPageToWidth={!planCanvasExpanded}
-                    viewZoom={traceViewZoom}
-                    boxZoomMode={planBoxZoomActive}
-                    resetViewSignal={traceResetViewTick}
-                    zoomToSelectedSignal={traceZoomToSelectedTick}
-                    calibration={draft.calibration}
-                    calibrationMode={calibrationMode}
-                    onCalibrationPoint={onCalibrationPoint}
-                    tool={tool}
-                    pieces={draft.pieces}
-                    selectedPieceId={selectedPieceId}
-                    onSelectPiece={setSelectedPieceId}
-                    onPiecesChange={onPiecesChange}
-                    slabs={layoutSlabs}
-                    placements={draft.placements}
-                    onViewZoomChange={onTraceViewZoomChange}
-                    onBoxZoomModeChange={setPlanBoxZoomActive}
-                  />
-                  <button
-                    type="button"
-                    className="ls-plan-canvas-expand-fab"
-                    onClick={() => setPlanCanvasExpanded((v) => !v)}
-                    title={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
-                    aria-label={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
+                  <div
+                    className={`ls-trace-stage-shell${
+                      draft.source?.kind === "pdf" && sourcePages.length > 1 && showSourceOnPlanCanvas
+                        ? " ls-trace-stage-shell--with-pages"
+                        : ""
+                    }`}
                   >
-                    {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
-                  </button>
+                    {draft.source?.kind === "pdf" && sourcePages.length > 1 && showSourceOnPlanCanvas ? (
+                      <aside className="ls-trace-page-strip" aria-label="Plan pages">
+                        {sourcePages.map((page) => {
+                          const thumbUrl =
+                            pdfPageThumbUrls[page.index] ??
+                            page.previewImageUrl ??
+                            (page.index === 0 ? draft.source?.previewImageUrl ?? null : null);
+                          const pageScale = page.calibration?.pixelsPerInch ?? null;
+                          const pagePieceCount = pieceCountBySourcePageIndex.get(page.index) ?? 0;
+                          const selected = page.index === activeSourcePage?.index;
+                          return (
+                            <button
+                              key={page.index}
+                              type="button"
+                              className={`ls-trace-page-card${selected ? " is-active" : ""}`}
+                              onClick={() => goToSourcePage(page.index)}
+                            >
+                              <span className="ls-trace-page-card-label">
+                                <span>Page {page.pageNumber}</span>
+                                {pagePieceCount > 0 ? (
+                                  <span className="ls-trace-page-card-count">{pagePieceCount}</span>
+                                ) : null}
+                              </span>
+                              <span
+                                className="ls-trace-page-card-frame"
+                                style={{ aspectRatio: `${Math.max(page.widthPx, 1)} / ${Math.max(page.heightPx, 1)}` }}
+                              >
+                                {thumbUrl ? (
+                                  <img
+                                    className="ls-trace-page-card-thumb"
+                                    src={thumbUrl}
+                                    alt={`Page ${page.pageNumber} thumbnail`}
+                                  />
+                                ) : (
+                                  <span className="ls-trace-page-card-placeholder">
+                                    <UploadProgressRing progress={null} compact stage="processing" />
+                                    <span>Rendering</span>
+                                  </span>
+                                )}
+                              </span>
+                              <span className="ls-trace-page-card-meta">
+                                {pageScale ? `${pageScale.toFixed(2)} px/in` : "Scale needed"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </aside>
+                    ) : null}
+                    <div className="ls-trace-page-stage">
+                      {draft.source?.kind === "pdf" &&
+                      sourcePages.length > 1 &&
+                      showSourceOnPlanCanvas &&
+                      activeSourcePage ? (
+                        <div className="ls-trace-page-pager" role="group" aria-label="PDF page navigation">
+                          <button
+                            type="button"
+                            className="ls-trace-page-pager-btn"
+                            onClick={() => goToSourcePage(sourcePages[Math.max(0, activeSourcePagePos - 1)]!.index)}
+                            disabled={activeSourcePagePos <= 0}
+                            aria-label="Previous PDF page"
+                            title="Previous page"
+                          >
+                            Prev
+                          </button>
+                          <span className="ls-trace-page-pager-label">
+                            Page {activeSourcePage.pageNumber} of {sourcePages.length}
+                          </span>
+                          <button
+                            type="button"
+                            className="ls-trace-page-pager-btn"
+                            onClick={() =>
+                              goToSourcePage(
+                                sourcePages[Math.min(sourcePages.length - 1, activeSourcePagePos + 1)]!.index,
+                              )
+                            }
+                            disabled={activeSourcePagePos < 0 || activeSourcePagePos >= sourcePages.length - 1}
+                            aria-label="Next PDF page"
+                            title="Next page"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      ) : null}
+                      {draft.source?.kind === "pdf" && showSourceOnPlanCanvas && !planCanvasDisplayUrl ? (
+                        <div className="ls-trace-empty glass-panel">
+                          <div className="ls-trace-empty-spinner">
+                            <UploadProgressRing progress={null} stage="processing" />
+                          </div>
+                          <p className="ls-trace-empty-title">Rendering page…</p>
+                          <p className="ls-muted">
+                            {pdfRenderStatusText ??
+                              (activeSourcePage ? `Loading page ${activeSourcePage.pageNumber}.` : "Loading PDF.")}
+                          </p>
+                        </div>
+                      ) : sourcePlanEditorActive ? (
+                        <BlankPlanWorkspace
+                          ref={blankPlanRef}
+                          zoomUiPlacement="toolbar"
+                          onViewZoomChange={onBlankViewZoomChange}
+                          onBoxZoomModeChange={setPlanBoxZoomActive}
+                          tool={tool}
+                          pieces={planCanvasPieces}
+                          selectedPieceId={selectedPieceId}
+                          selectedEdge={selectedEdge}
+                          selectedFilletEdges={selectedFilletEdges}
+                          showLabels={showPieceLabels}
+                          sourcePageNumberByIndex={sourcePageNumberByIndex}
+                          showEdgeDimensions={showEdgeDimensions}
+                          snapAlignmentMode={snapAlignmentMode}
+                          onSelectPiece={(id) => {
+                            setSelectedPieceId(id);
+                            setSelectedFilletEdges([]);
+                          }}
+                          onSelectEdge={(sel) => {
+                            setSelectedEdge(sel);
+                            if (sel) setSelectedFilletEdges([]);
+                          }}
+                          onSelectFilletEdges={setSelectedFilletEdges}
+                          onPiecesChange={onPlanCanvasPiecesChange}
+                          onRequestSplashForEdge={(sel, kind) => {
+                            setSplashTargetEdge(sel);
+                            setEdgeStripKind(kind);
+                            setSplashHeightInput("4");
+                            setSplashModalOpen(true);
+                          }}
+                          onRequestAddSinkForEdge={(sel) => {
+                            setSelectedPieceId(sel.pieceId);
+                            setAddSinkEdge(sel);
+                            setAddSinkModalOpen(true);
+                          }}
+                          onToggleProfileEdge={toggleProfileEdge}
+                          onSetSplashBottomEdge={setSplashBottomEdge}
+                          onPiecesChangeLive={onPlanCanvasPiecesChangeLive}
+                          onPieceDragStart={pushUndoSnapshot}
+                          slabs={layoutSlabs}
+                          placements={draft.placements}
+                          pixelsPerInch={1}
+                          fitAllPiecesSignal={planFitAllPiecesTick}
+                          onTraceToolChange={setTool}
+                          fitViewportWidth={planCanvasExpanded}
+                          minViewZoom={SOURCE_PLAN_EDITOR_VIEW_ZOOM_MIN}
+                        />
+                      ) : (
+                        <TraceWorkspace
+                          displayUrl={planCanvasDisplayUrl}
+                          isPdfSource={isPdfSource}
+                          sourceBounds={planCanvasBounds}
+                          fitPageToWidth={!planCanvasExpanded}
+                          viewZoom={traceViewZoom}
+                          boxZoomMode={planBoxZoomActive}
+                          resetViewSignal={traceResetViewTick}
+                          zoomToSelectedSignal={traceZoomToSelectedTick}
+                          calibration={activeCalibration}
+                          calibrationMode={calibrationMode}
+                          onCalibrationPoint={onCalibrationPoint}
+                          tool={tool}
+                          pieces={tracePagePieces}
+                          selectedPieceId={traceSelectedPieceId}
+                          selectedEdge={selectedEdge}
+                          onSelectPiece={setSelectedPieceId}
+                          onSelectEdge={setSelectedEdge}
+                          onPiecesChange={onTracePiecesChange}
+                          onPiecesChangeLive={onTracePiecesChangeLive}
+                          onPieceDragStart={pushUndoSnapshot}
+                          onRequestSplashForEdge={(sel, kind) => {
+                            setSplashTargetEdge(sel);
+                            setEdgeStripKind(kind);
+                            setSplashHeightInput("4");
+                            setSplashModalOpen(true);
+                          }}
+                          onRequestAddSinkForEdge={(sel) => {
+                            setSelectedPieceId(sel.pieceId);
+                            setAddSinkEdge(sel);
+                            setAddSinkModalOpen(true);
+                          }}
+                          onToggleProfileEdge={toggleProfileEdge}
+                          onSetSplashBottomEdge={setSplashBottomEdge}
+                          slabs={layoutSlabs}
+                          placements={draft.placements}
+                          newPieceSourceMeta={{
+                            sourcePageIndex: activeSourcePage?.index ?? 0,
+                            sourcePixelsPerInch: activeCalibration.pixelsPerInch,
+                          }}
+                          onViewZoomChange={onTraceViewZoomChange}
+                          onBoxZoomModeChange={setPlanBoxZoomActive}
+                        />
+                      )}
+                      {planCanvasLiveSummary}
+                      <button
+                        type="button"
+                        className="ls-plan-canvas-expand-fab"
+                        onClick={() => setPlanCanvasExpanded((v) => !v)}
+                        title={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
+                        aria-label={planCanvasExpanded ? "Exit full screen" : "Expand plan canvas"}
+                      >
+                        {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
+                      </button>
+                    </div>
+                  </div>
                   {traceCalibrationPopup}
                   {tracePieceInspectorPanel}
+                  {tracePieceListPanel}
                 </div>
               </div>
               </div>
@@ -2629,36 +5343,50 @@ export function LayoutStudioScreen({
             </div>
           ) : (
             <div className="ls-place-canvas-host">
-              <div className="ls-place-split-toolbar">
-                <div
-                  className="ls-metrics ls-metrics--place-toolbar glass-panel"
-                  aria-label="Live summary"
-                >
-                  <p className="ls-metrics-place-title">Live summary</p>
-                  <div className="ls-metric-grid ls-metric-grid--place-toolbar">
-                    <div className="ls-metric-inline">
-                      <span className="ls-metric-val">{draft.summary.areaSqFt.toFixed(1)}</span>
-                      <span className="ls-metric-lbl">sq ft (est.)</span>
-                    </div>
-                    <div className="ls-metric-inline">
-                      <span className="ls-metric-val">
-                        {(draft.summary.profileEdgeLf ?? 0) > 0
-                          ? (draft.summary.profileEdgeLf ?? 0).toFixed(1)
-                          : "—"}
-                      </span>
-                      <span className="ls-metric-lbl">ft profile (est.)</span>
-                    </div>
-                    <div className="ls-metric-inline">
-                      <span className="ls-metric-val">{draft.summary.sinkCount}</span>
-                      <span className="ls-metric-lbl">sinks</span>
-                    </div>
-                    <div className="ls-metric-inline">
-                      <span className="ls-metric-val">{draft.summary.estimatedSlabCount}</span>
-                      <span className="ls-metric-lbl">slabs (est.)</span>
-                    </div>
-                  </div>
+              {fullScreenPhaseToolbar}
+              <div className="ls-plan-toolbar ls-place-toolbar" role="toolbar" aria-label="Layout toolbar">
+                <div className="ls-plan-toolbar-group">
+                  <button
+                    type="button"
+                    className="ls-plan-toolbar-btn"
+                    onClick={() => void handleBack()}
+                    disabled={saveStatus === "saving" || backNavigationPending}
+                    title="Back to comparison"
+                    aria-label="Back to comparison"
+                  >
+                    <IconBack />
+                  </button>
                 </div>
-                <div className="ls-place-split-toolbar-actions">
+                <span className="ls-plan-toolbar-divider" aria-hidden />
+                <div className="ls-plan-toolbar-group ls-place-toolbar-group-summary">
+                  {renderLiveSummary("ls-live-summary ls-live-summary--toolbar")}
+                </div>
+                <span className="ls-plan-toolbar-divider" aria-hidden />
+                <div className="ls-plan-toolbar-group ls-place-toolbar-group-material">
+                  {placeMaterialMenu}
+                </div>
+                <span className="ls-plan-toolbar-spacer" aria-hidden />
+                <div className="ls-plan-toolbar-group ls-place-toolbar-group-actions">
+                  <button
+                    type="button"
+                    className="ls-plan-toolbar-btn"
+                    onClick={() => setPlanCanvasExpanded((v) => !v)}
+                    title={planCanvasExpanded ? "Exit full screen" : "Expand layout workspace"}
+                    aria-label={planCanvasExpanded ? "Exit full screen" : "Expand layout workspace"}
+                  >
+                    {planCanvasExpanded ? <IconFullscreenExit /> : <IconFullscreenEnter />}
+                  </button>
+                  <button
+                    type="button"
+                    className={`ls-plan-toolbar-btn ls-plan-toolbar-btn--toggle${placeSeamMode ? " is-active" : ""}`}
+                    aria-pressed={placeSeamMode}
+                    disabled={!piecesHaveAnyScale(placeVisiblePieces, draft.calibration.pixelsPerInch)}
+                    onClick={() => setPlaceSeamMode((v) => !v)}
+                    title="Seam — hover a slab edge to split the placed piece"
+                    aria-label="Seam tool"
+                  >
+                    <IconToolSeam />
+                  </button>
                   <button
                     type="button"
                     className={`ls-btn ls-btn-secondary ls-place-layout-toggle${placeOrthoMove ? " is-active" : ""}`}
@@ -2678,18 +5406,42 @@ export function LayoutStudioScreen({
                   </button>
                 </div>
               </div>
-              <div className={`ls-place-dual${placeSplitView ? " ls-place-dual--side" : ""}`}>
-                <div className="ls-place-region">
+              <div
+                ref={placeSplitContainerRef}
+                className={`ls-place-dual${placeSplitView ? " ls-place-dual--side" : ""}`}
+                style={
+                  placeSplitView
+                    ? ({
+                        ["--ls-place-side-left" as any]: `${placeSplitLeftPct}%`,
+                        ["--ls-place-side-right" as any]: `${100 - placeSplitLeftPct}%`,
+                      } as CSSProperties)
+                    : undefined
+                }
+              >
+                <div
+                  ref={placeSlabRegionRef}
+                  className={`ls-place-region ls-place-region--slabs${
+                    planCanvasExpanded && placeSplitView ? " ls-place-region--viewport-scroll" : ""
+                  }`}
+                  style={
+                    planCanvasExpanded && placeSplitView && placeSlabRegionViewportHeight != null
+                      ? {
+                          height: `${placeSlabRegionViewportHeight}px`,
+                          maxHeight: `${placeSlabRegionViewportHeight}px`,
+                        }
+                      : undefined
+                  }
+                >
                   <PlaceWorkspace
                     slabs={layoutSlabs}
                     activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
                     onActiveSlab={(id) => setActiveSlabId(id)}
-                    pieces={draft.pieces}
-                    placements={draft.placements}
+                    pieces={placeVisiblePieces}
+                    placements={activeMaterialPlacements}
                     pixelsPerInch={draft.calibration.pixelsPerInch}
-                    selectedPieceId={selectedPieceId}
+                    selectedPieceId={placeSelectedPieceId}
                     onSelectPiece={setSelectedPieceId}
-                    onPlacementChange={onPlacementsChange}
+                    onPlacementChange={onActiveMaterialPlacementsChange}
                     onPlacementInteractionStart={pushUndoSnapshot}
                     showPieceLabels={showPieceLabels}
                     slabViewMode="column"
@@ -2707,8 +5459,24 @@ export function LayoutStudioScreen({
                     addSlabDisabled={layoutSlabs.length >= MAX_LAYOUT_SLABS}
                     addSlabTitle={`Duplicate slab material (${layoutSlabs.length}/${MAX_LAYOUT_SLABS})`}
                     orthoMove={placeOrthoMove}
+                    seamMode={placeSeamMode}
+                    onPlaceSeamRequest={placeSeamOnSlab}
                   />
                 </div>
+                {placeSplitView ? (
+                  <div
+                    className="ls-place-panel-resizer"
+                    role="separator"
+                    aria-label="Resize layout panels"
+                    aria-orientation="vertical"
+                    aria-valuemin={28}
+                    aria-valuemax={72}
+                    aria-valuenow={Math.round(placeSplitLeftPct)}
+                    tabIndex={0}
+                    onPointerDown={handlePlaceSplitResizePointerDown}
+                    onKeyDown={handlePlaceSplitResizeKeyDown}
+                  />
+                ) : null}
                 <div className="ls-place-region ls-place-region--preview">
                   <div className="ls-place-live-preview-frame">
                     <div
@@ -2748,27 +5516,20 @@ export function LayoutStudioScreen({
                       </button>
                     </div>
                     <PlaceLayoutPreview
-                      workspaceKind={isBlankWorkspace ? "blank" : "source"}
-                      pieces={draft.pieces}
-                      placements={draft.placements}
+                      workspaceKind={layoutPreviewWorkspaceKind}
+                      pieces={layoutPreviewVisiblePieces}
+                      placements={activeMaterialPlacements}
                       slabs={layoutSlabs}
                       pixelsPerInch={draft.calibration.pixelsPerInch}
                       tracePlanWidth={draft.source?.sourceWidthPx ?? null}
                       tracePlanHeight={draft.source?.sourceHeightPx ?? null}
                       showLabels={showPieceLabels}
-                      selectedPieceId={selectedPieceId}
+                      selectedPieceId={placeSelectedPieceId}
                       onPieceActivate={placePieceFromLivePreview}
                     />
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="ls-quote-fab"
-                onClick={() => void beginQuoteTransition()}
-              >
-                Quote
-              </button>
             </div>
           )}
           {!showEntryHub &&
@@ -2776,31 +5537,7 @@ export function LayoutStudioScreen({
           !(mode === "place" && activeOption) &&
           !planCanvasExpanded ? (
             <div className="ls-canvas-footer">
-              <div className="ls-metrics ls-metrics--below-canvas glass-panel" aria-label="Live summary">
-                <p className="ls-metrics-below-title">Live summary</p>
-                <div className="ls-metric-grid ls-metric-grid--below">
-                  <div className="ls-metric-inline">
-                    <span className="ls-metric-val">{draft.summary.areaSqFt.toFixed(1)}</span>
-                    <span className="ls-metric-lbl">sq ft (est.)</span>
-                  </div>
-                  <div className="ls-metric-inline">
-                    <span className="ls-metric-val">
-                      {(draft.summary.profileEdgeLf ?? 0) > 0
-                        ? (draft.summary.profileEdgeLf ?? 0).toFixed(1)
-                        : "—"}
-                    </span>
-                    <span className="ls-metric-lbl">ft profile (est.)</span>
-                  </div>
-                  <div className="ls-metric-inline">
-                    <span className="ls-metric-val">{draft.summary.sinkCount}</span>
-                    <span className="ls-metric-lbl">sinks</span>
-                  </div>
-                  <div className="ls-metric-inline">
-                    <span className="ls-metric-val">{draft.summary.estimatedSlabCount}</span>
-                    <span className="ls-metric-lbl">slabs (est.)</span>
-                  </div>
-                </div>
-              </div>
+              {renderLiveSummary("ls-live-summary ls-live-summary--below-canvas")}
             </div>
           ) : null}
           </section>
@@ -3077,11 +5814,16 @@ export function LayoutStudioScreen({
           customer={customer}
           job={job}
           option={activeOption}
-          draft={draft}
+          draft={quoteShowingAllUsedMaterials ? draft : activeMaterialQuoteDraft}
+          previewPieces={quoteShowingAllUsedMaterials ? draft.pieces : layoutPreviewVisiblePieces}
+          previewWorkspaceKind={quoteShowingAllUsedMaterials ? (draft.workspaceKind === "blank" ? "blank" : "source") : layoutPreviewWorkspaceKind}
           layoutSlabs={layoutSlabs}
           activeSlabId={activeSlabId ?? layoutSlabs[0]?.id ?? null}
           ownerUserId={ownerUserId}
           showPieceLabels={showPieceLabels}
+          quoteSettings={mergedQuoteSettings}
+          customerExclusions={mergedCustomerExclusions}
+          allMaterialsSections={quoteShowingAllUsedMaterials ? quoteAllMaterialsSections : null}
         />
       ) : null}
 
@@ -3092,6 +5834,59 @@ export function LayoutStudioScreen({
           initial={mergedQuoteSettings}
           onSave={saveLayoutQuoteSettings}
         />
+      ) : null}
+
+      {busyOverlayVisible ? (
+        <div
+          className={`ls-upload-overlay${busyOverlaySaving ? " ls-upload-overlay--saving" : ""}`}
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="ls-upload-overlay__backdrop" />
+          <div className="ls-upload-overlay__panel glass-panel">
+            <UploadProgressRing
+              progress={backNavigationPending ? backNavigationProgress : uploading ? uploadProgress : null}
+              stage={backNavigationPending ? "uploading" : uploading ? uploadStage : "processing"}
+              tone={busyOverlaySaving ? "success" : "default"}
+              label={busyOverlayPhaseTransition ? "Loading" : undefined}
+            />
+            <p className="ls-upload-overlay__eyebrow">
+              {backNavigationPending
+                ? "Saving layout"
+                : busyOverlayPhaseTransition
+                  ? "Switching views"
+                : uploading
+                ? uploadStage === "processing"
+                  ? "Preparing plan"
+                  : "Uploading plan"
+                : "Rendering page"}
+            </p>
+            <h2 className="ls-upload-overlay__title">
+              {backNavigationPending
+                ? `${backNavigationProgressLabel}% saved`
+                : busyOverlayPhaseTransition
+                  ? `Opening ${phaseTransitionLabel}...`
+                : uploading
+                ? uploadStage === "processing"
+                  ? "Almost there..."
+                  : `${Math.round(uploadProgress ?? 0)}% uploaded`
+                : "Rendering PDF preview..."}
+            </h2>
+            <p className="ls-upload-overlay__body">
+              {backNavigationPending
+                ? "Storing your latest plan changes before returning."
+                : busyOverlayPhaseTransition
+                  ? "Saving your latest changes and loading the selected workspace."
+                : uploading
+                ? uploadStatusText ??
+                  (uploadStage === "processing"
+                    ? "Reading the file and building your plan workspace."
+                    : "Sending your plan to secure storage.")
+                : pdfRenderStatusText ?? "Turning the selected PDF page into a plan image."}
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {layoutPreviewModalOpen && mode === "place" ? (
@@ -3136,9 +5931,13 @@ export function LayoutStudioScreen({
                 <div className="ls-modal-layout-preview-toolbar-right">
                   {layoutPreviewExpandedMode === "3d" ? (
                     <span className="ls-layout-preview-3d-hint" aria-hidden>
-                      Drag to rotate
+                      Wheel to zoom, drag to rotate
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="ls-layout-preview-3d-hint" aria-hidden>
+                      Wheel or +/- to zoom, drag to pan
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="ls-btn ls-btn-secondary"
@@ -3153,24 +5952,24 @@ export function LayoutStudioScreen({
             <div className="ls-modal-layout-preview-body">
               {layoutPreviewExpandedMode === "2d" ? (
                 <PlaceLayoutPreview
-                  workspaceKind={isBlankWorkspace ? "blank" : "source"}
-                  pieces={draft.pieces}
-                  placements={draft.placements}
+                  workspaceKind={layoutPreviewWorkspaceKind}
+                  pieces={layoutPreviewVisiblePieces}
+                  placements={activeMaterialPlacements}
                   slabs={layoutSlabs}
                   pixelsPerInch={draft.calibration.pixelsPerInch}
                   tracePlanWidth={draft.source?.sourceWidthPx ?? null}
                   tracePlanHeight={draft.source?.sourceHeightPx ?? null}
                   showLabels={showPieceLabels}
-                  selectedPieceId={selectedPieceId}
+                  selectedPieceId={placeSelectedPieceId}
                   previewInstanceId="modal"
                   variant="fullscreen"
                   onPieceActivate={placePieceFromLivePreview}
                 />
               ) : (
                 <PlaceLayoutPreview3D
-                  workspaceKind={isBlankWorkspace ? "blank" : "source"}
-                  pieces={draft.pieces}
-                  placements={draft.placements}
+                  workspaceKind={layoutPreviewWorkspaceKind}
+                  pieces={layoutPreviewVisiblePieces}
+                  placements={activeMaterialPlacements}
                   slabs={layoutSlabs}
                   pixelsPerInch={draft.calibration.pixelsPerInch ?? 0}
                   slabThicknessInches={slabThicknessInForPreview}

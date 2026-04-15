@@ -11,6 +11,7 @@ import {
 import { isPlanStripPiece } from "./pieceRoles";
 
 const EPS = 1e-6;
+const POINT_MATCH_EPS = 1e-4;
 const MIN_SPLIT_AREA = 0.08;
 /** Endpoint tolerance for snap-flush join (plan inches). Slightly loose so Snap lines + float still qualify. */
 const JOIN_PT_EPS = 0.22;
@@ -419,24 +420,143 @@ export function seamGeometryFromAxisAlignedEdge(
   };
 }
 
+function pointsCoincident(a: LayoutPoint, b: LayoutPoint, tol = POINT_MATCH_EPS): boolean {
+  return Math.hypot(a.x - b.x, a.y - b.y) <= tol;
+}
+
+function pointOnSegmentInterior(p: LayoutPoint, a: LayoutPoint, b: LayoutPoint): boolean {
+  if (pointsCoincident(p, a) || pointsCoincident(p, b)) return false;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < EPS * EPS) return false;
+  const cross = (p.x - a.x) * dy - (p.y - a.y) * dx;
+  if (Math.abs(cross) > POINT_MATCH_EPS * Math.max(1, Math.sqrt(len2))) return false;
+  const dot = (p.x - a.x) * dx + (p.y - a.y) * dy;
+  return dot > POINT_MATCH_EPS && dot < len2 - POINT_MATCH_EPS;
+}
+
+function appendUniquePoint(points: LayoutPoint[], point: LayoutPoint): LayoutPoint[] {
+  if (!points.some((existing) => pointsCoincident(existing, point))) points.push(point);
+  return points;
+}
+
+function insertPointsOnContainingEdges(
+  ring: LayoutPoint[],
+  cutPoints: LayoutPoint[]
+): LayoutPoint[] | null {
+  const r = normalizeClosedRing(ring);
+  const n = r.length;
+  if (n < 3) return null;
+  const insertsByEdge = new Map<number, LayoutPoint[]>();
+
+  for (const point of cutPoints) {
+    let matchedVertex = false;
+    for (const vertex of r) {
+      if (pointsCoincident(vertex, point)) {
+        matchedVertex = true;
+        break;
+      }
+    }
+    if (matchedVertex) continue;
+
+    let edgeIndex = -1;
+    for (let i = 0; i < n; i++) {
+      const a = r[i]!;
+      const b = r[(i + 1) % n]!;
+      if (pointOnSegmentInterior(point, a, b)) {
+        edgeIndex = i;
+        break;
+      }
+    }
+    if (edgeIndex < 0) return null;
+    const existing = insertsByEdge.get(edgeIndex) ?? [];
+    appendUniquePoint(existing, point);
+    insertsByEdge.set(edgeIndex, existing);
+  }
+
+  const out: LayoutPoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const start = r[i]!;
+    const end = r[(i + 1) % n]!;
+    out.push({ ...start });
+    const inserts = insertsByEdge.get(i);
+    if (!inserts || inserts.length === 0) continue;
+    for (const point of sortPointsAlongOpenEdge(start, end, inserts)) {
+      out.push({ ...point });
+    }
+  }
+  return dedupeConsecutive(out);
+}
+
+function findPointIndex(ring: LayoutPoint[], point: LayoutPoint): number {
+  return ring.findIndex((candidate) => pointsCoincident(candidate, point));
+}
+
+function walkRingInclusive(ring: LayoutPoint[], startIndex: number, endIndex: number): LayoutPoint[] {
+  const n = ring.length;
+  const out: LayoutPoint[] = [{ ...ring[startIndex]! }];
+  let cursor = startIndex;
+  while (cursor !== endIndex) {
+    cursor = (cursor + 1) % n;
+    out.push({ ...ring[cursor]! });
+    if (out.length > n + 1) break;
+  }
+  return out;
+}
+
+function validateSplitRing(ring: LayoutPoint[]): LayoutPoint[] | null {
+  const cleaned = dedupeConsecutive(ring);
+  if (cleaned.length < 3) return null;
+  if (polygonArea(cleaned) < MIN_SPLIT_AREA) return null;
+  return ensureRingCCW(cleaned);
+}
+
+function averageCoordinate(ring: LayoutPoint[], axis: "x" | "y"): number {
+  if (ring.length === 0) return 0;
+  return ring.reduce((sum, point) => sum + point[axis], 0) / ring.length;
+}
+
+function splitWorldRingAlongSegment(
+  worldRing: LayoutPoint[],
+  start: LayoutPoint,
+  end: LayoutPoint
+): [LayoutPoint[], LayoutPoint[]] | null {
+  if (pointsCoincident(start, end)) return null;
+  const augmented = insertPointsOnContainingEdges(worldRing, [start, end]);
+  if (!augmented) return null;
+  const startIndex = findPointIndex(augmented, start);
+  const endIndex = findPointIndex(augmented, end);
+  if (startIndex < 0 || endIndex < 0 || startIndex === endIndex) return null;
+
+  const first = validateSplitRing(walkRingInclusive(augmented, startIndex, endIndex));
+  const second = validateSplitRing(walkRingInclusive(augmented, endIndex, startIndex));
+  if (!first || !second) return null;
+  return [first, second];
+}
+
 export function splitWorldRingAtVerticalSeam(
   worldRing: LayoutPoint[],
-  xSeam: number
+  xSeam: number,
+  hintY: number
 ): [LayoutPoint[], LayoutPoint[]] | null {
-  const left = clipPolygonXMax(worldRing, xSeam);
-  const right = clipPolygonXMin(worldRing, xSeam);
-  if (!left || !right) return null;
-  return [left, right];
+  const { y0, y1 } = verticalSeamPreviewChord(worldRing, xSeam, hintY);
+  const split = splitWorldRingAlongSegment(worldRing, { x: xSeam, y: y0 }, { x: xSeam, y: y1 });
+  if (!split) return null;
+  const [a, b] = split;
+  return averageCoordinate(a, "x") <= averageCoordinate(b, "x") ? [a, b] : [b, a];
 }
 
 export function splitWorldRingAtHorizontalSeam(
   worldRing: LayoutPoint[],
-  ySeam: number
+  ySeam: number,
+  hintX: number
 ): [LayoutPoint[], LayoutPoint[]] | null {
-  const low = clipPolygonYMax(worldRing, ySeam);
-  const high = clipPolygonYMin(worldRing, ySeam);
-  if (!low || !high) return null;
-  return [low, high];
+  const { x0, x1 } = horizontalSeamPreviewChord(worldRing, ySeam, hintX);
+  const split = splitWorldRingAlongSegment(worldRing, { x: x0, y: ySeam }, { x: x1, y: ySeam });
+  if (!split) return null;
+  const [a, b] = split;
+  return averageCoordinate(a, "y") <= averageCoordinate(b, "y") ? [a, b] : [b, a];
 }
 
 function near(a: LayoutPoint, b: LayoutPoint): boolean {

@@ -14,6 +14,7 @@ import { isPlanStripPiece, stripFoldsDownFromHinge } from "../utils/pieceRoles";
 import { centroid, normalizeClosedRing } from "../utils/geometry";
 import { allSinkCutoutRingsPlanWorld, coordPerInchForPlan } from "../utils/pieceSinks";
 import { DEFAULT_SLAB_THICKNESS_IN } from "../utils/parseThicknessInches";
+import { piecePixelsPerInch, piecesHaveAnyScale } from "../utils/sourcePages";
 import {
   planCentroidForTexture,
   planPointToSlabInches,
@@ -97,7 +98,7 @@ type PlaceLayoutPreview3DProps = {
   pieces: LayoutPiece[];
   placements: PiecePlacement[];
   slabs: LayoutSlab[];
-  pixelsPerInch: number;
+  pixelsPerInch: number | null;
   /** Extrusion depth in inches (from catalog slab thickness). */
   slabThicknessInches: number;
   /** Partial override of colors, lights, and exposure for the 3D preview. */
@@ -354,7 +355,7 @@ export function PlaceLayoutPreview3D({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !pixelsPerInch || pixelsPerInch <= 0) return;
+    if (!container || !piecesHaveAnyScale(pieces, pixelsPerInch)) return;
 
     let cancelled = false;
 
@@ -362,9 +363,6 @@ export function PlaceLayoutPreview3D({
     const placementByPiece = new Map(placements.map((p) => [p.pieceId, p]));
 
     const thicknessIn = Math.max(0.08, slabThicknessInches || DEFAULT_SLAB_THICKNESS_IN);
-    const extrudeDepth =
-      workspaceKind === "blank" ? thicknessIn : thicknessIn * pixelsPerInch;
-
     const coordPerInch = coordPerInchForPlan(workspaceKind, pixelsPerInch);
 
     const appearance = resolvePlaceLayoutPreview3DAppearance(appearanceProp);
@@ -568,6 +566,7 @@ export function PlaceLayoutPreview3D({
       geom: THREE.ExtrudeGeometry,
       tex: THREE.Texture | null,
       piece: LayoutPiece,
+      extrudeDepth: number,
     ): THREE.Mesh => {
       const lidMat = new THREE.MeshStandardMaterial({
         map: tex ?? undefined,
@@ -616,14 +615,18 @@ export function PlaceLayoutPreview3D({
     };
 
     void (async () => {
-      const planScalePerInch = workspaceKind === "blank" ? 1 : pixelsPerInch;
-
       for (const piece of pieces) {
         if (cancelled) return;
         const pl = placementByPiece.get(piece.id);
         if (!pl?.slabId || !pl.placed) continue;
         const slab = slabById.get(pl.slabId);
         if (!slab || slab.widthIn <= 0 || slab.heightIn <= 0) continue;
+        const planScalePerInch =
+          workspaceKind === "blank" ? 1 : piecePixelsPerInch(piece, pixelsPerInch);
+        if (!planScalePerInch) continue;
+        const pieceExtrudeDepth = thicknessIn * planScalePerInch;
+        const pieceCoordPerInch =
+          workspaceKind === "blank" ? coordPerInch : planScalePerInch;
 
         const planCentroid = planCentroidForTexture(piece, pieces);
         if (!planCentroid) continue;
@@ -641,25 +644,25 @@ export function PlaceLayoutPreview3D({
             }))
           : chordPts;
 
-        const holeRings = allSinkCutoutRingsPlanWorld(piece, pieces, coordPerInch);
+        const holeRings = allSinkCutoutRingsPlanWorld(piece, pieces, pieceCoordPerInch);
 
         const shape = buildShapeFromPlanWithHoles(pts, holeRings);
         let geom: THREE.ExtrudeGeometry;
         try {
           geom = new THREE.ExtrudeGeometry(shape, {
-            depth: extrudeDepth,
+            depth: pieceExtrudeDepth,
             bevelEnabled: false,
           });
         } catch {
           geom = new THREE.ExtrudeGeometry(buildShapeFromPlanWithHoles(pts, []), {
-            depth: extrudeDepth,
+            depth: pieceExtrudeDepth,
             bevelEnabled: false,
           });
         }
 
         const miterIdx = piece.edgeTags?.miterEdgeIndices;
         if (miterIdx?.length) {
-          applyMiter45ShearToExtrudeGeometry(geom, chordPts, miterIdx, extrudeDepth);
+          applyMiter45ShearToExtrudeGeometry(geom, chordPts, miterIdx, pieceExtrudeDepth);
         }
 
         /** ExtrudeGeometry already computes vertex normals; a second pass blends rim normals and breaks {@link fixLidUVsPlanMapped}. */
@@ -683,7 +686,7 @@ export function PlaceLayoutPreview3D({
           geom.dispose();
           return;
         }
-        addPieceMesh(geom, tex, piece);
+        addPieceMesh(geom, tex, piece, pieceExtrudeDepth);
       }
 
       if (cancelled) return;
@@ -704,7 +707,7 @@ export function PlaceLayoutPreview3D({
         box.getSize(size);
       } else {
         center.set(0, 0, 0);
-        size.set(120, extrudeDepth, 80);
+        size.set(120, thicknessIn, 80);
       }
 
       const maxDim = Math.max(size.x, size.y, size.z, 40);
@@ -880,7 +883,7 @@ export function PlaceLayoutPreview3D({
     }
   }, [panDragEnabled]);
 
-  if (!pixelsPerInch || pixelsPerInch <= 0) {
+  if (!piecesHaveAnyScale(pieces, pixelsPerInch)) {
     return (
       <div className="ls-place-layout-preview-empty ls-place-layout-preview-empty--fullscreen glass-panel">
         <p className="ls-muted">Set scale on the Plan tab to preview 3D placement.</p>

@@ -7,6 +7,22 @@ export type LayoutQuoteCustomerSnapshot = {
   notes: string | null;
 };
 
+export type LayoutQuoteDisplayValue = string | string[];
+
+export type LayoutQuoteShareRow = {
+  label: string;
+  value: LayoutQuoteDisplayValue;
+};
+
+export type LayoutQuoteShareMaterialSection = {
+  title: string;
+  subtitle: string | null;
+  estimate: string | null;
+  placementImageUrl: string | null;
+  slabThumbs: { label: string; imageUrl: string }[];
+  note: string | null;
+};
+
 /** Serialized layout quote for read-only share links and PDF snapshots. */
 export type LayoutQuoteSharePayloadV1 = {
   version: 1;
@@ -20,6 +36,7 @@ export type LayoutQuoteSharePayloadV1 = {
   placementImageUrl: string | null;
   slabThumbs: { label: string; imageUrl: string }[];
   activeSlabLabel: string;
+  activeSlabLabelTitle?: string;
   summary: {
     areaSqFt: number;
     finishedEdgeLf: number;
@@ -38,6 +55,10 @@ export type LayoutQuoteSharePayloadV1 = {
     quotedTotal: number | null;
     quotedPerSqft: number | null;
   };
+  customerRows?: LayoutQuoteShareRow[];
+  sinkNames?: string[];
+  materialSections?: LayoutQuoteShareMaterialSection[];
+  isAllMaterials?: boolean;
   jobAssumptions: string | null;
   optionNotes: string | null;
   disclaimer: string;

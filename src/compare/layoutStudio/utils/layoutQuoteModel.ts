@@ -1,12 +1,17 @@
 import type { CustomerRecord, JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
-import { computeQuotedInstallForCompareOption, effectiveQuoteSquareFootage } from "../../../utils/quotedPrice";
-import type { LayoutSlab, SavedLayoutStudioState } from "../types";
+import type { LayoutPiece, LayoutSlab, SavedLayoutStudioState } from "../types";
 import {
   LAYOUT_QUOTE_DISCLAIMER,
   type LayoutQuoteCustomerSnapshot,
+  type LayoutQuoteDisplayValue,
+  type LayoutQuoteShareMaterialSection,
   type LayoutQuoteSharePayloadV1,
+  type LayoutQuoteShareRow,
 } from "../types/layoutQuoteShare";
 import { layoutQuoteCustomerFromRecord } from "./layoutQuoteCustomer";
+
+export type LayoutQuoteDisplayRow = LayoutQuoteShareRow;
+export type LayoutQuoteDisplayMaterialSection = LayoutQuoteShareMaterialSection;
 
 export type LayoutQuoteDisplayModel = {
   customer: LayoutQuoteCustomerSnapshot | null;
@@ -18,36 +23,39 @@ export type LayoutQuoteDisplayModel = {
   placementImageUrl: string | null;
   slabThumbs: { label: string; imageUrl: string }[];
   activeSlabLabel: string;
+  activeSlabLabelTitle: string;
   summary: LayoutQuoteSharePayloadV1["summary"];
   quotedTotal: number | null;
   quotedPerSqft: number | null;
+  customerRows: LayoutQuoteDisplayRow[];
+  sinkNames: string[];
+  materialSections: LayoutQuoteDisplayMaterialSection[];
+  isAllMaterials: boolean;
   jobAssumptions: string | null;
   optionNotes: string | null;
   disclaimer: string;
 };
 
-export function buildLayoutQuoteDisplayModel(input: {
+export function buildSingleLayoutQuoteDisplayModel(input: {
   customer: CustomerRecord | null;
   job: JobRecord;
   option: JobComparisonOptionRecord;
   draft: SavedLayoutStudioState;
   layoutSlabs: LayoutSlab[];
   activeSlabLabel: string;
+  activeSlabLabelTitle?: string;
+  customerRows: LayoutQuoteDisplayRow[];
+  quotedTotal: number | null;
+  quotedPerSqft: number | null;
+  planImageUrl?: string | null;
+  placementImageUrl?: string | null;
   generatedAt?: string;
 }): LayoutQuoteDisplayModel {
   const { customer, job, option, draft, layoutSlabs, activeSlabLabel } = input;
-  const quoteAreaSqFt =
-    draft.summary.areaSqFt > 0 ? draft.summary.areaSqFt : effectiveQuoteSquareFootage(job, option);
-  const quoted = computeQuotedInstallForCompareOption({
-    jobSquareFootage: quoteAreaSqFt,
-    priceUnit: option.priceUnit,
-    catalogLinePrice: option.selectedPriceValue,
-    slabQuantity: option.slabQuantity ?? draft.summary.estimatedSlabCount,
-  });
   const materialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
   const profileLf = draft.summary.profileEdgeLf ?? 0;
   const miterLf = draft.summary.miterEdgeLf ?? 0;
-  const previewUrl = draft.preview?.imageUrl ?? option.layoutPreviewImageUrl ?? null;
+  const previewUrl = input.placementImageUrl ?? draft.preview?.imageUrl ?? option.layoutPreviewImageUrl ?? null;
 
   return {
     customer: layoutQuoteCustomerFromRecord(customer),
@@ -55,10 +63,11 @@ export function buildLayoutQuoteDisplayModel(input: {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     productName: option.productName,
     vendorManufacturerLine: materialLine,
-    planImageUrl: null,
+    planImageUrl: input.planImageUrl ?? null,
     placementImageUrl: previewUrl,
     slabThumbs: layoutSlabs.map((s) => ({ label: s.label, imageUrl: s.imageUrl })),
     activeSlabLabel,
+    activeSlabLabelTitle: input.activeSlabLabelTitle ?? "Selected slab reference",
     summary: {
       areaSqFt: draft.summary.areaSqFt,
       finishedEdgeLf: draft.summary.finishedEdgeLf,
@@ -68,11 +77,80 @@ export function buildLayoutQuoteDisplayModel(input: {
       sinkCount: draft.summary.sinkCount,
       splashAreaSqFt: draft.summary.splashAreaSqFt ?? 0,
     },
-    quotedTotal: quoted.quotedTotal,
-    quotedPerSqft: quoted.quotedPerSqft,
+    quotedTotal: input.quotedTotal,
+    quotedPerSqft: input.quotedPerSqft,
+    customerRows: input.customerRows,
+    sinkNames: sinkNamesFromPieces(draft.pieces),
+    materialSections: [],
+    isAllMaterials: false,
     jobAssumptions: job.assumptions?.trim() || null,
     optionNotes: option.notes?.trim() || null,
     disclaimer: LAYOUT_QUOTE_DISCLAIMER,
+  };
+}
+
+export function buildAllMaterialsLayoutQuoteDisplayModel(input: {
+  customer: CustomerRecord | null;
+  job: JobRecord;
+  summary: LayoutQuoteSharePayloadV1["summary"];
+  customerRows: LayoutQuoteDisplayRow[];
+  sinkNames?: string[];
+  materialSections: LayoutQuoteDisplayMaterialSection[];
+  quotedTotal: number | null;
+  quotedPerSqft: number | null;
+  planImageUrl?: string | null;
+  generatedAt?: string;
+}): LayoutQuoteDisplayModel {
+  const { customer, job, summary, customerRows, materialSections, quotedTotal, quotedPerSqft } = input;
+  return {
+    customer: layoutQuoteCustomerFromRecord(customer),
+    jobName: job.name,
+    generatedAt: input.generatedAt ?? new Date().toISOString(),
+    productName: "All used materials",
+    vendorManufacturerLine: `${materialSections.length} material${materialSections.length === 1 ? "" : "s"} included`,
+    planImageUrl: input.planImageUrl ?? null,
+    placementImageUrl: null,
+    slabThumbs: [],
+    activeSlabLabel: "All used slabs",
+    activeSlabLabelTitle: "Included slab scope",
+    summary,
+    quotedTotal,
+    quotedPerSqft,
+    customerRows,
+    sinkNames: input.sinkNames ?? [],
+    materialSections,
+    isAllMaterials: true,
+    jobAssumptions: job.assumptions?.trim() || null,
+    optionNotes: null,
+    disclaimer: LAYOUT_QUOTE_DISCLAIMER,
+  };
+}
+
+export function sharePayloadFromDisplayModel(model: LayoutQuoteDisplayModel): LayoutQuoteSharePayloadV1 {
+  return {
+    version: 1,
+    customer: model.customer ?? null,
+    jobName: model.jobName,
+    productName: model.productName,
+    vendorManufacturerLine: model.vendorManufacturerLine,
+    generatedAt: model.generatedAt,
+    planImageUrl: model.planImageUrl,
+    placementImageUrl: model.placementImageUrl,
+    slabThumbs: model.slabThumbs,
+    activeSlabLabel: model.activeSlabLabel,
+    activeSlabLabelTitle: model.activeSlabLabelTitle,
+    summary: model.summary,
+    price: {
+      quotedTotal: model.quotedTotal,
+      quotedPerSqft: model.quotedPerSqft,
+    },
+    customerRows: model.customerRows,
+    sinkNames: model.sinkNames,
+    materialSections: model.materialSections,
+    isAllMaterials: model.isAllMaterials,
+    jobAssumptions: model.jobAssumptions,
+    optionNotes: model.optionNotes,
+    disclaimer: model.disclaimer,
   };
 }
 
@@ -92,11 +170,71 @@ export function displayModelFromSharePayload(p: LayoutQuoteSharePayloadV1): Layo
     placementImageUrl: p.placementImageUrl,
     slabThumbs: p.slabThumbs,
     activeSlabLabel: p.activeSlabLabel,
+    activeSlabLabelTitle: p.activeSlabLabelTitle ?? "Selected slab reference",
     summary: { ...p.summary, splashAreaSqFt, miterEdgeLf: miterLf },
     quotedTotal: p.price.quotedTotal,
     quotedPerSqft: p.price.quotedPerSqft,
+    customerRows: p.customerRows ?? fallbackCustomerRows(p),
+    sinkNames: p.sinkNames ?? [],
+    materialSections: p.materialSections ?? [],
+    isAllMaterials: p.isAllMaterials === true,
     jobAssumptions: p.jobAssumptions,
     optionNotes: p.optionNotes,
     disclaimer: p.disclaimer,
   };
+}
+
+function fallbackCustomerRows(p: LayoutQuoteSharePayloadV1): LayoutQuoteDisplayRow[] {
+  const rows: LayoutQuoteDisplayRow[] = [
+    { label: "Layout area (est.)", value: `${p.summary.areaSqFt.toFixed(1)} sq ft` },
+    {
+      label: "Profile edge (est.)",
+      value: p.summary.profileEdgeLf > 0 ? `${p.summary.profileEdgeLf.toFixed(1)} lf` : "—",
+    },
+    {
+      label: "Miter edge (est.)",
+      value: (p.summary.miterEdgeLf ?? 0) > 0 ? `${(p.summary.miterEdgeLf ?? 0).toFixed(1)} lf` : "—",
+    },
+    { label: "Slab count (est.)", value: String(p.summary.estimatedSlabCount) },
+    { label: "Sinks", value: String(p.summary.sinkCount) },
+    {
+      label: "Splash (est.)",
+      value: (p.summary.splashAreaSqFt ?? 0) > 0 ? `${(p.summary.splashAreaSqFt ?? 0).toFixed(1)} sq ft` : "—",
+    },
+  ];
+  if (p.price.quotedTotal != null) {
+    rows.push({ label: "Installed estimate", value: formatMoneyValue(p.price.quotedTotal) });
+  }
+  if (p.price.quotedPerSqft != null) {
+    rows.push({ label: "Per sq ft (installed)", value: formatMoneyValue(p.price.quotedPerSqft) });
+  }
+  return rows;
+}
+
+function formatMoneyValue(value: number): LayoutQuoteDisplayValue {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function sinkNamesFromPieces(pieces: LayoutPiece[]): string[] {
+  const names: string[] = [];
+  for (const piece of pieces) {
+    const pieceName = piece.name.trim() || "Piece";
+    const namedSinks = (piece.sinks ?? [])
+      .map((sink) => sink.name.trim())
+      .filter((name) => name.length > 0);
+    if (namedSinks.length > 0) {
+      names.push(...namedSinks);
+      continue;
+    }
+    const legacyCount = Math.max(0, Math.floor(piece.sinkCount || 0));
+    for (let index = 0; index < legacyCount; index += 1) {
+      names.push(legacyCount > 1 ? `${pieceName} sink ${index + 1}` : `${pieceName} sink`);
+    }
+  }
+  return names;
 }

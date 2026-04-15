@@ -20,6 +20,45 @@ export function IconRedo(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconBack(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M15 18l-6-6 6-6" />
+      <path d="M9 12h10" />
+    </svg>
+  );
+}
+
+export function IconEye(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+export function IconEyeOff(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M3 3l18 18" />
+      <path d="M10.6 10.7A3 3 0 0013.4 13.5" />
+      <path d="M9.9 5.1A11.4 11.4 0 0112 5c6.5 0 10 7 10 7a17.3 17.3 0 01-3.2 3.8" />
+      <path d="M6.7 6.8C4.1 8.5 2 12 2 12a17.8 17.8 0 004.7 5.2" />
+      <path d="M14.1 18.8A11.4 11.4 0 0112 19c-1.1 0-2.2-.1-3.2-.4" />
+    </svg>
+  );
+}
+
+export function IconSettings(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1 1 0 00.2 1.1l.1.1a1.8 1.8 0 010 2.5 1.8 1.8 0 01-2.5 0l-.1-.1a1 1 0 00-1.1-.2 1 1 0 00-.6.9V20a1.8 1.8 0 01-1.8 1.8h-.4A1.8 1.8 0 0111.4 20v-.2a1 1 0 00-.6-.9 1 1 0 00-1.1.2l-.1.1a1.8 1.8 0 01-2.5 0 1.8 1.8 0 010-2.5l.1-.1a1 1 0 00.2-1.1 1 1 0 00-.9-.6H6.2a1.8 1.8 0 01-1.8-1.8v-.4a1.8 1.8 0 011.8-1.8h.2a1 1 0 00.9-.6 1 1 0 00-.2-1.1L7 8.9a1.8 1.8 0 010-2.5 1.8 1.8 0 012.5 0l.1.1a1 1 0 001.1.2 1 1 0 00.6-.9V5.6a1.8 1.8 0 011.8-1.8h.4a1.8 1.8 0 011.8 1.8v.2a1 1 0 00.6.9 1 1 0 001.1-.2l.1-.1a1.8 1.8 0 012.5 0 1.8 1.8 0 010 2.5l-.1.1a1 1 0 00-.2 1.1 1 1 0 00.9.6h.2a1.8 1.8 0 011.8 1.8v.4a1.8 1.8 0 01-1.8 1.8h-.2a1 1 0 00-.9.6z" />
+    </svg>
+  );
+}
+
 /** Dimension callout style — “123” */
 export function IconDimensions(props: SVGProps<SVGSVGElement>) {
   return (
@@ -46,8 +85,9 @@ export function IconPieceLabels(props: SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" aria-hidden {...props}>
       <text
         x="12"
-        y="17"
+        y="12"
         textAnchor="middle"
+        dominantBaseline="middle"
         fill="currentColor"
         fontSize="15"
         fontWeight="700"
@@ -132,6 +172,16 @@ export function IconToolCornerRadius(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Straight corner cut / bevel. */
+export function IconToolChamfer(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M7 7v7l3 3h7" />
+      <path d="M10 14l4-4" />
+    </svg>
+  );
+}
+
 /** Join two snap-flush pieces into one. */
 export function IconToolJoin(props: SVGProps<SVGSVGElement>) {
   return (
@@ -139,6 +189,25 @@ export function IconToolJoin(props: SVGProps<SVGSVGElement>) {
       <rect x="4" y="8" width="7" height="8" rx="1" />
       <rect x="13" y="8" width="7" height="8" rx="1" />
       <path d="M11 10v4M11 12h2" />
+    </svg>
+  );
+}
+
+/** Perpendicular split across a selected edge. */
+export function IconToolSeam(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <rect x="5" y="6" width="14" height="12" rx="1.5" />
+      <path d="M12 4v16" strokeDasharray="2 2" />
+    </svg>
+  );
+}
+
+export function IconPieceList(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden {...props}>
+      <path d="M9 7h10M9 12h10M9 17h10" />
+      <path d="M5.25 7h.5M5.25 12h.5M5.25 17h.5" />
     </svg>
   );
 }

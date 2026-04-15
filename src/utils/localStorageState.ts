@@ -1,8 +1,24 @@
-import type { ColumnVisibility, UiPreferences } from "../types/catalog";
+import type { ColumnVisibility, SortKey, UiPreferences } from "../types/catalog";
 
 const PREFIX = "bella-catalog";
 const KEY_FAVORITES = `${PREFIX}-favorites-v1`;
 const KEY_PREFS = `${PREFIX}-preferences-v1`;
+
+function parseStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+}
+
+function isSortKey(value: unknown): value is SortKey {
+  return (
+    value === "nameAsc" ||
+    value === "nameDesc" ||
+    value === "vendor" ||
+    value === "manufacturer" ||
+    value === "priceLow" ||
+    value === "priceHigh" ||
+    value === "tier"
+  );
+}
 
 export function loadFavoriteIds(): Set<string> {
   try {
@@ -78,41 +94,20 @@ export function loadPreferences(): Partial<UiPreferences> {
     if (cv === "grid" || cv === "table") out.catalogView = cv;
     if (typeof o.searchQuery === "string") out.searchQuery = o.searchQuery;
     if (typeof o.vendor === "string") out.vendor = o.vendor;
-    if (Array.isArray(o.manufacturers))
-      out.manufacturers = o.manufacturers.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.materials))
-      out.materials = o.materials.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.thicknesses))
-      out.thicknesses = o.thicknesses.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.tierGroups))
-      out.tierGroups = o.tierGroups.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.finishes))
-      out.finishes = o.finishes.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.sizeClasses))
-      out.sizeClasses = o.sizeClasses.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.priceTypes))
-      out.priceTypes = o.priceTypes.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.colorFamilies))
-      out.colorFamilies = o.colorFamilies.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.undertones))
-      out.undertones = o.undertones.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.patternTags))
-      out.patternTags = o.patternTags.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.movementLevels))
-      out.movementLevels = o.movementLevels.filter((x): x is string => typeof x === "string");
-    if (Array.isArray(o.styleTags))
-      out.styleTags = o.styleTags.filter((x): x is string => typeof x === "string");
+    if (Array.isArray(o.manufacturers)) out.manufacturers = parseStringArray(o.manufacturers);
+    if (Array.isArray(o.materials)) out.materials = parseStringArray(o.materials);
+    if (Array.isArray(o.thicknesses)) out.thicknesses = parseStringArray(o.thicknesses);
+    if (Array.isArray(o.tierGroups)) out.tierGroups = parseStringArray(o.tierGroups);
+    if (Array.isArray(o.finishes)) out.finishes = parseStringArray(o.finishes);
+    if (Array.isArray(o.sizeClasses)) out.sizeClasses = parseStringArray(o.sizeClasses);
+    if (Array.isArray(o.priceTypes)) out.priceTypes = parseStringArray(o.priceTypes);
+    if (Array.isArray(o.colorFamilies)) out.colorFamilies = parseStringArray(o.colorFamilies);
+    if (Array.isArray(o.undertones)) out.undertones = parseStringArray(o.undertones);
+    if (Array.isArray(o.patternTags)) out.patternTags = parseStringArray(o.patternTags);
+    if (Array.isArray(o.movementLevels)) out.movementLevels = parseStringArray(o.movementLevels);
+    if (Array.isArray(o.styleTags)) out.styleTags = parseStringArray(o.styleTags);
     const sk = o.sortKey;
-    if (
-      sk === "nameAsc" ||
-      sk === "nameDesc" ||
-      sk === "vendor" ||
-      sk === "manufacturer" ||
-      sk === "priceLow" ||
-      sk === "priceHigh" ||
-      sk === "tier"
-    )
-      out.sortKey = sk;
+    if (isSortKey(sk)) out.sortKey = sk;
     if (typeof o.favoritesOnly === "boolean") out.favoritesOnly = o.favoritesOnly;
     if (typeof o.hidePrices === "boolean") out.hidePrices = o.hidePrices;
     if (typeof o.showQuotedPrice === "boolean") out.showQuotedPrice = o.showQuotedPrice;

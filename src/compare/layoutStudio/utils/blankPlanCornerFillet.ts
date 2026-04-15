@@ -264,3 +264,49 @@ export function applyCornerFillet(
   const filletCircle: LayoutArcCircle = { cx: O.x, cy: O.y, r: R };
   return { ok: true, points: out, filletSagittaIn, filletCircle };
 }
+
+/**
+ * Replace vertex `vertexIndex` with a straight chamfer whose endpoints are `insetIn` away from the
+ * original corner along the two incident edges.
+ */
+export function applyCornerChamfer(
+  ringIn: LayoutPoint[],
+  vertexIndex: number,
+  insetIn: number,
+): { ok: true; points: LayoutPoint[] } | { ok: false; reason: string } {
+  const ring = normalizeClosedRing(ringIn);
+  const n = ring.length;
+  if (n < 3) return { ok: false, reason: "Not enough vertices." };
+  if (!Number.isFinite(insetIn) || insetIn <= EPS) {
+    return { ok: false, reason: "Chamfer size must be a positive number." };
+  }
+  const v = ((vertexIndex % n) + n) % n;
+  const prev = ring[(v - 1 + n) % n]!;
+  const B = ring[v]!;
+  const next = ring[(v + 1) % n]!;
+  const toPrev = { x: prev.x - B.x, y: prev.y - B.y };
+  const toNext = { x: next.x - B.x, y: next.y - B.y };
+  const lenPrev = Math.hypot(toPrev.x, toPrev.y);
+  const lenNext = Math.hypot(toNext.x, toNext.y);
+  if (lenPrev < EPS || lenNext < EPS) {
+    return { ok: false, reason: "Degenerate edge at this corner." };
+  }
+  if (insetIn >= lenPrev - EPS || insetIn >= lenNext - EPS) {
+    return {
+      ok: false,
+      reason: "Chamfer is too large for this corner — try a smaller size.",
+    };
+  }
+  const uPrev = unit2(toPrev);
+  const uNext = unit2(toNext);
+  const turn = Math.abs(uPrev.x * uNext.y - uPrev.y * uNext.x);
+  if (turn < MIN_SIN_HALF) {
+    return { ok: false, reason: "Corner is degenerate (edges are collinear)." };
+  }
+  const t1 = { x: B.x + uPrev.x * insetIn, y: B.y + uPrev.y * insetIn };
+  const t2 = { x: B.x + uNext.x * insetIn, y: B.y + uNext.y * insetIn };
+  return {
+    ok: true,
+    points: [...ring.slice(0, v), t1, t2, ...ring.slice(v + 1)],
+  };
+}

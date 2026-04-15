@@ -10,6 +10,7 @@ import type { SavedLayoutStudioState } from "../types";
 import { captureLayoutPreview } from "../utils/previewCapture";
 import { ensurePlacementsForPieces } from "../utils/placements";
 import { slabsForOption } from "../utils/slabDimensions";
+import { piecesHaveAnyScale } from "../utils/sourcePages";
 import { useResolvedLayoutSlabs } from "./useResolvedLayoutSlabs";
 
 export type LayoutSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -74,7 +75,7 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
     if (!option) return null;
     const slabs = layoutSlabs.length > 0 ? layoutSlabs : slabsForOption(option);
     const ppi = d.calibration.pixelsPerInch;
-    if (!slabs[0] || !ppi) return null;
+    if (!slabs[0] || !piecesHaveAnyScale(d.pieces, ppi)) return null;
     return captureLayoutPreview({
       slab: slabs[0],
       pieces: d.pieces,

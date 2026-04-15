@@ -3,6 +3,7 @@ import type { CatalogItem, PriceEntry } from "../types/catalog";
 import type { JobComparisonOptionRecord } from "../types/compareQuote";
 import { formatMoney } from "../utils/priceHelpers";
 import {
+  catalogPrimaryImageUrl,
   catalogSnapshotPayload,
   computeEstimatedMaterialCost,
   pickDefaultPriceEntry,
@@ -206,7 +207,7 @@ export function buildOptionRecordFields(
     material: item.material?.trim() || null,
     thickness: item.thickness?.trim() || null,
     size: item.size?.trim() || null,
-    imageUrl: item.imageUrl?.trim() || null,
+    imageUrl: catalogPrimaryImageUrl(item),
     sourceUrl: item.productPageUrl?.trim() || item.sourceUrl?.trim() || null,
     selectedPriceType: entry?.unit ?? null,
     selectedPriceLabel: entry ? priceEntryLabel(entry) : "No price in catalog",

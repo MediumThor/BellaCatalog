@@ -1,5 +1,11 @@
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { getDownloadURL, ref, uploadBytes, uploadBytesResumable } from "firebase/storage";
 import { firebaseStorage } from "../../../firebase";
+
+export type LayoutUploadProgress = {
+  bytesTransferred: number;
+  totalBytes: number;
+  percent: number;
+};
 
 function extFromMime(file: File): string {
   const t = file.type.toLowerCase();
@@ -16,13 +22,29 @@ function extFromMime(file: File): string {
 export async function uploadJobLayoutSource(
   ownerUserId: string,
   jobId: string,
-  file: File
+  file: File,
+  opts?: { onProgress?: (progress: LayoutUploadProgress) => void }
 ): Promise<{ downloadUrl: string; storagePath: string }> {
   const ext = extFromMime(file);
   const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const storagePath = `layout-sources/${ownerUserId}/jobs/${jobId}/${safeName}`;
   const r = ref(firebaseStorage, storagePath);
-  await uploadBytes(r, file, { contentType: file.type || "application/octet-stream" });
+  const task = uploadBytesResumable(r, file, { contentType: file.type || "application/octet-stream" });
+  await new Promise<void>((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (snap) => {
+        const totalBytes = snap.totalBytes || file.size || 1;
+        opts?.onProgress?.({
+          bytesTransferred: snap.bytesTransferred,
+          totalBytes,
+          percent: (snap.bytesTransferred / totalBytes) * 100,
+        });
+      },
+      reject,
+      () => resolve(),
+    );
+  });
   const downloadUrl = await getDownloadURL(r);
   return { downloadUrl, storagePath };
 }
@@ -30,9 +52,11 @@ export async function uploadJobLayoutSource(
 export async function uploadJobLayoutSourcePreviewPng(
   ownerUserId: string,
   jobId: string,
-  blob: Blob
+  blob: Blob,
+  opts?: { nameHint?: string }
 ): Promise<{ downloadUrl: string; storagePath: string }> {
-  const safeName = `preview-${Date.now()}.png`;
+  const hint = (opts?.nameHint ?? "preview").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "preview";
+  const safeName = `${hint}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
   const storagePath = `layout-sources/${ownerUserId}/jobs/${jobId}/${safeName}`;
   const r = ref(firebaseStorage, storagePath);
   await uploadBytes(r, blob, { contentType: "image/png" });

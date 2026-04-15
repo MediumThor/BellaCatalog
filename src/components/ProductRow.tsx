@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { CatalogItem, ColumnVisibility } from "../types/catalog";
+import { CatalogCollectionButton } from "./CatalogCollectionButton";
 import { glueBrandLabel } from "../utils/glueBrandLabel";
 import { CompareBagButton } from "./CompareBagButton";
 import { FavoriteStar } from "./FavoriteStar";
@@ -26,6 +27,8 @@ type Props = {
   compareBagEnabled?: boolean;
   compareBagSelected?: boolean;
   onToggleCompareBag?: (id: string) => void;
+  collectionCount?: number;
+  onOpenCollections?: (item: CatalogItem) => void;
 };
 
 function ProductRowInner({
@@ -43,6 +46,8 @@ function ProductRowInner({
   compareBagEnabled,
   compareBagSelected,
   onToggleCompareBag,
+  collectionCount = 0,
+  onOpenCollections,
 }: Props) {
   const hasImage = Boolean(item.imageUrl);
   const productHref = item.productPageUrl || item.sourceUrl;
@@ -59,6 +64,14 @@ function ProductRowInner({
             onToggle={() => onToggleFavorite(item.id)}
             label={item.displayName}
           />
+          {onOpenCollections && !compareBagEnabled ? (
+            <CatalogCollectionButton
+              active={collectionCount > 0}
+              count={collectionCount}
+              onClick={() => onOpenCollections(item)}
+              label={item.displayName}
+            />
+          ) : null}
           {onRequestDeleteEntry ? (
             <TrashIconButton label={item.displayName} onClick={() => onRequestDeleteEntry(item)} />
           ) : null}
@@ -66,11 +79,21 @@ function ProductRowInner({
       </td>
       {compareBagEnabled && onToggleCompareBag ? (
         <td>
-          <CompareBagButton
-            selected={!!compareBagSelected}
-            onToggle={() => onToggleCompareBag(item.id)}
-            label={item.displayName}
-          />
+          <div className="catalog-table-selection-stack">
+            <CompareBagButton
+              selected={!!compareBagSelected}
+              onToggle={() => onToggleCompareBag(item.id)}
+              label={item.displayName}
+            />
+            {onOpenCollections ? (
+              <CatalogCollectionButton
+                active={collectionCount > 0}
+                count={collectionCount}
+                onClick={() => onOpenCollections(item)}
+                label={item.displayName}
+              />
+            ) : null}
+          </div>
         </td>
       ) : null}
       {pickMode && onPickItem ? (

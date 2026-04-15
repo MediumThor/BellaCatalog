@@ -1,6 +1,12 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CatalogItem, NormalizedCatalog, UiPreferences } from "../types/catalog";
+import { useSearchParams } from "react-router-dom";
+import type { CatalogCollection, CatalogItem, NormalizedCatalog, UiPreferences } from "../types/catalog";
+import { CatalogAddToCollectionModal } from "./CatalogAddToCollectionModal";
+import { CatalogCollectionsBar } from "./CatalogCollectionsBar";
+import { CatalogCreateManualCollectionModal } from "./CatalogCreateManualCollectionModal";
+import { CatalogCollectionsManagerModal } from "./CatalogCollectionsManagerModal";
+import { CatalogSaveSmartCollectionModal } from "./CatalogSaveSmartCollectionModal";
 import { CompareCatalogOnboardingModal } from "./CompareCatalogOnboardingModal";
 import { FloatingCompareButton } from "./FloatingCompareButton";
 import { ActiveFilterChips } from "./ActiveFilterChips";
@@ -22,19 +28,27 @@ import {
   runGeminiCatalogVisualMatch,
 } from "../services/geminiCatalogSearch";
 import { buildFilterOptions } from "../utils/catalogOptions";
+import {
+  COLLECTION_QUERY_PARAM,
+  applyCollectionSnapshot,
+  buildCollectionSnapshot,
+  getCatalogCollectionItems,
+  pruneCatalogCollections,
+} from "../utils/catalogCollections";
 import { downloadCsv, exportCsv } from "../utils/exportCsv";
 import { downloadHorusSlabsExcel } from "../utils/exportHorusCsv";
 import { filterCatalog } from "../utils/filterCatalog";
-import {
-  loadFavoriteIds,
-  loadPreferences,
-  mergePreferences,
-  saveFavoriteIds,
-  savePreferences,
-} from "../utils/localStorageState";
+import { loadFavoriteIds, loadPreferences, mergePreferences, saveFavoriteIds, savePreferences } from "../utils/localStorageState";
 import { searchCatalog } from "../utils/searchCatalog";
 import { sortCatalog } from "../utils/sortCatalog";
 import { markItemRemoved, saveOverlayState } from "../utils/import/importStorage";
+import { useAuth } from "../auth/AuthProvider";
+import {
+  createCatalogCollection,
+  deleteCatalogCollection,
+  subscribeCatalogCollections,
+  updateCatalogCollection,
+} from "../services/catalogCollectionsFirestore";
 
 export type CatalogBrowserProps = {
   catalog: NormalizedCatalog | null;
@@ -67,9 +81,15 @@ export function CatalogBrowser({
   searchPlacement = "header",
   compareBagAction,
 }: CatalogBrowserProps) {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [prefs, setPrefs] = useState<UiPreferences>(() => mergePreferences(loadPreferences()));
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => [...loadFavoriteIds()]);
+  const [collections, setCollections] = useState<CatalogCollection[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<CatalogItem | null>(null);
+  const [collectionDeleteConfirm, setCollectionDeleteConfirm] = useState<CatalogCollection | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiRankedIds, setAiRankedIds] = useState<string[]>([]);
   const [aiStatus, setAiStatus] = useState<{
@@ -80,9 +100,16 @@ export function CatalogBrowser({
   const [headerSearchSlot, setHeaderSearchSlot] = useState<HTMLElement | null>(null);
   const [compareBagIds, setCompareBagIds] = useState<string[]>([]);
   const [compareOnboardOpen, setCompareOnboardOpen] = useState(false);
+  const [createManualOpen, setCreateManualOpen] = useState(false);
+  const [saveSmartOpen, setSaveSmartOpen] = useState(false);
+  const [collectionManagerOpen, setCollectionManagerOpen] = useState(false);
+  const [addToCollectionOpen, setAddToCollectionOpen] = useState(false);
+  const [collectionModalItems, setCollectionModalItems] = useState<CatalogItem[]>([]);
+  const [loadedCollectionId, setLoadedCollectionId] = useState<string | null>(null);
   const aiConfigured = geminiCatalogSearchConfigured();
   const compareBagEnabled = Boolean(compareBagAction) || !pickMode;
   const canDeleteCatalogRows = allowDelete ?? !pickMode;
+  const activeCollectionId = searchParams.get(COLLECTION_QUERY_PARAM);
 
   useLayoutEffect(() => {
     if (searchPlacement !== "header") {
@@ -100,11 +127,111 @@ export function CatalogBrowser({
     saveFavoriteIds(new Set(favoriteIds));
   }, [favoriteIds]);
 
+  useEffect(() => {
+    if (!user?.uid) {
+      setCollections([]);
+      setCollectionsLoading(false);
+      setCollectionsError(null);
+      return;
+    }
+    setCollectionsLoading(true);
+    setCollectionsError(null);
+    setCollections([]);
+    return subscribeCatalogCollections(
+      user.uid,
+      (rows) => {
+        setCollections(rows);
+        setCollectionsLoading(false);
+      },
+      (e) => {
+        setCollections([]);
+        setCollectionsLoading(false);
+        setCollectionsError(e.message);
+      }
+    );
+  }, [user?.uid]);
+
   const deferredSearch = useDeferredValue(prefs.searchQuery);
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const activeCollection = useMemo(
+    () => collections.find((collection) => collection.id === activeCollectionId) ?? null,
+    [collections, activeCollectionId]
+  );
+  const currentCollectionSnapshot = useMemo(() => buildCollectionSnapshot(prefs), [prefs]);
+
+  useEffect(() => {
+    if (!catalog || !user?.uid) return;
+    const validIds = new Set(catalog.items.map((item) => item.id));
+    const next = pruneCatalogCollections(collections, validIds);
+    const changedCollections = next.filter((collection, index) => collection !== collections[index]);
+    if (changedCollections.length === 0) return;
+    void Promise.all(
+      changedCollections.map((collection) =>
+        updateCatalogCollection(collection.id, {
+          itemIds: collection.itemIds,
+        })
+      )
+    );
+  }, [catalog, collections, user?.uid]);
+
+  useEffect(() => {
+    if (!activeCollectionId) {
+      if (loadedCollectionId !== null) setLoadedCollectionId(null);
+      return;
+    }
+    if (collectionsLoading) return;
+    if (activeCollection) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(COLLECTION_QUERY_PARAM);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [activeCollection, activeCollectionId, collectionsLoading, loadedCollectionId, setSearchParams]);
+
+  useEffect(() => {
+    if (!activeCollection) {
+      if (loadedCollectionId !== null) setLoadedCollectionId(null);
+      return;
+    }
+    if (loadedCollectionId === activeCollection.id) return;
+    setLoadedCollectionId(activeCollection.id);
+    if (activeCollection.type === "smart" && activeCollection.smartSnapshot) {
+      const snapshot = activeCollection.smartSnapshot;
+      setPrefs((prev) => applyCollectionSnapshot(prev, snapshot));
+      setAiRankedIds([]);
+      setAiStatus({ kind: "idle", message: "" });
+    }
+  }, [activeCollection, loadedCollectionId]);
+
+  const collectionBaseItems = useMemo(() => {
+    if (!catalog) return [] as CatalogItem[];
+    return activeCollection ? getCatalogCollectionItems(activeCollection, catalog.items) : catalog.items;
+  }, [catalog, activeCollection]);
+
+  const countsByCollectionId = useMemo(() => {
+    if (!catalog) return {} as Record<string, number>;
+    return Object.fromEntries(
+      collections.map((collection) => [collection.id, getCatalogCollectionItems(collection, catalog.items).length])
+    ) as Record<string, number>;
+  }, [catalog, collections]);
+
+  const collectionMembershipCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    collections
+      .filter((collection) => collection.type === "manual")
+      .forEach((collection) => {
+        collection.itemIds.forEach((id) => {
+          counts[id] = (counts[id] ?? 0) + 1;
+        });
+      });
+    return counts;
+  }, [collections]);
 
   const filterOptions = useMemo(() => {
-    if (!catalog?.items.length) {
+    if (!collectionBaseItems.length) {
       return {
         vendors: [] as string[],
         manufacturers: [] as string[],
@@ -121,12 +248,12 @@ export function CatalogBrowser({
         styleTags: [] as string[],
       };
     }
-    return buildFilterOptions(catalog.items);
-  }, [catalog]);
+    return buildFilterOptions(collectionBaseItems);
+  }, [collectionBaseItems]);
 
   const displayedItems: CatalogItem[] = useMemo(() => {
     if (!catalog) return [];
-    const searched = searchCatalog(catalog.items, deferredSearch);
+    const searched = searchCatalog(collectionBaseItems, deferredSearch);
     const filtered = filterCatalog(searched, {
       vendor: prefs.vendor,
       manufacturers: prefs.manufacturers,
@@ -159,11 +286,108 @@ export function CatalogBrowser({
       if (bRank != null) return 1;
       return 0;
     });
-  }, [catalog, deferredSearch, prefs, favoriteSet, aiRankedIds]);
+  }, [catalog, collectionBaseItems, deferredSearch, prefs, favoriteSet, aiRankedIds]);
 
   const updatePrefs = useCallback((patch: Partial<UiPreferences>) => {
     setPrefs((p) => ({ ...p, ...patch, columns: { ...p.columns, ...patch.columns } }));
   }, []);
+
+  const updateCollectionParam = useCallback(
+    (id: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id) next.set(COLLECTION_QUERY_PARAM, id);
+          else next.delete(COLLECTION_QUERY_PARAM);
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const handleSelectCollection = useCallback(
+    (id: string | null) => {
+      if (id) {
+        const selected = collections.find((collection) => collection.id === id) ?? null;
+        if (selected?.type === "smart" && selected.smartSnapshot) {
+          const snapshot = selected.smartSnapshot;
+          setPrefs((prev) => applyCollectionSnapshot(prev, snapshot));
+          setLoadedCollectionId(id);
+        }
+      } else {
+        setLoadedCollectionId(null);
+      }
+      setAiRankedIds([]);
+      setAiStatus({ kind: "idle", message: "" });
+      updateCollectionParam(id);
+    },
+    [collections, updateCollectionParam]
+  );
+
+  const createManualCollection = useCallback(
+    async (name: string, description: string, itemIds: string[] = [], activate = true) => {
+      if (!user?.uid) return;
+      const id = await createCatalogCollection(user.uid, {
+        name,
+        description,
+        type: "manual",
+        itemIds: [...new Set(itemIds)],
+        smartSnapshot: null,
+      });
+      if (activate) handleSelectCollection(id);
+    },
+    [handleSelectCollection, user?.uid]
+  );
+
+  const createSmartCollection = useCallback(
+    async (name: string, description: string, activate = true) => {
+      if (!user?.uid) return;
+      const id = await createCatalogCollection(user.uid, {
+        name,
+        description,
+        type: "smart",
+        itemIds: [],
+        smartSnapshot: currentCollectionSnapshot,
+      });
+      if (activate) handleSelectCollection(id);
+    },
+    [currentCollectionSnapshot, handleSelectCollection, user?.uid]
+  );
+
+  const renameCollection = useCallback(async (id: string, name: string, description: string) => {
+    await updateCatalogCollection(id, {
+      name,
+      description,
+    });
+  }, []);
+
+  const updateSmartCollection = useCallback(
+    async (id: string) => {
+      await updateCatalogCollection(id, {
+        smartSnapshot: currentCollectionSnapshot,
+      });
+    },
+    [currentCollectionSnapshot]
+  );
+
+  const openCollectionPickerForItems = useCallback((items: CatalogItem[]) => {
+    if (items.length === 0) return;
+    setCollectionModalItems(items);
+    setAddToCollectionOpen(true);
+  }, []);
+
+  const handleOpenCollectionsForItem = useCallback(
+    (item: CatalogItem) => {
+      openCollectionPickerForItems([item]);
+    },
+    [openCollectionPickerForItems]
+  );
+
+  const openCreateManualModal = useCallback(() => setCreateManualOpen(true), []);
+  const openSaveSmartModal = useCallback(() => setSaveSmartOpen(true), []);
+  const openManageCollectionsModal = useCallback(() => setCollectionManagerOpen(true), []);
 
   /** Add-to-job picker: never show list/cost prices; quoted column follows toolbar preference. */
   const hidePricesEffective = pickMode ? true : prefs.hidePrices;
@@ -215,6 +439,38 @@ export function CatalogBrowser({
     return compareBagIds.map((id) => map.get(id)).filter((x): x is CatalogItem => x != null);
   }, [catalog, compareBagIds]);
 
+  const handleSaveItemsToCollections = useCallback(
+    async (
+      selectedCollectionIds: string[],
+      createNew: { name: string; description: string } | null
+    ) => {
+      if (!user?.uid) return;
+      const selectedItemIds = [...new Set(collectionModalItems.map((item) => item.id))];
+      if (selectedItemIds.length === 0) return;
+      const selectedItemIdSet = new Set(selectedItemIds);
+      const selectedCollectionIdSet = new Set(selectedCollectionIds);
+      const updates = collections
+        .filter((collection) => collection.type === "manual")
+        .map(async (collection) => {
+          const hasOverlap = collection.itemIds.some((id) => selectedItemIdSet.has(id));
+          const shouldInclude = selectedCollectionIdSet.has(collection.id);
+          if (!hasOverlap && !shouldInclude) return;
+          const withoutSelected = collection.itemIds.filter((id) => !selectedItemIdSet.has(id));
+          const itemIds = shouldInclude ? [...withoutSelected, ...selectedItemIds] : withoutSelected;
+          const changed =
+            itemIds.length !== collection.itemIds.length ||
+            itemIds.some((id, index) => id !== collection.itemIds[index]);
+          if (!changed) return;
+          await updateCatalogCollection(collection.id, { itemIds });
+        });
+      await Promise.all(updates);
+      if (createNew?.name.trim()) {
+        await createManualCollection(createNew.name.trim(), createNew.description.trim(), selectedItemIds, false);
+      }
+    },
+    [collections, collectionModalItems, createManualCollection, user?.uid]
+  );
+
   /** Drop bag ids that no longer exist in the loaded catalog (overlay delete), not when filtered out. */
   useEffect(() => {
     if (!catalog) return;
@@ -224,6 +480,16 @@ export function CatalogBrowser({
       return next.length === prev.length ? prev : next;
     });
   }, [catalog]);
+
+  const handleDeleteCollection = useCallback(async () => {
+    if (!collectionDeleteConfirm) return;
+    const deletingId = collectionDeleteConfirm.id;
+    await deleteCatalogCollection(deletingId);
+    if (activeCollectionId === deletingId) {
+      handleSelectCollection(null);
+    }
+    setCollectionDeleteConfirm(null);
+  }, [activeCollectionId, collectionDeleteConfirm, handleSelectCollection]);
 
   const handleRequestDeleteEntry = useCallback((item: CatalogItem) => {
     if (!canDeleteCatalogRows) return;
@@ -258,7 +524,7 @@ export function CatalogBrowser({
   }, []);
 
   const runAiSearch = useCallback(async () => {
-    if (!catalog) return;
+    if (!catalog || collectionBaseItems.length === 0) return;
     const query = prefs.searchQuery.trim();
     if (!query) return;
     setAiBusy(true);
@@ -301,7 +567,7 @@ export function CatalogBrowser({
         styleTags: plan.styleTags,
       }));
 
-      const searched = searchCatalog(catalog.items, plan.searchText);
+      const searched = searchCatalog(collectionBaseItems, plan.searchText);
       const filtered = filterCatalog(searched, {
         vendor: nextPrefs.vendor,
         manufacturers: nextPrefs.manufacturers,
@@ -345,7 +611,7 @@ export function CatalogBrowser({
     } finally {
       setAiBusy(false);
     }
-  }, [catalog, favoriteSet, filterOptions, prefs]);
+  }, [catalog, collectionBaseItems, favoriteSet, filterOptions, prefs]);
 
   return (
     <>
@@ -364,6 +630,42 @@ export function CatalogBrowser({
           onClearSelection={clearCompareBag}
         />
       ) : null}
+
+      <CatalogCreateManualCollectionModal
+        open={createManualOpen}
+        onClose={() => setCreateManualOpen(false)}
+        onCreate={createManualCollection}
+      />
+
+      <CatalogSaveSmartCollectionModal
+        open={saveSmartOpen}
+        currentSnapshot={currentCollectionSnapshot}
+        onClose={() => setSaveSmartOpen(false)}
+        onCreate={createSmartCollection}
+      />
+
+      <CatalogCollectionsManagerModal
+        open={collectionManagerOpen}
+        collections={collections}
+        activeCollectionId={activeCollectionId}
+        countsByCollectionId={countsByCollectionId}
+        onClose={() => setCollectionManagerOpen(false)}
+        onSelectCollection={handleSelectCollection}
+        onRenameCollection={renameCollection}
+        onDeleteCollection={(id) => {
+          const next = collections.find((collection) => collection.id === id) ?? null;
+          setCollectionDeleteConfirm(next);
+        }}
+        onUpdateSmartCollection={updateSmartCollection}
+      />
+
+      <CatalogAddToCollectionModal
+        open={addToCollectionOpen}
+        items={collectionModalItems}
+        collections={collections}
+        onClose={() => setAddToCollectionOpen(false)}
+        onSave={handleSaveItemsToCollections}
+      />
 
       <FloatingCompareButton
         count={compareBagEnabled ? compareBagIds.length : 0}
@@ -393,6 +695,20 @@ export function CatalogBrowser({
         cancelLabel="Cancel"
         onCancel={() => setDeleteConfirm(null)}
         onConfirm={confirmDeleteEntry}
+      />
+
+      <ConfirmDialog
+        open={!!collectionDeleteConfirm}
+        title="Delete collection?"
+        message={
+          collectionDeleteConfirm
+            ? `Delete “${collectionDeleteConfirm.name}”? This only removes the saved collection. Catalog items stay untouched.`
+            : ""
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onCancel={() => setCollectionDeleteConfirm(null)}
+        onConfirm={handleDeleteCollection}
       />
 
       {pickMode ? (
@@ -442,6 +758,30 @@ export function CatalogBrowser({
         </div>
       ) : null}
 
+      {collectionsError ? (
+        <div className="import-warnings" role="alert">
+          Could not load your collections. {collectionsError}
+        </div>
+      ) : null}
+
+      <CatalogCollectionsBar
+        collections={collections}
+        activeCollection={activeCollection}
+        activeCollectionId={activeCollectionId}
+        displayedCount={displayedItems.length}
+        baseCount={collectionBaseItems.length}
+        compareBagCount={compareBagItems.length}
+        onSelectCollection={handleSelectCollection}
+        onOpenNewManual={openCreateManualModal}
+        onOpenSaveCurrentView={openSaveSmartModal}
+        onOpenManage={openManageCollectionsModal}
+        onOpenAddToCollection={() => openCollectionPickerForItems(compareBagItems)}
+        onUpdateActiveCollection={() => {
+          if (activeCollection?.type !== "smart") return;
+          updateSmartCollection(activeCollection.id);
+        }}
+      />
+
       <CatalogToolsDrawer open={catalogToolsOpen} onOpenChange={setCatalogToolsOpen}>
         <section className="catalog-tools-section" aria-labelledby="catalog-tools-layout-title">
           <h3 id="catalog-tools-layout-title" className="catalog-tools-section__title">
@@ -450,6 +790,11 @@ export function CatalogBrowser({
           <CatalogViewToggle
             catalogView={prefs.catalogView}
             onCatalogViewChange={(catalogView) => updatePrefs({ catalogView })}
+          />
+          <ThicknessQuickFilter
+            catalogThicknessOptions={filterOptions.thicknesses}
+            selectedThicknesses={prefs.thicknesses}
+            onChange={(thicknesses) => updatePrefs({ thicknesses })}
           />
           <div className="catalog-tools-layout-extras" role="group" aria-label="View options">
             <button
@@ -474,18 +819,6 @@ export function CatalogBrowser({
           />
         </section>
 
-        <CatalogColumnClearRow
-          columns={prefs.columns}
-          onColumnToggle={onColumnToggle}
-          onClearFilters={clearFilters}
-        />
-
-        <ThicknessQuickFilter
-          catalogThicknessOptions={filterOptions.thicknesses}
-          selectedThicknesses={prefs.thicknesses}
-          onChange={(thicknesses) => updatePrefs({ thicknesses })}
-        />
-
         <section className="catalog-tools-section" aria-labelledby="catalog-tools-vendors-title">
           <h3 id="catalog-tools-vendors-title" className="catalog-tools-section__title">
             Vendors
@@ -497,6 +830,12 @@ export function CatalogBrowser({
             onSelect={(vendor) => updatePrefs({ vendor })}
           />
         </section>
+
+        <CatalogColumnClearRow
+          columns={prefs.columns}
+          onColumnToggle={onColumnToggle}
+          onClearFilters={clearFilters}
+        />
 
         <section className="catalog-tools-section">
           <CatalogToolbar
@@ -564,7 +903,8 @@ export function CatalogBrowser({
           {catalog ? (
             <>
               {" "}
-              of <strong>{catalog.items.length}</strong> items
+              of <strong>{collectionBaseItems.length}</strong>{" "}
+              {activeCollection ? "items in this collection" : "items"}
             </>
           ) : null}
         </p>
@@ -600,6 +940,8 @@ export function CatalogBrowser({
             compareBagEnabled={compareBagEnabled}
             compareBagIds={compareBagIdSet}
             onToggleCompareBag={toggleCompareBag}
+            collectionMembershipCounts={collectionMembershipCounts}
+            onOpenCollections={handleOpenCollectionsForItem}
           />
         ) : (
           <TableView
@@ -617,6 +959,8 @@ export function CatalogBrowser({
             compareBagEnabled={compareBagEnabled}
             compareBagIds={compareBagIdSet}
             onToggleCompareBag={toggleCompareBag}
+            collectionMembershipCounts={collectionMembershipCounts}
+            onOpenCollections={handleOpenCollectionsForItem}
           />
         )
       ) : null}

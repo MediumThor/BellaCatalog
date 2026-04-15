@@ -29,7 +29,7 @@ export function StudioEntryHub({ kicker, onChooseUpload, onChooseBlank, uploadin
           <span className="ls-entry-card-body">
             PDF or image — calibrate scale, trace shapes, then place on slabs.
           </span>
-          <span className="ls-entry-card-cta">{uploading ? "Opening…" : "Choose file"}</span>
+          <span className="ls-entry-card-cta">Choose file</span>
         </button>
         <button type="button" className="ls-entry-card glass-panel ls-entry-card--accent" onClick={onChooseBlank}>
           <span className="ls-entry-card-kicker">Quick quote</span>

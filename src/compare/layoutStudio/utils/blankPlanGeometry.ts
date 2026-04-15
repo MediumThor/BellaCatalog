@@ -151,15 +151,17 @@ export function outwardNormalForEdge(displayPoints: LayoutPoint[], edgeIndex: nu
 export function buildSplashRectanglePoints(
   displayParentPoints: LayoutPoint[],
   edgeIndex: number,
-  heightIn: number
+  heightIn: number,
+  coordPerInch = 1,
 ): LayoutPoint[] {
   const ring = normalizeClosedRing(displayParentPoints);
   const n = ring.length;
-  const h = Math.max(0.5, heightIn);
+  const safeCoordPerInch = Number.isFinite(coordPerInch) && coordPerInch > 0 ? coordPerInch : 1;
+  const h = Math.max(0.5, heightIn) * safeCoordPerInch;
   const a = ring[edgeIndex];
   const b = ring[(edgeIndex + 1) % n];
   const outward = outwardNormalForEdge(displayParentPoints, edgeIndex);
-  const g = SPLASH_PLAN_OFFSET_IN;
+  const g = SPLASH_PLAN_OFFSET_IN * safeCoordPerInch;
   const p0 = { x: a.x + outward.x * g, y: a.y + outward.y * g };
   const p1 = { x: b.x + outward.x * g, y: b.y + outward.y * g };
   const p2 = { x: b.x + outward.x * (g + h), y: b.y + outward.y * (g + h) };
@@ -172,9 +174,23 @@ export function rotatePlanPieceAroundCentroid(piece: LayoutPiece, deltaDeg: numb
   const local = piece.points.map((p) => ({ x: p.x - c.x, y: p.y - c.y }));
   const rotated = rotatePoints(local, deltaDeg);
   const nextPts = rotated.map((p) => ({ x: p.x + c.x, y: p.y + c.y }));
+  const nextSinks = piece.sinks?.map((sink) => {
+    const [rotatedCenter] = rotatePoints(
+      [{ x: sink.centerX - c.x, y: sink.centerY - c.y }],
+      deltaDeg,
+    );
+    const nextRotation = (sink.rotationDeg + deltaDeg) % 360;
+    return {
+      ...sink,
+      centerX: rotatedCenter.x + c.x,
+      centerY: rotatedCenter.y + c.y,
+      rotationDeg: nextRotation < 0 ? nextRotation + 360 : nextRotation,
+    };
+  });
   return {
     ...piece,
     points: nextPts,
+    sinks: nextSinks,
     manualDimensions: undefined,
   };
 }

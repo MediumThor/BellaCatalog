@@ -8,9 +8,13 @@ import type {
   TraceTool,
 } from "../types";
 import { boundsOfPoints, ensureClosedRing, normalizeClosedRing, rectFromCorners, unitLShapePolygon } from "../utils/geometry";
-import { tryRemoveDraftPolylinePoint } from "../utils/blankPlanGeometry";
+import {
+  hitTestEdge,
+  tryRemoveDraftPolylinePoint,
+} from "../utils/blankPlanGeometry";
 import {
   nearPoint,
+  orthoPreviewPoint,
   orthoSnapFirstPoint,
   orthoSnapPreview,
   simplifyOrthoRing,
@@ -23,10 +27,24 @@ import {
 } from "../utils/slabLayoutTexture";
 import { defaultNonSplashPieceName } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
+import {
+  assignSinksToSplitPieces,
+  clampSinkCenter,
+} from "../utils/pieceSinks";
+import {
+  horizontalSeamPreviewChord,
+  seamGeometryFromAxisAlignedEdge,
+  splitWorldRingAtHorizontalSeam,
+  splitWorldRingAtVerticalSeam,
+  verticalSeamPreviewChord,
+  type SeamFromEdgeGeometry,
+} from "../utils/blankPlanPolygonOps";
+import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 
 type Props = {
   displayUrl: string | null;
   isPdfSource: boolean;
+  sourceBounds?: { minX: number; minY: number; width: number; height: number } | null;
   fitPageToWidth?: boolean;
   viewZoom: number;
   boxZoomMode: boolean;
@@ -38,10 +56,22 @@ type Props = {
   tool: TraceTool;
   pieces: LayoutPiece[];
   selectedPieceId: string | null;
+  selectedEdge: { pieceId: string; edgeIndex: number } | null;
   onSelectPiece: (id: string | null) => void;
+  onSelectEdge: (edge: { pieceId: string; edgeIndex: number } | null) => void;
   onPiecesChange: (pieces: LayoutPiece[]) => void;
+  onPiecesChangeLive?: (pieces: LayoutPiece[]) => void;
+  onPieceDragStart?: () => void;
+  onRequestSplashForEdge: (
+    edge: { pieceId: string; edgeIndex: number },
+    kind: "splash" | "miter",
+  ) => void;
+  onRequestAddSinkForEdge?: (edge: { pieceId: string; edgeIndex: number }) => void;
+  onToggleProfileEdge: (edge: { pieceId: string; edgeIndex: number }) => void;
+  onSetSplashBottomEdge?: (edge: { pieceId: string; edgeIndex: number }) => void;
   slabs?: LayoutSlab[];
   placements?: PiecePlacement[];
+  newPieceSourceMeta?: Pick<LayoutPiece, "sourcePageIndex" | "sourcePixelsPerInch">;
   onViewZoomChange: (zoom: number) => void;
   onBoxZoomModeChange: (active: boolean) => void;
 };
@@ -55,32 +85,40 @@ const TRACE_DRAFT_FILL = "rgba(120,195,255,0.12)";
 const TRACE_CALIBRATION_STROKE = "rgba(232,72,72,0.96)";
 const TRACE_CALIBRATION_FILL = "rgba(244,84,84,0.98)";
 
+type EdgeSel = { pieceId: string; edgeIndex: number };
+
 export function traceViewZoomDisplayPct(viewZoom: number): number {
   return Math.round(viewZoom * 100);
 }
 
 function clampTraceViewCenter(
   center: LayoutPoint,
-  imgNatural: { w: number; h: number },
+  bounds: { minX: number; minY: number; width: number; height: number },
   zoom: number,
 ): LayoutPoint {
-  if (!imgNatural.w || !imgNatural.h) return center;
+  if (!bounds.width || !bounds.height) return center;
   const safeZoom = Math.max(zoom, TRACE_VIEW_ZOOM_MIN);
-  const viewW = imgNatural.w / safeZoom;
-  const viewH = imgNatural.h / safeZoom;
-  const minX = viewW / 2;
-  const maxX = imgNatural.w - viewW / 2;
-  const minY = viewH / 2;
-  const maxY = imgNatural.h - viewH / 2;
+  const viewW = bounds.width / safeZoom;
+  const viewH = bounds.height / safeZoom;
+  const minX = bounds.minX + viewW / 2;
+  const maxX = bounds.minX + bounds.width - viewW / 2;
+  const minY = bounds.minY + viewH / 2;
+  const maxY = bounds.minY + bounds.height - viewH / 2;
   return {
-    x: minX > maxX ? imgNatural.w / 2 : Math.min(maxX, Math.max(minX, center.x)),
-    y: minY > maxY ? imgNatural.h / 2 : Math.min(maxY, Math.max(minY, center.y)),
+    x:
+      minX > maxX
+        ? bounds.minX + bounds.width / 2
+        : Math.min(maxX, Math.max(minX, center.x)),
+    y:
+      minY > maxY
+        ? bounds.minY + bounds.height / 2
+        : Math.min(maxY, Math.max(minY, center.y)),
   };
 }
 
-function nextPieceName(pieces: LayoutPiece[]): string {
+function nextPieceName(pieces: LayoutPiece[], offset = 0): string {
   const n = pieces.filter((p) => !isPlanStripPiece(p)).length;
-  return defaultNonSplashPieceName(n);
+  return defaultNonSplashPieceName(n + offset);
 }
 
 function pointInPoly(pt: LayoutPoint, poly: LayoutPoint[]): boolean {
@@ -120,9 +158,49 @@ function segmentLength(a: LayoutPoint, b: LayoutPoint): number {
   return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
+function formatSeamValue(value: number, coordPerInch: number | null): string {
+  if (coordPerInch && coordPerInch > 0) {
+    return String(Math.round((value / coordPerInch) * 1000) / 1000);
+  }
+  return String(Math.round(value * 1000) / 1000);
+}
+
+function parseSeamValue(value: string, coordPerInch: number | null): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  if (coordPerInch && coordPerInch > 0) return parsed * coordPerInch;
+  return parsed;
+}
+
+function seamUnitLabel(coordPerInch: number | null): "in" | "px" {
+  return coordPerInch && coordPerInch > 0 ? "in" : "px";
+}
+
+function pickTraceEdgeAtPoint(
+  p: LayoutPoint,
+  pieces: readonly LayoutPiece[],
+  maxDist: number,
+): EdgeSel | null {
+  for (let i = pieces.length - 1; i >= 0; i -= 1) {
+    const piece = pieces[i]!;
+    const edgeIndex = hitTestEdge(p, piece.points, maxDist);
+    if (edgeIndex != null) {
+      return { pieceId: piece.id, edgeIndex };
+    }
+  }
+  return null;
+}
+
 function formatDraftSegmentLength(length: number, pixelsPerInch: number | null): string {
   if (pixelsPerInch && pixelsPerInch > 0) {
     return `${Math.max(1, Math.round(length / pixelsPerInch))}"`;
+  }
+  return `${Math.round(length)} px`;
+}
+
+function formatDraftRectDimension(length: number, pixelsPerInch: number | null): string {
+  if (pixelsPerInch && pixelsPerInch > 0) {
+    return `${Math.max(0, Math.round(length / pixelsPerInch))}"`;
   }
   return `${Math.round(length)} px`;
 }
@@ -160,6 +238,7 @@ function collectTraceSnapTargets(
 export function TraceWorkspace({
   displayUrl,
   isPdfSource,
+  sourceBounds = null,
   fitPageToWidth = false,
   viewZoom,
   boxZoomMode,
@@ -171,15 +250,28 @@ export function TraceWorkspace({
   tool,
   pieces,
   selectedPieceId,
+  selectedEdge,
   onSelectPiece,
+  onSelectEdge,
   onPiecesChange,
+  onPiecesChangeLive,
+  onPieceDragStart,
+  onRequestSplashForEdge,
+  onRequestAddSinkForEdge,
+  onToggleProfileEdge,
+  onSetSplashBottomEdge,
   slabs,
   placements,
+  newPieceSourceMeta,
   onViewZoomChange,
   onBoxZoomModeChange,
 }: Props) {
   const effectiveTool: TraceTool =
-    tool === "snapLines" || tool === "join" || tool === "cornerRadius" || tool === "connectCorner"
+    tool === "snapLines" ||
+    tool === "join" ||
+    tool === "cornerRadius" ||
+    tool === "chamferCorner" ||
+    tool === "connectCorner"
       ? "select"
       : tool;
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -194,6 +286,25 @@ export function TraceWorkspace({
   const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
   const [viewCenter, setViewCenter] = useState<LayoutPoint>({ x: 0, y: 0 });
+  const traceBounds = useMemo(
+    () =>
+      sourceBounds && sourceBounds.width > 0 && sourceBounds.height > 0
+        ? sourceBounds
+        : imgNatural.w > 0 && imgNatural.h > 0
+          ? { minX: 0, minY: 0, width: imgNatural.w, height: imgNatural.h }
+          : null,
+    [
+      imgNatural.h,
+      imgNatural.w,
+      sourceBounds?.minX,
+      sourceBounds?.minY,
+      sourceBounds?.width,
+      sourceBounds?.height,
+    ],
+  );
+  const traceBoundsKey = traceBounds
+    ? `${traceBounds.minX}:${traceBounds.minY}:${traceBounds.width}:${traceBounds.height}`
+    : "none";
   const syncNaturalSize = useCallback((w: number, h: number) => {
     if (!w || !h) return;
     setImgNatural((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
@@ -246,7 +357,7 @@ export function TraceWorkspace({
 
   const clientToImage = useCallback((clientX: number, clientY: number): LayoutPoint | null => {
     const svg = svgRef.current;
-    if (!svg || !imgNatural.w || !imgNatural.h) return null;
+    if (!svg || !traceBounds) return null;
     const ctm = svg.getScreenCTM();
     if (!ctm) return null;
     const pt = svg.createSVGPoint();
@@ -254,18 +365,46 @@ export function TraceWorkspace({
     pt.y = clientY;
     const mapped = pt.matrixTransform(ctm.inverse());
     return {
-      x: Math.min(imgNatural.w, Math.max(0, mapped.x)),
-      y: Math.min(imgNatural.h, Math.max(0, mapped.y)),
+      x: Math.min(traceBounds.minX + traceBounds.width, Math.max(traceBounds.minX, mapped.x)),
+      y: Math.min(traceBounds.minY + traceBounds.height, Math.max(traceBounds.minY, mapped.y)),
     };
-  }, [imgNatural.h, imgNatural.w]);
+  }, [traceBounds]);
 
   const [dragRect, setDragRect] = useState<{ a: LayoutPoint; b: LayoutPoint } | null>(null);
   const [polyDraft, setPolyDraft] = useState<LayoutPoint[] | null>(null);
   const [polyCursor, setPolyCursor] = useState<LayoutPoint | null>(null);
   const [orthoDraft, setOrthoDraft] = useState<LayoutPoint[] | null>(null);
   const [orthoCursor, setOrthoCursor] = useState<LayoutPoint | null>(null);
+  const [calibrationCursor, setCalibrationCursor] = useState<LayoutPoint | null>(null);
   const [vertexDrag, setVertexDrag] = useState<{ pieceId: string; index: number } | null>(null);
   const [boxZoomRect, setBoxZoomRect] = useState<{ a: LayoutPoint; b: LayoutPoint } | null>(null);
+  const [hoverEdge, setHoverEdge] = useState<EdgeSel | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null);
+  const [seamModal, setSeamModal] = useState<{
+    pieceId: string;
+    edgeIndex: number;
+    geometry: SeamFromEdgeGeometry;
+    coordPerInch: number | null;
+    valA: string;
+    valB: string;
+  } | null>(null);
+  const traceSinkPieces = useMemo(
+    () =>
+      pieces.map((piece) =>
+        piece.planTransform
+          ? { ...piece, planTransform: undefined }
+          : piece,
+      ),
+    [pieces],
+  );
+  const [sinkDrag, setSinkDrag] = useState<{
+    pieceId: string;
+    sinkId: string;
+    start: LayoutPoint;
+    startCx: number;
+    startCy: number;
+  } | null>(null);
+  const sinkDragOrthoAxisRef = useRef<"x" | "y" | null>(null);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -281,92 +420,97 @@ export function TraceWorkspace({
   }, []);
 
   useEffect(() => {
+    if (!traceBounds) return;
     onViewZoomChange(1);
     setViewCenter({
-      x: imgNatural.w / 2,
-      y: imgNatural.h / 2,
+      x: traceBounds.minX + traceBounds.width / 2,
+      y: traceBounds.minY + traceBounds.height / 2,
     });
     onBoxZoomModeChange(false);
     setBoxZoomRect(null);
-  }, [imgNatural.h, imgNatural.w, onBoxZoomModeChange, onViewZoomChange, resolvedUrl]);
+  }, [onBoxZoomModeChange, onViewZoomChange, resolvedUrl, traceBoundsKey]);
 
   const baseScale = useMemo(() => {
-    if (!imgNatural.w || !imgNatural.h || !stageSize.w || !stageSize.h) return 1;
-    return Math.min(stageSize.w / imgNatural.w, stageSize.h / imgNatural.h);
-  }, [imgNatural.h, imgNatural.w, stageSize.h, stageSize.w]);
+    if (!traceBounds || !stageSize.w || !stageSize.h) return 1;
+    return Math.min(stageSize.w / traceBounds.width, stageSize.h / traceBounds.height);
+  }, [stageSize.h, stageSize.w, traceBounds]);
 
   const renderScale = useMemo(() => baseScale * viewZoom, [baseScale, viewZoom]);
 
   useEffect(() => {
-    if (!imgNatural.w || !imgNatural.h) return;
-    setViewCenter((prev) => clampTraceViewCenter(prev, imgNatural, viewZoom));
-  }, [imgNatural, viewZoom]);
+    if (!traceBounds) return;
+    setViewCenter((prev) => clampTraceViewCenter(prev, traceBounds, viewZoom));
+  }, [traceBounds, viewZoom]);
 
   const viewBox = useMemo(() => {
-    if (!imgNatural.w || !imgNatural.h) return null;
-    const clampedCenter = clampTraceViewCenter(viewCenter, imgNatural, viewZoom);
+    if (!traceBounds) return null;
+    const clampedCenter = clampTraceViewCenter(viewCenter, traceBounds, viewZoom);
     const safeZoom = Math.max(viewZoom, TRACE_VIEW_ZOOM_MIN);
-    const width = imgNatural.w / safeZoom;
-    const height = imgNatural.h / safeZoom;
+    const width = traceBounds.width / safeZoom;
+    const height = traceBounds.height / safeZoom;
     return {
       minX: clampedCenter.x - width / 2,
       minY: clampedCenter.y - height / 2,
       width,
       height,
     };
-  }, [imgNatural, viewCenter, viewZoom]);
+  }, [traceBounds, viewCenter, viewZoom]);
 
   const fitBounds = useCallback(
     (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
-      if (!imgNatural.w || !imgNatural.h) return;
+      if (!traceBounds) return;
       const bw = Math.max(24, bounds.maxX - bounds.minX);
       const bh = Math.max(24, bounds.maxY - bounds.minY);
       const nextZoom = Math.min(
         TRACE_VIEW_ZOOM_MAX,
-        Math.max(TRACE_VIEW_ZOOM_MIN, Math.min(imgNatural.w / (bw * 1.15), imgNatural.h / (bh * 1.15))),
+        Math.max(
+          TRACE_VIEW_ZOOM_MIN,
+          Math.min(traceBounds.width / (bw * 1.15), traceBounds.height / (bh * 1.15)),
+        ),
       );
       const cx = (bounds.minX + bounds.maxX) / 2;
       const cy = (bounds.minY + bounds.maxY) / 2;
       onViewZoomChange(nextZoom);
-      setViewCenter(clampTraceViewCenter({ x: cx, y: cy }, imgNatural, nextZoom));
+      setViewCenter(clampTraceViewCenter({ x: cx, y: cy }, traceBounds, nextZoom));
     },
-    [imgNatural, onViewZoomChange]
+    [onViewZoomChange, traceBounds]
   );
 
   const resetView = useCallback(() => {
     onViewZoomChange(1);
     onBoxZoomModeChange(false);
     setBoxZoomRect(null);
+    if (!traceBounds) return;
     setViewCenter({
-      x: imgNatural.w / 2,
-      y: imgNatural.h / 2,
+      x: traceBounds.minX + traceBounds.width / 2,
+      y: traceBounds.minY + traceBounds.height / 2,
     });
-  }, [imgNatural.h, imgNatural.w, onBoxZoomModeChange, onViewZoomChange]);
+  }, [onBoxZoomModeChange, onViewZoomChange, traceBounds]);
 
   const zoomTo = useCallback(
     (nextZoom: number, focusImage?: LayoutPoint | null, focusStage?: LayoutPoint | null) => {
-      if (!imgNatural.w || !imgNatural.h) return;
+      if (!traceBounds) return;
       const clamped = Math.min(TRACE_VIEW_ZOOM_MAX, Math.max(TRACE_VIEW_ZOOM_MIN, nextZoom));
-      let nextCenter = clampTraceViewCenter(viewCenter, imgNatural, clamped);
+      let nextCenter = clampTraceViewCenter(viewCenter, traceBounds, clamped);
       if (focusImage && focusStage && baseScale > 0) {
-        const nextViewW = imgNatural.w / clamped;
-        const nextViewH = imgNatural.h / clamped;
-        const marginX = Math.max(0, (stageSize.w - imgNatural.w * baseScale) / 2);
-        const marginY = Math.max(0, (stageSize.h - imgNatural.h * baseScale) / 2);
+        const nextViewW = traceBounds.width / clamped;
+        const nextViewH = traceBounds.height / clamped;
+        const marginX = Math.max(0, (stageSize.w - traceBounds.width * baseScale) / 2);
+        const marginY = Math.max(0, (stageSize.h - traceBounds.height * baseScale) / 2);
         const nextScale = Math.max(baseScale * clamped, 1e-6);
         nextCenter = clampTraceViewCenter(
           {
             x: focusImage.x + nextViewW / 2 - (focusStage.x - marginX) / nextScale,
             y: focusImage.y + nextViewH / 2 - (focusStage.y - marginY) / nextScale,
           },
-          imgNatural,
+          traceBounds,
           clamped,
         );
       }
       onViewZoomChange(clamped);
       setViewCenter(nextCenter);
     },
-    [baseScale, imgNatural, onViewZoomChange, stageSize.h, stageSize.w, viewCenter]
+    [baseScale, onViewZoomChange, stageSize.h, stageSize.w, traceBounds, viewCenter]
   );
 
   const zoomToSelected = useCallback(() => {
@@ -378,6 +522,216 @@ export function TraceWorkspace({
     fitBounds(bounds);
     onBoxZoomModeChange(false);
   }, [fitBounds, onBoxZoomModeChange, pieces, selectedPieceId]);
+
+  const edgePickMaxDist = useMemo(
+    () => Math.max(4, 10 / Math.max(renderScale, 0.0001)),
+    [renderScale],
+  );
+
+  const coordPerInchForPiece = useCallback(
+    (piece: LayoutPiece | null | undefined): number | null => {
+      const ppi = piece?.sourcePixelsPerInch ?? calibration.pixelsPerInch ?? null;
+      return ppi && ppi > 0 ? ppi : null;
+    },
+    [calibration.pixelsPerInch],
+  );
+
+  const updatePopoverPosition = useCallback(() => {
+    if (!selectedEdge || !svgRef.current) {
+      setPopoverPos(null);
+      return;
+    }
+    const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+    if (!piece) {
+      setPopoverPos(null);
+      return;
+    }
+    const ring = normalizeClosedRing(piece.points);
+    const n = ring.length;
+    if (n < 2 || selectedEdge.edgeIndex < 0 || selectedEdge.edgeIndex >= n) {
+      setPopoverPos(null);
+      return;
+    }
+    const mid = segmentMidpoint(
+      ring[selectedEdge.edgeIndex]!,
+      ring[(selectedEdge.edgeIndex + 1) % n]!,
+    );
+    const pt = svgRef.current.createSVGPoint();
+    pt.x = mid.x;
+    pt.y = mid.y;
+    const ctm = svgRef.current.getScreenCTM();
+    if (!ctm) return;
+    const sp = pt.matrixTransform(ctm);
+    setPopoverPos({ left: sp.x, top: sp.y });
+  }, [pieces, selectedEdge]);
+
+  const openSeamModalFromEdge = useCallback(() => {
+    if (!selectedEdge) return;
+    const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+    if (!piece || isPlanStripPiece(piece)) return;
+    const geometry = seamGeometryFromAxisAlignedEdge(piece.points, selectedEdge.edgeIndex);
+    if (!geometry) {
+      window.alert("Seams can only be added from a straight horizontal or vertical edge.");
+      return;
+    }
+    const coordPerInch = coordPerInchForPiece(piece);
+    setSeamModal({
+      pieceId: piece.id,
+      edgeIndex: selectedEdge.edgeIndex,
+      geometry,
+      coordPerInch,
+      valA: formatSeamValue(geometry.dimA, coordPerInch),
+      valB: formatSeamValue(geometry.dimB, coordPerInch),
+    });
+  }, [coordPerInchForPiece, pieces, selectedEdge]);
+
+  const startSinkDrag = useCallback(
+    (pieceId: string, sinkId: string, e: React.PointerEvent) => {
+      if (tool !== "select") return;
+      const p = clientToImage(e.clientX, e.clientY);
+      if (!p) return;
+      const piece = traceSinkPieces.find((candidate) => candidate.id === pieceId);
+      const sink = piece?.sinks?.find((candidate) => candidate.id === sinkId);
+      if (!piece || !sink || isPlanStripPiece(piece)) return;
+      onPieceDragStart?.();
+      onSelectPiece(pieceId);
+      onSelectEdge(null);
+      sinkDragOrthoAxisRef.current = null;
+      setSinkDrag({
+        pieceId,
+        sinkId,
+        start: { ...p },
+        startCx: sink.centerX,
+        startCy: sink.centerY,
+      });
+      try {
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      } catch {
+        /* noop */
+      }
+      e.preventDefault();
+    },
+    [clientToImage, onPieceDragStart, onSelectEdge, onSelectPiece, tool, traceSinkPieces],
+  );
+
+  const seamPreviewLine = useMemo(() => {
+    if (!seamModal) return null;
+    const piece = pieces.find((p) => p.id === seamModal.pieceId);
+    if (!piece) return null;
+    const ring = normalizeClosedRing(piece.points);
+    const n = ring.length;
+    if (n < 2) return null;
+    const ei = seamModal.edgeIndex % n;
+    const ev0 = ring[ei]!;
+    const ev1 = ring[(ei + 1) % n]!;
+    const hintY = (ev0.y + ev1.y) / 2;
+    const hintX = (ev0.x + ev1.x) / 2;
+    const da = parseSeamValue(seamModal.valA, seamModal.coordPerInch);
+    if (!da) return null;
+    if (seamModal.geometry.kind === "vertical") {
+      const x = seamModal.geometry.xMin + da;
+      const { y0, y1 } = verticalSeamPreviewChord(piece.points, x, hintY);
+      return { kind: "vertical" as const, x, y0, y1 };
+    }
+    const y = seamModal.geometry.yMin + da;
+    const { x0, x1 } = horizontalSeamPreviewChord(piece.points, y, hintX);
+    return { kind: "horizontal" as const, y, x0, x1 };
+  }, [pieces, seamModal]);
+
+  const applySeamModal = useCallback(() => {
+    if (!seamModal) return;
+    const targetPiece = pieces.find((p) => p.id === seamModal.pieceId);
+    if (!targetPiece || isPlanStripPiece(targetPiece)) {
+      setSeamModal(null);
+      return;
+    }
+    const dimA = parseSeamValue(seamModal.valA, seamModal.coordPerInch);
+    const dimB = parseSeamValue(seamModal.valB, seamModal.coordPerInch);
+    if (!dimA || !dimB) return;
+    const seamRing = normalizeClosedRing(targetPiece.points);
+    const seamEdgeCount = seamRing.length;
+    if (seamEdgeCount < 2) return;
+    const seamEdgeIndex = seamModal.edgeIndex % seamEdgeCount;
+    const seamStart = seamRing[seamEdgeIndex]!;
+    const seamEnd = seamRing[(seamEdgeIndex + 1) % seamEdgeCount]!;
+    const seamHint = {
+      x: (seamStart.x + seamEnd.x) / 2,
+      y: (seamStart.y + seamEnd.y) / 2,
+    };
+    const commit = (ringA: LayoutPoint[], ringB: LayoutPoint[]) => {
+      const idA = crypto.randomUUID();
+      const idB = crypto.randomUUID();
+      const existingSinks = targetPiece.sinks ?? [];
+      const legacyCount =
+        existingSinks.length > 0
+          ? 0
+          : Math.max(0, Math.floor(targetPiece.sinkCount || 0));
+      const { sinksA, sinksB } =
+        existingSinks.length > 0
+          ? assignSinksToSplitPieces(existingSinks, ringA, ringB, 0, 0)
+          : {
+              sinksA: [] as typeof existingSinks,
+              sinksB: [] as typeof existingSinks,
+            };
+      const splitLegacy = legacyCount > 0;
+      const sA = splitLegacy ? Math.floor(legacyCount / 2) : 0;
+      const sB = splitLegacy ? legacyCount - sA : 0;
+      const splitNameA = nextPieceName(pieces);
+      const splitNameB = nextPieceName(pieces, 1);
+      const newA: LayoutPiece = {
+        ...targetPiece,
+        id: idA,
+        name: splitNameA,
+        points: ringA,
+        sinkCount: splitLegacy ? sA : 0,
+        sinks: existingSinks.length > 0 ? sinksA : undefined,
+        manualDimensions: undefined,
+        shapeKind: "polygon",
+        edgeTags: undefined,
+      };
+      const newB: LayoutPiece = {
+        ...targetPiece,
+        id: idB,
+        name: splitNameB,
+        points: ringB,
+        sinkCount: splitLegacy ? sB : 0,
+        sinks: existingSinks.length > 0 ? sinksB : undefined,
+        manualDimensions: undefined,
+        shapeKind: "polygon",
+        edgeTags: undefined,
+      };
+      const next = pieces
+        .filter((piece) => piece.id !== targetPiece.id)
+        .concat([newA, newB]);
+      onPiecesChange(next);
+      onSelectPiece(idA);
+      onSelectEdge(null);
+      setSeamModal(null);
+    };
+
+    if (seamModal.geometry.kind === "vertical") {
+      const total = seamModal.geometry.xMax - seamModal.geometry.xMin;
+      if (Math.abs(dimA + dimB - total) > 0.08) return;
+      const split = splitWorldRingAtVerticalSeam(
+        targetPiece.points,
+        seamModal.geometry.xMin + dimA,
+        seamHint.y,
+      );
+      if (!split) return;
+      commit(split[0], split[1]);
+      return;
+    }
+
+    const total = seamModal.geometry.yMax - seamModal.geometry.yMin;
+    if (Math.abs(dimA + dimB - total) > 0.08) return;
+    const split = splitWorldRingAtHorizontalSeam(
+      targetPiece.points,
+      seamModal.geometry.yMin + dimA,
+      seamHint.x,
+    );
+    if (!split) return;
+    commit(split[0], split[1]);
+  }, [onPiecesChange, onSelectEdge, onSelectPiece, pieces, seamModal]);
 
   const finishOrthoPolygon = useCallback(() => {
     setOrthoDraft((prev) => {
@@ -391,6 +745,7 @@ export function TraceWorkspace({
         sinkCount: 0,
         shapeKind: "polygon",
         source: "manual",
+        ...newPieceSourceMeta,
       };
       onPiecesChange([...pieces, newPiece]);
       onSelectPiece(id);
@@ -398,12 +753,38 @@ export function TraceWorkspace({
       onBoxZoomModeChange(false);
       return null;
     });
-  }, [onBoxZoomModeChange, pieces, onPiecesChange, onSelectPiece]);
+  }, [newPieceSourceMeta, onBoxZoomModeChange, pieces, onPiecesChange, onSelectPiece]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     const p = clientToImage(e.clientX, e.clientY);
     if (!p) return;
     const backgroundHit = !pieces.some((piece) => pointInPoly(p, piece.points));
+    const edgeClick =
+      e.button === 0 &&
+      tool === "select" &&
+      !boxZoomMode &&
+      !calibrationMode
+        ? hoverEdge ?? pickTraceEdgeAtPoint(p, pieces, edgePickMaxDist)
+        : null;
+    if (edgeClick) {
+      onSelectPiece(edgeClick.pieceId);
+      onSelectEdge(edgeClick);
+      setHoverEdge(edgeClick);
+      return;
+    }
+    if (
+      e.button === 0 &&
+      tool === "select" &&
+      !boxZoomMode &&
+      !calibrationMode &&
+      backgroundHit &&
+      (selectedPieceId != null || selectedEdge != null)
+    ) {
+      onSelectPiece(null);
+      onSelectEdge(null);
+      setHoverEdge(null);
+      return;
+    }
     if (
       e.button === 1 ||
       e.button === 2 ||
@@ -429,7 +810,10 @@ export function TraceWorkspace({
       return;
     }
     if (calibrationMode) {
-      onCalibrationPoint(p);
+      const calibrationPoint =
+        calibration.pointA && !calibration.pointB ? orthoPreviewPoint(calibration.pointA, p) : p;
+      setCalibrationCursor(calibrationPoint);
+      onCalibrationPoint(calibrationPoint);
       return;
     }
     if (boxZoomMode) {
@@ -519,23 +903,32 @@ export function TraceWorkspace({
       return;
     }
     if (effectiveTool === "rect" || effectiveTool === "lShape") {
+      const snapped = snapTracePointToNearestInch(p, calibration.pixelsPerInch);
       try {
         (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
       } catch {
         /* noop */
       }
-      setDragRect({ a: p, b: p });
+      setDragRect({ a: snapped, b: snapped });
       return;
     }
     if (effectiveTool === "select") {
+      const edgeHit = hoverEdge ?? pickTraceEdgeAtPoint(p, pieces, edgePickMaxDist);
+      if (edgeHit) {
+        onSelectPiece(edgeHit.pieceId);
+        onSelectEdge(edgeHit);
+        return;
+      }
       for (let i = pieces.length - 1; i >= 0; i--) {
         const piece = pieces[i];
         if (pointInPoly(p, piece.points)) {
           onSelectPiece(piece.id);
+          onSelectEdge(null);
           return;
         }
       }
       onSelectPiece(null);
+      onSelectEdge(null);
     }
   };
 
@@ -551,15 +944,76 @@ export function TraceWorkspace({
             x: panDrag.startCenter.x - (e.clientX - panDrag.startClientX) * unitsPerScreenPx,
             y: panDrag.startCenter.y - (e.clientY - panDrag.startClientY) * unitsPerScreenPx,
           },
-          imgNatural,
+          traceBounds ?? { minX: 0, minY: 0, width: 1, height: 1 },
           viewZoom,
         ),
       );
       return;
     }
-    if (calibrationMode) return;
+    if (calibrationMode) {
+      if (calibration.pointA && !calibration.pointB) {
+        setCalibrationCursor(orthoPreviewPoint(calibration.pointA, p));
+      } else {
+        setCalibrationCursor(p);
+      }
+      return;
+    }
     if (effectiveTool === "polygon") {
       setPolyCursor(p);
+    }
+    if (sinkDrag) {
+      let dx = p.x - sinkDrag.start.x;
+      let dy = p.y - sinkDrag.start.y;
+      if (dx !== 0 || dy !== 0) {
+        if (sinkDragOrthoAxisRef.current == null) {
+          sinkDragOrthoAxisRef.current =
+            Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+        }
+        if (sinkDragOrthoAxisRef.current === "x") dy = 0;
+        else if (sinkDragOrthoAxisRef.current === "y") dx = 0;
+      }
+      const piece = traceSinkPieces.find(
+        (candidate) => candidate.id === sinkDrag.pieceId,
+      );
+      if (!piece) return;
+      const sink = piece.sinks?.find((candidate) => candidate.id === sinkDrag.sinkId);
+      if (!sink) return;
+      const coordPerInch =
+        piece.sourcePixelsPerInch ??
+        calibration.pixelsPerInch ??
+        1;
+      const nextCenter = clampSinkCenter(
+        sink,
+        piece,
+        traceSinkPieces,
+        coordPerInch,
+        sinkDrag.startCx + dx,
+        sinkDrag.startCy + dy,
+      );
+      const nextPieces = pieces.map((candidate) =>
+        candidate.id === sinkDrag.pieceId
+          ? {
+              ...candidate,
+              sinks: candidate.sinks?.map((item) =>
+                item.id === sinkDrag.sinkId
+                  ? {
+                      ...item,
+                      centerX: nextCenter.centerX,
+                      centerY: nextCenter.centerY,
+                    }
+                  : item,
+              ),
+            }
+          : candidate,
+      );
+      (onPiecesChangeLive ?? onPiecesChange)(nextPieces);
+      setHoverEdge(null);
+      return;
+    }
+    if (effectiveTool === "select" && !boxZoomRect && !dragRect) {
+      setHoverEdge(pickTraceEdgeAtPoint(p, pieces, edgePickMaxDist));
+    } else if (hoverEdge) {
+      setHoverEdge(null);
     }
     if (boxZoomRect) {
       setBoxZoomRect((prev) => (prev ? { ...prev, b: p } : prev));
@@ -569,7 +1023,11 @@ export function TraceWorkspace({
       setOrthoCursor(p);
     }
     if (dragRect && (effectiveTool === "rect" || effectiveTool === "lShape")) {
-      setDragRect({ ...dragRect, b: p });
+      setDragRect((prev) =>
+        prev
+          ? { ...prev, b: snapTracePointToNearestInch(p, calibration.pixelsPerInch) }
+          : prev,
+      );
     }
   };
 
@@ -607,7 +1065,8 @@ export function TraceWorkspace({
       return;
     }
     if (dragRect && p && (effectiveTool === "rect" || effectiveTool === "lShape")) {
-      const { a, b } = dragRect;
+      const { a } = dragRect;
+      const b = snapTracePointToNearestInch(p, calibration.pixelsPerInch);
       const w = Math.abs(b.x - a.x);
       const h = Math.abs(b.y - a.y);
       if (w > 8 && h > 8) {
@@ -622,6 +1081,7 @@ export function TraceWorkspace({
                 sinkCount: 0,
                 shapeKind: "rectangle",
                 source: "manual",
+                ...newPieceSourceMeta,
               }
             : {
                 id,
@@ -633,10 +1093,15 @@ export function TraceWorkspace({
                 sinkCount: 0,
                 shapeKind: "lShape",
                 source: "manual",
+                ...newPieceSourceMeta,
               };
         onPiecesChange([...pieces, newPiece]);
         onSelectPiece(id);
       }
+    }
+    if (sinkDrag) {
+      sinkDragOrthoAxisRef.current = null;
+      setSinkDrag(null);
     }
     try {
       (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
@@ -648,7 +1113,7 @@ export function TraceWorkspace({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    if (!imgNatural.w || !imgNatural.h) return;
+    if (!traceBounds) return;
     const focus = clientToImage(e.clientX, e.clientY);
     const rect = stageRef.current?.getBoundingClientRect();
     if (!focus) return;
@@ -672,12 +1137,13 @@ export function TraceWorkspace({
         sinkCount: 0,
         shapeKind: "polygon",
         source: "manual",
+        ...newPieceSourceMeta,
       };
       onPiecesChange([...pieces, newPiece]);
       onSelectPiece(id);
       return null;
     });
-  }, [pieces, onPiecesChange, onSelectPiece]);
+  }, [newPieceSourceMeta, pieces, onPiecesChange, onSelectPiece]);
 
   useEffect(() => {
     if (effectiveTool !== "orthoDraw") {
@@ -691,6 +1157,12 @@ export function TraceWorkspace({
       setPolyCursor(null);
     }
   }, [effectiveTool]);
+
+  useEffect(() => {
+    if (!calibrationMode || !calibration.pointA || calibration.pointB) {
+      setCalibrationCursor(null);
+    }
+  }, [calibration.pointA, calibration.pointB, calibrationMode]);
 
   useEffect(() => {
     if (!boxZoomMode) {
@@ -708,6 +1180,39 @@ export function TraceWorkspace({
   }, [zoomToSelected, zoomToSelectedSignal]);
 
   useEffect(() => {
+    if (!selectedEdge) {
+      setPopoverPos(null);
+      return;
+    }
+    if (!pieces.some((piece) => piece.id === selectedEdge.pieceId)) {
+      onSelectEdge(null);
+      return;
+    }
+    updatePopoverPosition();
+  }, [onSelectEdge, pieces, selectedEdge, updatePopoverPosition, viewBox]);
+
+  useEffect(() => {
+    const onResize = () => updatePopoverPosition();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [updatePopoverPosition]);
+
+  useEffect(() => {
+    if (effectiveTool === "select") return;
+    setHoverEdge(null);
+    if (selectedEdge) onSelectEdge(null);
+  }, [effectiveTool, onSelectEdge, selectedEdge]);
+
+  useEffect(() => {
+    if (!seamModal) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setSeamModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [seamModal]);
+
+  useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Enter" && effectiveTool === "polygon" && polyDraft && polyDraft.length >= 3) {
         finishPolygon();
@@ -721,6 +1226,8 @@ export function TraceWorkspace({
         setOrthoDraft(null);
         setOrthoCursor(null);
         setDragRect(null);
+        setSinkDrag(null);
+        sinkDragOrthoAxisRef.current = null;
         setBoxZoomRect(null);
         onBoxZoomModeChange(false);
       }
@@ -756,7 +1263,7 @@ export function TraceWorkspace({
   }, [vertexDrag, clientToImage, pieces, onPiecesChange]);
 
   const overlaySvg = useMemo(() => {
-    if (!imgNatural.w || !imgNatural.h) return null;
+    if (!traceBounds) return null;
     const placementByPiece = new Map<string, PiecePlacement>();
     if (placements) for (const p of placements) placementByPiece.set(p.pieceId, p);
     const slabById = new Map<string, LayoutSlab>();
@@ -769,6 +1276,14 @@ export function TraceWorkspace({
     const strokeCal =
       calibration.pointA && calibration.pointB
         ? `M ${calibration.pointA.x} ${calibration.pointA.y} L ${calibration.pointB.x} ${calibration.pointB.y}`
+        : "";
+    const calibrationPreviewPoint =
+      calibrationMode && calibration.pointA && !calibration.pointB ? calibrationCursor : null;
+    const strokeCalPreview =
+      calibration.pointA &&
+      calibrationPreviewPoint &&
+      !pointsAlmostEqual(calibration.pointA, calibrationPreviewPoint, 1e-6)
+        ? `M ${calibration.pointA.x} ${calibration.pointA.y} L ${calibrationPreviewPoint.x} ${calibrationPreviewPoint.y}`
         : "";
     let orthoDrawSnap: { preview: LayoutPoint; guides: OrthoSnapGuide[] } | null = null;
     if (effectiveTool === "orthoDraw" && orthoCursor) {
@@ -825,6 +1340,38 @@ export function TraceWorkspace({
               lengthLabel: formatDraftSegmentLength(segmentLength(polyDraft[polyDraft.length - 1], polygonDisplayPreview), ppi),
             }
           : null;
+    const overlayBounds = viewBox ?? traceBounds;
+    const dragRectReadout =
+      dragRect &&
+      (effectiveTool === "rect" || effectiveTool === "lShape") &&
+      overlayBounds
+        ? (() => {
+            const minX = Math.min(dragRect.a.x, dragRect.b.x);
+            const minY = Math.min(dragRect.a.y, dragRect.b.y);
+            const maxX = Math.max(dragRect.a.x, dragRect.b.x);
+            const maxY = Math.max(dragRect.a.y, dragRect.b.y);
+            const width = maxX - minX;
+            const height = maxY - minY;
+            const widthText = `W ${formatDraftRectDimension(width, ppi)}`;
+            const heightText = `H ${formatDraftRectDimension(height, ppi)}`;
+            const widthBoxW = Math.max(40, widthText.length * 10);
+            const heightBoxW = Math.max(40, heightText.length * 10);
+            const widthY = minY - 15 < overlayBounds.minY + 8 ? maxY + 15 : minY - 15;
+            const heightOffset = Math.max(24, heightBoxW / 2 + 8);
+            const heightX =
+              minX - heightOffset < overlayBounds.minX + 8 ? maxX + heightOffset : minX - heightOffset;
+            return {
+              widthText,
+              heightText,
+              widthBoxW,
+              heightBoxW,
+              widthCenterX: minX + width / 2,
+              widthCenterY: widthY,
+              heightCenterX: heightX,
+              heightCenterY: minY + height / 2,
+            };
+          })()
+        : null;
     return (
       <>
         {strokeCal ? (
@@ -833,6 +1380,16 @@ export function TraceWorkspace({
             fill="none"
             stroke={TRACE_CALIBRATION_STROKE}
             strokeWidth={calibrationStrokeWidth}
+          />
+        ) : null}
+        {strokeCalPreview ? (
+          <path
+            d={strokeCalPreview}
+            fill="none"
+            stroke={TRACE_CALIBRATION_STROKE}
+            strokeWidth={calibrationStrokeWidth}
+            strokeDasharray="7 4"
+            pointerEvents="none"
           />
         ) : null}
         {calibration.pointA ? (
@@ -851,9 +1408,47 @@ export function TraceWorkspace({
             fill={TRACE_CALIBRATION_FILL}
           />
         ) : null}
+        {calibrationPreviewPoint ? (
+          <circle
+            cx={calibrationPreviewPoint.x}
+            cy={calibrationPreviewPoint.y}
+            r={calibrationHandleRadius}
+            fill={TRACE_CALIBRATION_FILL}
+            opacity={0.72}
+            pointerEvents="none"
+          />
+        ) : null}
+        {seamPreviewLine ? (
+          seamPreviewLine.kind === "vertical" ? (
+            <line
+              x1={seamPreviewLine.x}
+              y1={seamPreviewLine.y0}
+              x2={seamPreviewLine.x}
+              y2={seamPreviewLine.y1}
+              stroke="rgba(232,212,139,0.96)"
+              strokeWidth={2 / Math.max(renderScale, 0.0001)}
+              strokeDasharray={`${8 / Math.max(renderScale, 0.0001)} ${5 / Math.max(renderScale, 0.0001)}`}
+              pointerEvents="none"
+            />
+          ) : (
+            <line
+              x1={seamPreviewLine.x0}
+              y1={seamPreviewLine.y}
+              x2={seamPreviewLine.x1}
+              y2={seamPreviewLine.y}
+              stroke="rgba(232,212,139,0.96)"
+              strokeWidth={2 / Math.max(renderScale, 0.0001)}
+              strokeDasharray={`${8 / Math.max(renderScale, 0.0001)} ${5 / Math.max(renderScale, 0.0001)}`}
+              pointerEvents="none"
+            />
+          )
+        ) : null}
         {pieces.map((piece, idx) => {
+          const sinkPiece =
+            traceSinkPieces.find((candidate) => candidate.id === piece.id) ?? piece;
           const sel = piece.id === selectedPieceId;
-          const pts = ensureClosedRing(normalizeClosedRing(piece.points));
+          const ring = normalizeClosedRing(piece.points);
+          const pts = ensureClosedRing(ring);
           const d = pts.map((q, i) => `${i === 0 ? "M" : "L"} ${q.x} ${q.y}`).join(" ") + " Z";
           const placement = placementByPiece.get(piece.id);
           const slab =
@@ -875,11 +1470,11 @@ export function TraceWorkspace({
           const fill = slabTex
             ? sel
               ? "rgba(201,162,39,0.14)"
-              : "rgba(6,8,12,0.18)"
+              : "rgba(6,8,12,0.24)"
             : sel
               ? "rgba(201,162,39,0.18)"
-              : `rgba(120,200,255,${0.08 + (idx % 5) * 0.04})`;
-          const stroke = sel ? "rgba(232,212,139,0.95)" : "rgba(180,210,255,0.55)";
+              : `rgba(72,140,228,${0.16 + (idx % 5) * 0.045})`;
+          const stroke = sel ? "rgba(232,212,139,0.95)" : "rgba(74,132,212,0.86)";
           return (
             <g key={piece.id}>
               {slabTex ? (
@@ -893,6 +1488,7 @@ export function TraceWorkspace({
                 <g clipPath={`url(#ls-slab-tex-clip-${piece.id})`} style={{ pointerEvents: "none" }}>
                   <image
                     href={slabTex.imageUrl}
+                    xlinkHref={slabTex.imageUrl}
                     x={0}
                     y={0}
                     width={slabTex.widthIn}
@@ -911,6 +1507,51 @@ export function TraceWorkspace({
                 strokeWidth={sel ? 2.2 : 1.2}
                 style={{ pointerEvents: "none" }}
               />
+              <PieceSinkCutoutsSvg
+                piece={sinkPiece}
+                allPieces={traceSinkPieces}
+                coordPerInch={
+                  piece.sourcePixelsPerInch ??
+                  ppi ??
+                  1
+                }
+                selectedSinkId={sinkDrag?.pieceId === piece.id ? sinkDrag.sinkId : null}
+                interactive={tool === "select" && selectedPieceId === piece.id}
+                onSinkPointerDown={(sinkId, e) => startSinkDrag(piece.id, sinkId, e)}
+                appearance="trace"
+              />
+              {ring.map((a, edgeIndex) => {
+                const b = ring[(edgeIndex + 1) % ring.length]!;
+                const isSelected =
+                  selectedEdge?.pieceId === piece.id &&
+                  selectedEdge.edgeIndex === edgeIndex;
+                const isHovered =
+                  !isSelected &&
+                  hoverEdge?.pieceId === piece.id &&
+                  hoverEdge.edgeIndex === edgeIndex;
+                if (!isSelected && !isHovered) return null;
+                return (
+                  <line
+                    key={`${piece.id}-edge-highlight-${edgeIndex}`}
+                    x1={a.x}
+                    y1={a.y}
+                    x2={b.x}
+                    y2={b.y}
+                    stroke={
+                      isSelected
+                        ? "rgba(232,212,139,0.98)"
+                        : "rgba(235,65,65,0.98)"
+                    }
+                    strokeWidth={
+                      isSelected
+                        ? 3 / Math.max(renderScale, 0.0001)
+                        : 2.5 / Math.max(renderScale, 0.0001)
+                    }
+                    strokeLinecap="round"
+                    pointerEvents="none"
+                  />
+                );
+              })}
             </g>
           );
         })}
@@ -920,9 +1561,9 @@ export function TraceWorkspace({
                 <line
                   key={`trace-ortho-guide-v-${gi}`}
                   x1={g.x}
-                  y1={0}
+                  y1={traceBounds.minY}
                   x2={g.x}
-                  y2={imgNatural.h}
+                  y2={traceBounds.minY + traceBounds.height}
                   stroke={TRACE_DRAFT_STROKE_SOFT}
                   strokeWidth={1.2}
                   strokeDasharray="7 4"
@@ -931,9 +1572,9 @@ export function TraceWorkspace({
               ) : (
                 <line
                   key={`trace-ortho-guide-h-${gi}`}
-                  x1={0}
+                  x1={traceBounds.minX}
                   y1={g.y}
-                  x2={imgNatural.w}
+                  x2={traceBounds.minX + traceBounds.width}
                   y2={g.y}
                   stroke={TRACE_DRAFT_STROKE_SOFT}
                   strokeWidth={1.2}
@@ -944,15 +1585,57 @@ export function TraceWorkspace({
             )
           : null}
         {dragRect ? (
-          <rect
-            x={Math.min(dragRect.a.x, dragRect.b.x)}
-            y={Math.min(dragRect.a.y, dragRect.b.y)}
-            width={Math.abs(dragRect.b.x - dragRect.a.x)}
-            height={Math.abs(dragRect.b.y - dragRect.a.y)}
-            fill={TRACE_DRAFT_FILL}
-            stroke={TRACE_DRAFT_STROKE_SOFT}
-            strokeWidth={1.5}
-          />
+          <>
+            <rect
+              x={Math.min(dragRect.a.x, dragRect.b.x)}
+              y={Math.min(dragRect.a.y, dragRect.b.y)}
+              width={Math.abs(dragRect.b.x - dragRect.a.x)}
+              height={Math.abs(dragRect.b.y - dragRect.a.y)}
+              fill={TRACE_DRAFT_FILL}
+              stroke={TRACE_DRAFT_STROKE_SOFT}
+              strokeWidth={1.5}
+            />
+            {dragRectReadout ? (
+              <>
+                <g className="ls-draft-segment-label" pointerEvents="none">
+                  <rect
+                    x={dragRectReadout.widthCenterX - dragRectReadout.widthBoxW / 2}
+                    y={dragRectReadout.widthCenterY - 15}
+                    width={dragRectReadout.widthBoxW}
+                    height={22}
+                    rx={6}
+                    ry={6}
+                  />
+                  <text
+                    x={dragRectReadout.widthCenterX}
+                    y={dragRectReadout.widthCenterY}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {dragRectReadout.widthText}
+                  </text>
+                </g>
+                <g className="ls-draft-segment-label" pointerEvents="none">
+                  <rect
+                    x={dragRectReadout.heightCenterX - dragRectReadout.heightBoxW / 2}
+                    y={dragRectReadout.heightCenterY - 15}
+                    width={dragRectReadout.heightBoxW}
+                    height={22}
+                    rx={6}
+                    ry={6}
+                  />
+                  <text
+                    x={dragRectReadout.heightCenterX}
+                    y={dragRectReadout.heightCenterY}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >
+                    {dragRectReadout.heightText}
+                  </text>
+                </g>
+              </>
+            ) : null}
+          </>
         ) : null}
         {boxZoomRect ? (
           <rect
@@ -1076,10 +1759,16 @@ export function TraceWorkspace({
       </>
     );
   }, [
-    imgNatural,
+    traceBounds,
     calibration,
+    calibrationCursor,
+    calibrationMode,
     pieces,
+    traceSinkPieces,
     selectedPieceId,
+    selectedEdge,
+    hoverEdge,
+    sinkDrag,
     dragRect,
     boxZoomRect,
     polyDraft,
@@ -1090,10 +1779,13 @@ export function TraceWorkspace({
     placements,
     slabs,
     renderScale,
+    viewBox,
+    seamPreviewLine,
+    startSinkDrag,
     tool,
   ]);
 
-  if (!resolvedUrl) {
+  if (!resolvedUrl && !traceBounds) {
     return (
       <div className="ls-trace-empty glass-panel">
         <p className="ls-trace-empty-title">Upload a plan to begin</p>
@@ -1102,14 +1794,16 @@ export function TraceWorkspace({
     );
   }
 
+  const imageBounds = traceBounds ?? viewBox ?? { minX: 0, minY: 0, width: 1, height: 1 };
+
   return (
     <div className="ls-trace-wrap">
       <div
         ref={stageRef}
         className="ls-trace-stage"
         style={{
-          ...(fitPageToWidth && imgNatural.w > 0 && imgNatural.h > 0
-            ? { aspectRatio: `${imgNatural.w} / ${imgNatural.h}` }
+          ...(fitPageToWidth && traceBounds
+            ? { aspectRatio: `${traceBounds.width} / ${traceBounds.height}` }
             : {}),
           cursor:
             panDragRef.current != null
@@ -1122,6 +1816,8 @@ export function TraceWorkspace({
                     tool === "lShape" ||
                     tool === "orthoDraw"
                   ? "crosshair"
+                  : tool === "select" && hoverEdge
+                    ? "pointer"
                   : tool === "select" && viewZoom > 1
                     ? "grab"
                     : undefined,
@@ -1134,6 +1830,7 @@ export function TraceWorkspace({
           setDragRect(null);
           setVertexDrag(null);
           setBoxZoomRect(null);
+          setHoverEdge(null);
           panDragRef.current = null;
         }}
         onContextMenu={(e) => e.preventDefault()}
@@ -1143,21 +1840,180 @@ export function TraceWorkspace({
             ref={svgRef}
             className="ls-trace-svg"
             viewBox={`${viewBox.minX} ${viewBox.minY} ${viewBox.width} ${viewBox.height}`}
-            preserveAspectRatio="xMidYMid meet"
+            preserveAspectRatio="xMidYMin meet"
           >
-            <image
-              href={resolvedUrl}
-              x={0}
-              y={0}
-              width={imgNatural.w}
-              height={imgNatural.h}
-              preserveAspectRatio="none"
-              pointerEvents="none"
-            />
+            {resolvedUrl ? (
+              <image
+                href={resolvedUrl}
+                x={imageBounds.minX}
+                y={imageBounds.minY}
+                width={imageBounds.width}
+                height={imageBounds.height}
+                preserveAspectRatio="none"
+                pointerEvents="none"
+              />
+            ) : null}
             {overlaySvg}
           </svg>
         ) : null}
       </div>
+      {tool === "select" && selectedEdge && popoverPos ? (
+        <div
+          className="ls-edge-popover-cluster"
+          style={{ left: popoverPos.left, top: popoverPos.top }}
+        >
+          <div className="ls-edge-popover glass-panel">
+            <button
+              type="button"
+              className="ls-edge-popover-btn"
+              onClick={() => onToggleProfileEdge(selectedEdge)}
+            >
+              Profile
+            </button>
+            {(() => {
+              const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+              return piece && !isPlanStripPiece(piece);
+            })() ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                onClick={() => onRequestSplashForEdge(selectedEdge, "splash")}
+              >
+                Splash
+              </button>
+            ) : null}
+            {(() => {
+              const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+              return piece && !isPlanStripPiece(piece);
+            })() ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                title="Same traced placement as splash; 3D preview folds the miter strip down from the edge"
+                onClick={() => onRequestSplashForEdge(selectedEdge, "miter")}
+              >
+                Miter
+              </button>
+            ) : null}
+            {onSetSplashBottomEdge &&
+            (() => {
+              const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+              return piece && isPlanStripPiece(piece);
+            })() ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                onClick={() => {
+                  onSetSplashBottomEdge(selectedEdge);
+                  onSelectEdge(null);
+                }}
+              >
+                Bottom (3D)
+              </button>
+            ) : null}
+            {onRequestAddSinkForEdge &&
+            (() => {
+              const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+              return piece && !isPlanStripPiece(piece);
+            })() ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                onClick={() => onRequestAddSinkForEdge(selectedEdge)}
+              >
+                Sink
+              </button>
+            ) : null}
+            {(() => {
+              const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+              return (
+                piece &&
+                !isPlanStripPiece(piece) &&
+                seamGeometryFromAxisAlignedEdge(piece.points, selectedEdge.edgeIndex)
+              );
+            })() ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                onClick={() => openSeamModalFromEdge()}
+              >
+                Seam
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {seamModal ? (
+        <div
+          className="ls-seam-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ls-trace-seam-modal-title"
+          onClick={() => setSeamModal(null)}
+        >
+          <div
+            className="ls-seam-modal glass-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="ls-trace-seam-modal-title" className="ls-seam-modal-title">
+              Add seam
+            </h2>
+            <p className="ls-seam-modal-sub">
+              Split this traced piece along a seam perpendicular to the selected
+              edge. Enter the two edge spans on either side of the seam.
+            </p>
+            <div className="ls-seam-modal-fields">
+              <label className="ls-seam-modal-field">
+                {`${seamModal.geometry.labelA} (${seamUnitLabel(seamModal.coordPerInch)})`}
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={seamModal.valA}
+                  onChange={(e) =>
+                    setSeamModal((prev) =>
+                      prev ? { ...prev, valA: e.target.value } : prev,
+                    )
+                  }
+                  autoFocus
+                />
+              </label>
+              <label className="ls-seam-modal-field">
+                {`${seamModal.geometry.labelB} (${seamUnitLabel(seamModal.coordPerInch)})`}
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  value={seamModal.valB}
+                  onChange={(e) =>
+                    setSeamModal((prev) =>
+                      prev ? { ...prev, valB: e.target.value } : prev,
+                    )
+                  }
+                />
+              </label>
+            </div>
+            <div className="ls-seam-modal-actions">
+              <button
+                type="button"
+                className="ls-btn ls-btn-secondary"
+                onClick={() => setSeamModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                onClick={() => applySeamModal()}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {effectiveTool === "polygon" && polyDraft && polyDraft.length > 0 ? (
         <div className="ls-floating-hint">
           Click the first point to close · Enter to finish · Esc to cancel · Click a point or line to remove it

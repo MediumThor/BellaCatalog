@@ -1,5 +1,30 @@
 import type { CatalogItem, PriceEntry } from "../types/catalog";
 
+function firstNonEmptyString(values: readonly (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function nonEmptyStringArray(values: readonly string[] | null | undefined): string[] | undefined {
+  const cleaned =
+    values
+      ?.map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)) ?? [];
+  return cleaned.length ? cleaned : undefined;
+}
+
+export function catalogPrimaryImageUrl(item: CatalogItem): string | null {
+  return firstNonEmptyString([
+    item.imageUrl,
+    item.galleryImages?.find((url) => typeof url === "string" && url.trim()),
+    item.liveInventory?.imageUrl ?? undefined,
+    item.liveInventory?.galleryImages?.find((url) => typeof url === "string" && url.trim()),
+  ]);
+}
+
 export function pickDefaultPriceEntry(item: CatalogItem): PriceEntry | null {
   const entries = item.priceEntries.filter((e) => e.price != null && Number.isFinite(e.price));
   if (!entries.length) return null;
@@ -76,7 +101,14 @@ export function catalogSnapshotPayload(item: CatalogItem): Record<string, unknow
     size: item.size,
     sku: item.sku,
     sourceUrl: item.sourceUrl?.trim() || item.productPageUrl?.trim() || null,
-    imageUrl: item.imageUrl?.trim() || null,
+    imageUrl: catalogPrimaryImageUrl(item),
+    galleryImages: nonEmptyStringArray(item.galleryImages),
+    liveInventory: item.liveInventory
+      ? {
+          imageUrl: item.liveInventory.imageUrl?.trim() || null,
+          galleryImages: nonEmptyStringArray(item.liveInventory.galleryImages),
+        }
+      : undefined,
     priceEntries: item.priceEntries,
     rawSourceFields: item.rawSourceFields,
   };

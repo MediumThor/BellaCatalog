@@ -72,6 +72,8 @@ export interface LayoutArcCircle {
 export interface LayoutPiece {
   id: string;
   name: string;
+  /** Area material option assigned to this piece; strip pieces inherit from their parent when unset. */
+  materialOptionId?: string | null;
   /**
    * Closed polygon vertices.
    * - Source-backed layouts: coordinates are in source image / PDF pixel space (after calibration, 1 inch = 1/ppi ft etc. via summary math).
@@ -135,6 +137,10 @@ export interface LayoutPiece {
    * @deprecated Legacy storage: was circle radius in inches. Migrated to `edgeArcSagittaIn` when loading.
    */
   edgeArcRadiiIn?: (number | null)[] | null;
+  /** Source-backed layouts: PDF/image page index this piece was traced from. */
+  sourcePageIndex?: number | null;
+  /** Source-backed layouts: page-specific pixels-per-inch used when converting this piece to slab inches. */
+  sourcePixelsPerInch?: number | null;
 }
 
 export interface PiecePlacement {
@@ -179,13 +185,34 @@ export interface SavedLayoutCalibration {
   pixelsPerInch: number | null;
 }
 
+export interface SavedLayoutSourcePage {
+  index: number;
+  pageNumber: number;
+  widthPx: number;
+  heightPx: number;
+  /** Combined-plan origin so multi-page PDFs share one source coordinate space. */
+  originX: number;
+  originY: number;
+  /** Optional cached preview; active page rendering can also be generated at runtime. */
+  previewImageUrl?: string;
+  /** Storage ref for the cached preview so we can recover when download URLs rotate. */
+  previewStoragePath?: string;
+  calibration?: SavedLayoutCalibration;
+}
+
 export interface SavedLayoutSource {
   kind: LayoutSourceKind;
   fileUrl: string;
+  /** Storage ref for the original upload so reopen flows do not depend on a stale URL token. */
+  fileStoragePath?: string;
   /** PDF uploads also persist a rendered first-page preview for tracing + calibration. */
   previewImageUrl?: string;
+  /** Storage ref for the first-page preview image. */
+  previewStoragePath?: string;
   fileName: string;
   uploadedAt: string;
+  /** Multi-page PDFs: one entry per page with dimensions/origin/calibration. */
+  pages?: SavedLayoutSourcePage[];
   sourceWidthPx?: number;
   sourceHeightPx?: number;
 }
@@ -276,6 +303,7 @@ export type TraceTool =
   | "snapLines"
   | "join"
   | "cornerRadius"
+  | "chamferCorner"
   | "connectCorner";
 
 /** Snap alignment for line-to-line snap in blank workspace. */

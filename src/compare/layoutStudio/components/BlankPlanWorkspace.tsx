@@ -37,6 +37,7 @@ import {
 } from "../utils/manualPieces";
 import {
   collectOrthoSnapTargets,
+  isFinishableOrthoDraftRing,
   nearPoint,
   orthoSnapFirstPoint,
   orthoSnapPreview,
@@ -44,6 +45,7 @@ import {
   type OrthoSnapGuide,
 } from "../utils/blankPlanOrthoDraw";
 import {
+  applyCornerChamfer,
   applyCornerFillet,
   vertexIndexFromAdjacentEdges,
 } from "../utils/blankPlanCornerFillet";
@@ -74,7 +76,7 @@ import {
 import {
   defaultNonSplashPieceName,
   edgeStripLetterLabelByPieceId,
-  pieceLetterLabelByPieceId,
+  pieceLabelByPieceId,
 } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
@@ -180,6 +182,10 @@ function formatDraftSegmentLength(lengthIn: number): string {
   return `${Math.max(1, Math.round(lengthIn))}"`;
 }
 
+function formatDraftRectDimension(lengthIn: number): string {
+  return `${Math.max(0, Math.round(lengthIn))}"`;
+}
+
 function edgeSegmentHasArc(pc: LayoutPiece, edgeIndex: number): boolean {
   const s = getEffectiveEdgeArcSagittasIn(pc)[edgeIndex];
   const c = getEffectiveEdgeArcCirclesIn(pc)[edgeIndex];
@@ -223,6 +229,7 @@ type Props = {
   selectedPieceId: string | null;
   selectedEdge: EdgeSel | null;
   showLabels: boolean;
+  sourcePageNumberByIndex?: Record<number, number>;
   /** Edge length labels on pieces (blank workspace). */
   showEdgeDimensions: boolean;
   snapAlignmentMode: SnapAlignmentMode;
@@ -256,6 +263,9 @@ type Props = {
   /** Multi-selected corner-radius fillets (select-tool drag box). */
   selectedFilletEdges?: EdgeSel[];
   onSelectFilletEdges?: (edges: EdgeSel[]) => void;
+  /** When true, widen the blank plan viewport to match the actual stage aspect on wide screens. */
+  fitViewportWidth?: boolean;
+  minViewZoom?: number;
 };
 
 export type BlankPlanWorkspaceHandle = {
@@ -269,9 +279,9 @@ export type BlankPlanWorkspaceHandle = {
   cancelOrthoDraw: () => void;
 };
 
-function nextPieceName(pieces: LayoutPiece[]): string {
+function nextPieceName(pieces: LayoutPiece[], offset = 0): string {
   const n = pieces.filter((p) => !isPlanStripPiece(p)).length;
-  return defaultNonSplashPieceName(n);
+  return defaultNonSplashPieceName(n + offset);
 }
 
 function ringCentroid(ring: LayoutPoint[]): LayoutPoint {
@@ -432,6 +442,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       selectedPieceId,
       selectedEdge,
       showLabels,
+      sourcePageNumberByIndex,
       showEdgeDimensions,
       snapAlignmentMode,
       onSelectPiece,
@@ -453,6 +464,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       onTraceToolChange,
       selectedFilletEdges = [],
       onSelectFilletEdges = () => {},
+      fitViewportWidth = false,
+      minViewZoom = BLANK_VIEW_ZOOM_MIN,
     },
     ref,
   ) {
@@ -521,6 +534,15 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     } | null>(null);
     const [cornerRadiusFirstEdge, setCornerRadiusFirstEdge] =
       useState<EdgeSel | null>(null);
+    const [cornerChamferModal, setCornerChamferModal] = useState<{
+      sizeStr: string;
+      error?: string;
+    } | null>(null);
+    const [cornerChamferConfig, setCornerChamferConfig] = useState<{
+      sizeIn: number;
+    } | null>(null);
+    const [cornerChamferFirstEdge, setCornerChamferFirstEdge] =
+      useState<EdgeSel | null>(null);
     /** Connect tool: first edge picked; second adjacent edge removes arcs at ~90° corner. */
     const [connectFirstEdge, setConnectFirstEdge] =
       useState<EdgeSel | null>(null);
@@ -550,6 +572,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       top: number;
     } | null>(null);
     const vertexDragStartRef = useRef<LayoutPiece | null>(null);
+    const [viewportAspect, setViewportAspect] = useState(BLANK_PLAN_WORLD_W_IN / BLANK_PLAN_WORLD_H_IN);
     const [viewZoom, setViewZoom] = useState(1);
     const [viewCenter, setViewCenter] = useState(() => ({
       x: BLANK_PLAN_WORLD_W_IN / 2,
@@ -581,10 +604,43 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         setCornerRadiusConfig(null);
         setCornerRadiusFirstEdge(null);
       }
+      if (tool === "chamferCorner" && prev !== "chamferCorner") {
+        setCornerChamferModal({ sizeStr: "1", error: undefined });
+        setCornerChamferConfig(null);
+        setCornerChamferFirstEdge(null);
+      }
     }, [tool]);
 
+    useLayoutEffect(() => {
+      if (!fitViewportWidth) return;
+      const stage = stageRef.current;
+      if (!stage || typeof ResizeObserver === "undefined") return;
+      const updateAspect = () => {
+        const rect = stage.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        setViewportAspect(rect.width / rect.height);
+      };
+      updateAspect();
+      const observer = new ResizeObserver(() => updateAspect());
+      observer.observe(stage);
+      return () => observer.disconnect();
+    }, [fitViewportWidth]);
+
+    const viewportWorldWidth = useMemo(
+      () =>
+        fitViewportWidth
+          ? Math.max(BLANK_PLAN_WORLD_W_IN, BLANK_PLAN_WORLD_H_IN * viewportAspect)
+          : BLANK_PLAN_WORLD_W_IN,
+      [fitViewportWidth, viewportAspect],
+    );
+
+    useEffect(() => {
+      if (!fitViewportWidth || pieces.length > 0 || Math.abs(viewZoom - 1) > 1e-9) return;
+      setViewCenter({ x: viewportWorldWidth / 2, y: BLANK_PLAN_WORLD_H_IN / 2 });
+    }, [fitViewportWidth, pieces.length, viewportWorldWidth, viewZoom]);
+
     const vb = useMemo(() => {
-      const w = BLANK_PLAN_WORLD_W_IN / viewZoom;
+      const w = viewportWorldWidth / viewZoom;
       const h = BLANK_PLAN_WORLD_H_IN / viewZoom;
       return {
         minX: viewCenter.x - w / 2,
@@ -592,7 +648,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         width: w,
         height: h,
       };
-    }, [viewZoom, viewCenter.x, viewCenter.y]);
+    }, [viewZoom, viewCenter.x, viewCenter.y, viewportWorldWidth]);
     const vbRef = useRef(vb);
     vbRef.current = vb;
     const viewBoxStr = `${vb.minX} ${vb.minY} ${vb.width} ${vb.height}`;
@@ -607,11 +663,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const zoomOut = useCallback(() => {
       setViewZoom((z) =>
         Math.max(
-          BLANK_VIEW_ZOOM_MIN,
+          minViewZoom,
           Math.round((z - VIEW_ZOOM_STEP) * 100) / 100,
         ),
       );
-    }, []);
+    }, [minViewZoom]);
     const zoomIn = useCallback(() => {
       setViewZoom((z) =>
         Math.min(
@@ -623,10 +679,10 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const zoomReset = useCallback(() => {
       setViewZoom(1);
       setViewCenter({
-        x: BLANK_PLAN_WORLD_W_IN / 2,
+        x: viewportWorldWidth / 2,
         y: BLANK_PLAN_WORLD_H_IN / 2,
       });
-    }, []);
+    }, [viewportWorldWidth]);
 
     const fitBoundsInView = useCallback(
       (
@@ -641,14 +697,14 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         const bh = Math.max(maxY - minY + padIn * 2, 8);
         const cx = (minX + maxX) / 2;
         const cy = (minY + maxY) / 2;
-        const zoomForW = BLANK_PLAN_WORLD_W_IN / bw;
+        const zoomForW = viewportWorldWidth / bw;
         const zoomForH = BLANK_PLAN_WORLD_H_IN / bh;
         let z = Math.min(zoomForW, zoomForH) * zoomScale;
-        z = Math.min(BLANK_VIEW_ZOOM_MAX, Math.max(BLANK_VIEW_ZOOM_MIN, z));
+        z = Math.min(BLANK_VIEW_ZOOM_MAX, Math.max(minViewZoom, z));
         setViewZoom(Math.round(z * 100) / 100);
         setViewCenter({ x: cx, y: cy });
       },
-      [],
+      [minViewZoom, viewportWorldWidth],
     );
 
     const fitPieceInView = useCallback(
@@ -805,6 +861,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         setCornerRadiusConfig(null);
         setCornerRadiusFirstEdge(null);
       }
+      if (tool !== "chamferCorner") {
+        setCornerChamferModal(null);
+        setCornerChamferConfig(null);
+        setCornerChamferFirstEdge(null);
+      }
       if (tool !== "connectCorner") {
         setConnectFirstEdge(null);
       }
@@ -868,6 +929,37 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       [],
     );
 
+    const handleWheel = useCallback(
+      (e: React.WheelEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const svg = svgRef.current;
+        if (!svg) return;
+        const focus = clientToPlan(e.clientX, e.clientY);
+        if (!focus) return;
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const direction = e.deltaY < 0 ? 1 : -1;
+        const nextZoom = Math.min(
+          BLANK_VIEW_ZOOM_MAX,
+          Math.max(
+            BLANK_VIEW_ZOOM_MIN,
+            Math.round((viewZoom + direction * VIEW_ZOOM_STEP) * 100) / 100,
+          ),
+        );
+        if (Math.abs(nextZoom - viewZoom) < 1e-9) return;
+        const nextWidth = viewportWorldWidth / nextZoom;
+        const nextHeight = BLANK_PLAN_WORLD_H_IN / nextZoom;
+        const focusRatioX = (e.clientX - rect.left) / rect.width;
+        const focusRatioY = (e.clientY - rect.top) / rect.height;
+        setViewCenter({
+          x: focus.x - nextWidth * (focusRatioX - 0.5),
+          y: focus.y - nextHeight * (focusRatioY - 0.5),
+        });
+        setViewZoom(nextZoom);
+      },
+      [clientToPlan, viewZoom, viewportWorldWidth],
+    );
+
     const updatePopoverPosition = useCallback(() => {
       if (!selectedEdge || !svgRef.current) {
         setPopoverPos(null);
@@ -893,7 +985,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const openSeamModalFromEdge = useCallback(() => {
       if (!selectedEdge) return;
       const pc = pieces.find((p) => p.id === selectedEdge.pieceId);
-      if (!pc || isPlanStripPiece(pc)) {
+      if (!pc) {
         return;
       }
       const world = planDisplayPoints(pc, pieces);
@@ -918,7 +1010,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       const targetPiece = piecesRef.current.find(
         (p) => p.id === seamModal.pieceId,
       );
-      if (!targetPiece || isPlanStripPiece(targetPiece)) {
+      if (!targetPiece) {
         setSeamModal(null);
         return;
       }
@@ -930,6 +1022,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       }
       const MIN = 0.125;
       const world = planDisplayPoints(targetPiece, piecesRef.current);
+      const seamHint = edgeMidpoint(world, seamModal.edgeIndex);
       const commit = (ringA: LayoutPoint[], ringB: LayoutPoint[]) => {
         const ox = targetPiece.planTransform?.x ?? 0;
         const oy = targetPiece.planTransform?.y ?? 0;
@@ -953,10 +1046,16 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         const splitLegacy = legacyCount > 0;
         const sA = splitLegacy ? Math.floor(legacyCount / 2) : 0;
         const sB = splitLegacy ? legacyCount - sA : 0;
+        const splitNameA = isPlanStripPiece(targetPiece)
+          ? `${targetPiece.name} A`
+          : nextPieceName(cur);
+        const splitNameB = isPlanStripPiece(targetPiece)
+          ? `${targetPiece.name} B`
+          : nextPieceName(cur, 1);
         const newA: LayoutPiece = {
           ...targetPiece,
           id: idA,
-          name: `${targetPiece.name} — 1`,
+          name: splitNameA,
           points: localA,
           sinkCount: splitLegacy ? sA : 0,
           sinks: existingSinks.length > 0 ? sinksA : undefined,
@@ -967,7 +1066,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         const newB: LayoutPiece = {
           ...targetPiece,
           id: idB,
-          name: `${targetPiece.name} — 2`,
+          name: splitNameB,
           points: localB,
           sinkCount: splitLegacy ? sB : 0,
           sinks: existingSinks.length > 0 ? sinksB : undefined,
@@ -975,9 +1074,36 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           shapeKind: "polygon",
           edgeTags: undefined,
         };
-        const next = cur
+        const nextBase = cur
           .filter((x) => x.id !== targetPiece.id)
           .concat([newA, newB]);
+        const next = targetPiece.splashMeta
+          ? nextBase.map((piece) => {
+              if (piece.id !== targetPiece.splashMeta!.parentPieceId) return piece;
+              const restSplashEdges = (piece.edgeTags?.splashEdges ?? []).filter(
+                (entry) => entry.splashPieceId !== targetPiece.id,
+              );
+              return {
+                ...piece,
+                edgeTags: {
+                  ...piece.edgeTags,
+                  splashEdges: [
+                    ...restSplashEdges,
+                    {
+                      edgeIndex: targetPiece.splashMeta!.parentEdgeIndex,
+                      splashPieceId: idA,
+                      heightIn: targetPiece.splashMeta!.heightIn,
+                    },
+                    {
+                      edgeIndex: targetPiece.splashMeta!.parentEdgeIndex,
+                      splashPieceId: idB,
+                      heightIn: targetPiece.splashMeta!.heightIn,
+                    },
+                  ],
+                },
+              };
+            })
+          : nextBase;
         /** Only countertop-vs-countertop; splash strips along edges false-positive vs counters. */
         if (
           countertopOverlapsOtherCountertops(next, idA, idB) ||
@@ -1001,7 +1127,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           return;
         }
         const xSeam = g.xMin + da;
-        const split = splitWorldRingAtVerticalSeam(world, xSeam);
+        const split = splitWorldRingAtVerticalSeam(world, xSeam, seamHint.y);
         if (!split) {
           return;
         }
@@ -1017,7 +1143,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
       const ySeam = g.yMin + da;
-      const split = splitWorldRingAtHorizontalSeam(world, ySeam);
+      const split = splitWorldRingAtHorizontalSeam(world, ySeam, seamHint.x);
       if (!split) {
         return;
       }
@@ -1079,7 +1205,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         if (!prev || prev.length < 3) return prev;
         const closed = normalizeClosedRing([...prev, prev[0]]);
         const ring = simplifyOrthoRing(closed);
-        if (!isOrthogonalPolygonRing(ring)) {
+        if (!isFinishableOrthoDraftRing(ring)) {
           return prev;
         }
         if (!isValidPolygon(ring)) {
@@ -1216,6 +1342,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           tool === "snapLines" ||
           tool === "join" ||
           tool === "cornerRadius" ||
+          tool === "chamferCorner" ||
           tool === "connectCorner") &&
         e.button === 0
       ) {
@@ -1466,6 +1593,89 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
 
+      if (tool === "chamferCorner" && e.button === 0) {
+        e.preventDefault();
+        if (!cornerChamferConfig || cornerChamferModal) return;
+        const ppu = planUnitsPerScreenPx();
+        const hit = pickNearestPlanEdge(p, piecesRef.current, ppu, false);
+        if (!hit) {
+          return;
+        }
+        const hitPc = piecesRef.current.find((x) => x.id === hit.pieceId);
+        if (!hitPc || isPlanStripPiece(hitPc)) {
+          return;
+        }
+        if (!cornerChamferFirstEdge) {
+          setCornerChamferFirstEdge({
+            pieceId: hit.pieceId,
+            edgeIndex: hit.edgeIndex,
+          });
+          onSelectPiece(hit.pieceId);
+          onSelectEdge({ pieceId: hit.pieceId, edgeIndex: hit.edgeIndex });
+          return;
+        }
+        const e1 = cornerChamferFirstEdge;
+        if (hit.pieceId !== e1.pieceId) {
+          setCornerChamferFirstEdge(null);
+          onSelectEdge(null);
+          return;
+        }
+        if (hit.edgeIndex === e1.edgeIndex) return;
+        const ring = normalizeClosedRing(hitPc.points);
+        const vn = vertexIndexFromAdjacentEdges(
+          e1.edgeIndex,
+          hit.edgeIndex,
+          ring.length,
+        );
+        if (vn == null) {
+          setCornerChamferFirstEdge(null);
+          onSelectEdge(null);
+          return;
+        }
+        const chamfer = applyCornerChamfer(ring, vn, cornerChamferConfig.sizeIn);
+        if (!chamfer.ok) {
+          window.alert(chamfer.reason);
+          setCornerChamferFirstEdge(null);
+          onSelectEdge(null);
+          return;
+        }
+        const mergedArcs = mergeEdgeArcSagittaAfterCornerFillet(
+          hitPc,
+          vn,
+          chamfer.points,
+          null,
+        );
+        const mergedCircles = mergeEdgeArcCircleAfterCornerFillet(
+          hitPc,
+          vn,
+          chamfer.points,
+          null,
+        );
+        const { edgeArcRadiiIn: _legacyR, ...hitBase } = hitPc;
+        const updated: LayoutPiece = {
+          ...hitBase,
+          points: chamfer.points,
+          edgeArcSagittaIn: mergedArcs,
+          edgeArcCircleIn: mergedCircles,
+          shapeKind: "polygon",
+          manualDimensions: undefined,
+        };
+        const next = piecesRef.current.map((piece) =>
+          piece.id === hitPc.id ? updated : piece,
+        );
+        if (anyPiecesOverlap(next)) {
+          setCornerChamferFirstEdge(null);
+          onSelectEdge(null);
+          return;
+        }
+        onPieceDragStart?.();
+        onPiecesChange(next);
+        setCornerChamferFirstEdge(null);
+        onSelectPiece(hitPc.id);
+        onSelectEdge(null);
+        return;
+      }
+
       if (tool === "connectCorner" && e.button === 0) {
         e.preventDefault();
         const ppu = planUnitsPerScreenPx();
@@ -1641,7 +1851,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
       if (tool === "rect" || tool === "lShape") {
-        setDragRect({ a: p, b: p });
+        const snapped = snapPlanPointToNearestInch(p);
+        setDragRect({ a: snapped, b: snapped });
         return;
       }
       if (tool === "select") {
@@ -1691,7 +1902,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         }
         /** Edge hit — arc-aware (corner radii), wider pick on fillet circle edges */
         const ppu = planUnitsPerScreenPx();
-        const best = pickNearestPlanEdge(p, pieces, ppu, true);
+        const best = hoverEdge ?? pickNearestPlanEdge(p, pieces, ppu, true);
         if (best) {
           onSelectPiece(best.pieceId);
           onSelectEdge({ pieceId: best.pieceId, edgeIndex: best.edgeIndex });
@@ -1744,7 +1955,9 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       }
       if (dragRect && (tool === "rect" || tool === "lShape")) {
         setHoverEdge(null);
-        setDragRect({ ...dragRect, b: p });
+        setDragRect((prev) =>
+          prev ? { ...prev, b: snapPlanPointToNearestInch(p) } : prev,
+        );
         return;
       }
       if (sinkDrag) {
@@ -1857,6 +2070,13 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           hit ? { pieceId: hit.pieceId, edgeIndex: hit.edgeIndex } : null,
         );
         setJoinHoverPieceId(null);
+      } else if (tool === "chamferCorner" && !vertexDrag && !dragRect) {
+        const ppu = planUnitsPerScreenPx();
+        const hit = pickNearestPlanEdge(p, pieces, ppu, false);
+        setHoverEdge(
+          hit ? { pieceId: hit.pieceId, edgeIndex: hit.edgeIndex } : null,
+        );
+        setJoinHoverPieceId(null);
       } else if (tool === "connectCorner" && !vertexDrag && !dragRect) {
         const ppu = planUnitsPerScreenPx();
         const hit = pickNearestPlanEdge(p, pieces, ppu, false);
@@ -1939,7 +2159,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
       if (dragRect && p && (tool === "rect" || tool === "lShape")) {
-        const { a, b } = dragRect;
+        const { a } = dragRect;
+        const b = snapPlanPointToNearestInch(p);
         const w = Math.abs(b.x - a.x);
         const h = Math.abs(b.y - a.y);
         if (w > 0.25 && h > 0.25) {
@@ -2222,11 +2443,18 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           setCornerRadiusModal(null);
           setCornerRadiusConfig(null);
           setCornerRadiusFirstEdge(null);
+          setCornerChamferModal(null);
+          setCornerChamferConfig(null);
+          setCornerChamferFirstEdge(null);
           setConnectFirstEdge(null);
           setEdgeArcModal(null);
           setSelectFilletMarquee(null);
           onSelectFilletEdges([]);
-          if (tool === "cornerRadius" || tool === "connectCorner")
+          if (
+            tool === "cornerRadius" ||
+            tool === "chamferCorner" ||
+            tool === "connectCorner"
+          )
             onTraceToolChange?.("select");
           setBoxZoomMode(false);
           setZoomBoxDrag(null);
@@ -2321,14 +2549,21 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const profileSet = (pc: LayoutPiece) =>
       new Set(pc.edgeTags?.profileEdgeIndices ?? []);
 
-    const pieceLetterLabelById = useMemo(
-      () => pieceLetterLabelByPieceId(pieces),
+    const pieceLabelById = useMemo(
+      () => pieceLabelByPieceId(pieces),
       [pieces],
     );
     const stripLetterLabelById = useMemo(
       () => edgeStripLetterLabelByPieceId(pieces),
       [pieces],
     );
+    const multiSourcePageLabels = useMemo(() => {
+      const pageIndexes = new Set<number>();
+      for (const piece of pieces) {
+        if (piece.sourcePageIndex != null) pageIndexes.add(piece.sourcePageIndex);
+      }
+      return pageIndexes.size > 1;
+    }, [pieces]);
 
     const placementByPiece = useMemo(() => {
       const m = new Map<string, PiecePlacement>();
@@ -2347,6 +2582,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       tool === "snapLines" ||
       tool === "join" ||
       tool === "cornerRadius" ||
+      tool === "chamferCorner" ||
       tool === "connectCorner"
         ? "visiblePainted"
         : "none";
@@ -2357,6 +2593,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         tool !== "join" &&
         tool !== "snapLines" &&
         tool !== "cornerRadius" &&
+        tool !== "chamferCorner" &&
         tool !== "connectCorner"
       )
         setHoverEdge(null);
@@ -2437,6 +2674,37 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               ),
             }
           : null;
+    const dragRectReadout =
+      dragRect && (tool === "rect" || tool === "lShape")
+        ? (() => {
+            const minX = Math.min(dragRect.a.x, dragRect.b.x);
+            const minY = Math.min(dragRect.a.y, dragRect.b.y);
+            const maxX = Math.max(dragRect.a.x, dragRect.b.x);
+            const maxY = Math.max(dragRect.a.y, dragRect.b.y);
+            const width = maxX - minX;
+            const height = maxY - minY;
+            const widthLabel = formatDraftRectDimension(width);
+            const heightLabel = formatDraftRectDimension(height);
+            const widthBoxW = Math.max(4.5, widthLabel.length * 0.84);
+            const heightBoxW = Math.max(4.5, heightLabel.length * 0.84);
+            const widthY = minY - 1.9 < vb.minY + 0.8 ? maxY + 1.9 : minY - 1.9;
+            const heightOffset = Math.max(2.7, heightBoxW / 2 + 0.8);
+            const heightX =
+              minX - heightOffset < vb.minX + 0.5 ? maxX + heightOffset : minX - heightOffset;
+            return {
+              width,
+              height,
+              widthLabel,
+              heightLabel,
+              widthBoxW,
+              heightBoxW,
+              widthCenterX: minX + width / 2,
+              widthCenterY: widthY,
+              heightCenterX: heightX,
+              heightCenterY: minY + height / 2,
+            };
+          })()
+        : null;
 
     return (
       <div className="ls-blank-wrap" ref={stageRef}>
@@ -2452,7 +2720,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 type="button"
                 className="ls-plan-toolbar-btn"
                 onClick={zoomOut}
-                disabled={viewZoom <= BLANK_VIEW_ZOOM_MIN}
+                disabled={viewZoom <= minViewZoom}
                 title="Zoom out"
                 aria-label="Zoom out"
               >
@@ -2515,6 +2783,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         ) : null}
         <div
           className={`ls-blank-stage${spaceDown ? " ls-blank-stage--space" : ""}${canvasPan ? " ls-blank-stage--panning" : ""}${boxZoomMode ? " ls-blank-stage--box-zoom" : ""}`}
+          onWheel={handleWheel}
         >
           <svg
             ref={svgRef}
@@ -2640,7 +2909,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               );
               const labelText = isStrip
                 ? (stripLetterLabelById.get(piece.id) ?? "—")
-                : (pieceLetterLabelById.get(piece.id) ?? piece.name);
+                : (pieceLabelById.get(piece.id) ?? piece.name);
+              const sourcePageLabel =
+                multiSourcePageLabels && piece.sourcePageIndex != null
+                  ? `Page ${sourcePageNumberByIndex?.[piece.sourcePageIndex] ?? piece.sourcePageIndex + 1}`
+                  : null;
               return (
                 <g key={piece.id}>
                   {slabTex ? (
@@ -2657,6 +2930,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     >
                       <image
                         href={slabTex.imageUrl}
+                        xlinkHref={slabTex.imageUrl}
                         x={0}
                         y={0}
                         width={slabTex.widthIn}
@@ -2679,6 +2953,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                           ? "grab"
                           : tool === "join" ||
                               tool === "cornerRadius" ||
+                              tool === "chamferCorner" ||
                               tool === "connectCorner"
                             ? "pointer"
                             : "default",
@@ -2787,11 +3062,22 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       fill="#d32f2f"
                       fontSize={fontSize}
                       textAnchor="middle"
-                      dominantBaseline="middle"
                       className="ls-blank-piece-label"
                       style={{ pointerEvents: "none", userSelect: "none" }}
                     >
-                      {labelText}
+                      <tspan x={0} dy={sourcePageLabel ? "-0.25em" : "0.35em"}>
+                        {labelText}
+                      </tspan>
+                      {sourcePageLabel ? (
+                        <tspan
+                          x={0}
+                          dy="1.1em"
+                          fontSize={Math.max(0.72, fontSize * 0.58)}
+                          fill="rgba(211, 47, 47, 0.82)"
+                        >
+                          {sourcePageLabel}
+                        </tspan>
+                      ) : null}
                     </text>
                   ) : null}
                   {showEdgeDimensions
@@ -2881,6 +3167,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             tool === "snapLines" ||
             tool === "join" ||
             tool === "cornerRadius" ||
+            tool === "chamferCorner" ||
             tool === "connectCorner"
               ? pieces.map((piece) => {
                   /** Splash edges: selectable in select / snapLines (green); skip join/corner/connect (false-positives vs counters). */
@@ -2888,6 +3175,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                     isPlanStripPiece(piece) &&
                     (tool === "join" ||
                       tool === "cornerRadius" ||
+                      tool === "chamferCorner" ||
                       tool === "connectCorner")
                   )
                     return null;
@@ -2919,6 +3207,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                         tool === "join" ||
                         tool === "snapLines" ||
                         tool === "cornerRadius" ||
+                        tool === "chamferCorner" ||
                         tool === "connectCorner") &&
                       hoverEdge &&
                       hoverEdge.pieceId === piece.id &&
@@ -2947,6 +3236,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       cornerRadiusFirstEdge &&
                       cornerRadiusFirstEdge.pieceId === piece.id &&
                       cornerRadiusFirstEdge.edgeIndex === i;
+                    const isChamferFirst =
+                      tool === "chamferCorner" &&
+                      cornerChamferFirstEdge &&
+                      cornerChamferFirstEdge.pieceId === piece.id &&
+                      cornerChamferFirstEdge.edgeIndex === i;
                     const isConnectFirst =
                       tool === "connectCorner" &&
                       connectFirstEdge &&
@@ -2956,6 +3250,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       (tool === "snapLines" ||
                         tool === "join" ||
                         tool === "cornerRadius" ||
+                        tool === "chamferCorner" ||
                         tool === "connectCorner") &&
                       !isSelEdge &&
                       !isFilletMarqueeSel &&
@@ -2965,6 +3260,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       !isSnapPairMoving &&
                       !isJoinFirstPieceEdge &&
                       !isCornerRadiusFirst &&
+                      !isChamferFirst &&
                       !isConnectFirst &&
                       !isHoverEdge;
                     const strokeCol = isHoverEdge
@@ -2981,7 +3277,9 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                           ? "rgba(232,212,139,0.72)"
                           : isSnapAnchor
                             ? "rgba(232,212,139,0.95)"
-                            : isCornerRadiusFirst || isConnectFirst
+                            : isCornerRadiusFirst ||
+                                isChamferFirst ||
+                                isConnectFirst
                               ? "rgba(232,212,139,0.95)"
                               : isJoinFirstPieceEdge
                                 ? "rgba(232,212,139,0.95)"
@@ -3000,7 +3298,9 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                         ? 0.48
                         : isJoinFirstPieceEdge
                           ? 0.36
-                          : isCornerRadiusFirst || isConnectFirst
+                          : isCornerRadiusFirst ||
+                              isChamferFirst ||
+                              isConnectFirst
                             ? 0.36
                             : isSnapPairAnchor || isSnapPairMoving
                               ? 0.4
@@ -3239,15 +3539,57 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 })()
               : null}
             {dragRect ? (
-              <rect
-                x={Math.min(dragRect.a.x, dragRect.b.x)}
-                y={Math.min(dragRect.a.y, dragRect.b.y)}
-                width={Math.abs(dragRect.b.x - dragRect.a.x)}
-                height={Math.abs(dragRect.b.y - dragRect.a.y)}
-                fill="rgba(201,162,39,0.1)"
-                stroke="rgba(232,212,139,0.55)"
-                strokeWidth={0.12}
-              />
+              <>
+                <rect
+                  x={Math.min(dragRect.a.x, dragRect.b.x)}
+                  y={Math.min(dragRect.a.y, dragRect.b.y)}
+                  width={Math.abs(dragRect.b.x - dragRect.a.x)}
+                  height={Math.abs(dragRect.b.y - dragRect.a.y)}
+                  fill="rgba(201,162,39,0.1)"
+                  stroke="rgba(232,212,139,0.55)"
+                  strokeWidth={0.12}
+                />
+                {dragRectReadout ? (
+                  <>
+                    <g className="ls-draft-segment-label" pointerEvents="none">
+                      <rect
+                        x={dragRectReadout.widthCenterX - dragRectReadout.widthBoxW / 2}
+                        y={dragRectReadout.widthCenterY - 1.9}
+                        width={dragRectReadout.widthBoxW}
+                        height={1.45}
+                        rx={0.4}
+                        ry={0.4}
+                      />
+                      <text
+                        x={dragRectReadout.widthCenterX}
+                        y={dragRectReadout.widthCenterY - 1.18}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        W {dragRectReadout.widthLabel}
+                      </text>
+                    </g>
+                    <g className="ls-draft-segment-label" pointerEvents="none">
+                      <rect
+                        x={dragRectReadout.heightCenterX - dragRectReadout.heightBoxW / 2}
+                        y={dragRectReadout.heightCenterY - 1.9}
+                        width={dragRectReadout.heightBoxW}
+                        height={1.45}
+                        rx={0.4}
+                        ry={0.4}
+                      />
+                      <text
+                        x={dragRectReadout.heightCenterX}
+                        y={dragRectReadout.heightCenterY - 1.18}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        H {dragRectReadout.heightLabel}
+                      </text>
+                    </g>
+                  </>
+                ) : null}
+              </>
             ) : null}
             {selectFilletMarquee ? (
               <rect
@@ -3462,18 +3804,34 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               <button
                 type="button"
                 className="ls-edge-popover-btn"
-                onClick={() => onRequestSplashForEdge(selectedEdge, "splash")}
+                onClick={() => {
+                  const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+                  if (piece && isPlanStripPiece(piece)) {
+                    openSeamModalFromEdge();
+                    return;
+                  }
+                  onRequestSplashForEdge(selectedEdge, "splash");
+                }}
               >
-                Splash
+                {(() => {
+                  const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+                  return piece && isPlanStripPiece(piece) ? "Seam" : "Splash";
+                })()}
               </button>
-              <button
-                type="button"
-                className="ls-edge-popover-btn"
-                title="Same plan placement as splash; 3D preview folds the miter strip down from the edge"
-                onClick={() => onRequestSplashForEdge(selectedEdge, "miter")}
-              >
-                Miter
-              </button>
+              {(() => {
+                const piece = pieces.find((p) => p.id === selectedEdge.pieceId);
+                if (!piece || isPlanStripPiece(piece)) return null;
+                return (
+                  <button
+                    type="button"
+                    className="ls-edge-popover-btn"
+                    title="Same plan placement as splash; 3D preview folds the miter strip down from the edge"
+                    onClick={() => onRequestSplashForEdge(selectedEdge, "miter")}
+                  >
+                    Miter
+                  </button>
+                );
+              })()}
               {onSetSplashBottomEdge &&
               (() => {
                 const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
@@ -3902,6 +4260,102 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             </div>
           </div>
         ) : null}
+        {cornerChamferModal ? (
+          <div
+            className="ls-seam-modal-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ls-corner-chamfer-modal-title"
+            onClick={() => {
+              setCornerChamferModal(null);
+              onTraceToolChange?.("select");
+            }}
+          >
+            <div
+              className="ls-seam-modal glass-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2
+                id="ls-corner-chamfer-modal-title"
+                className="ls-seam-modal-title"
+              >
+                Corner chamfer
+              </h2>
+              <p className="ls-seam-modal-sub">
+                Chamfer size in inches, then click two adjacent edges at one
+                corner to cut that point off with a straight bevel.
+              </p>
+              <p className="ls-seam-modal-sub">
+                Adding a chamfer turns manual rectangles and L-shapes into
+                editable polygons. The two trimmed edges stay straight and the
+                new chamfer edge has no arc metadata.
+              </p>
+              <div className="ls-seam-modal-fields">
+                <label className="ls-seam-modal-field">
+                  Chamfer size (in)
+                  <input
+                    className="ls-input"
+                    type="number"
+                    min={0.125}
+                    step={0.125}
+                    value={cornerChamferModal.sizeStr}
+                    onChange={(e) =>
+                      setCornerChamferModal((m) =>
+                        m
+                          ? {
+                              ...m,
+                              sizeStr: e.target.value,
+                              error: undefined,
+                            }
+                          : m,
+                      )
+                    }
+                    autoFocus
+                  />
+                </label>
+              </div>
+              {cornerChamferModal.error ? (
+                <p className="ls-seam-modal-inline-error" role="alert">
+                  {cornerChamferModal.error}
+                </p>
+              ) : null}
+              <div className="ls-seam-modal-actions">
+                <button
+                  type="button"
+                  className="ls-btn ls-btn-secondary"
+                  onClick={() => {
+                    setCornerChamferModal(null);
+                    onTraceToolChange?.("select");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="ls-btn ls-btn-primary"
+                  onClick={() => {
+                    const size = parseFloat(cornerChamferModal.sizeStr);
+                    if (!Number.isFinite(size) || size <= 0) {
+                      setCornerChamferModal((m) =>
+                        m
+                          ? {
+                              ...m,
+                              error: "Enter a positive chamfer size in inches.",
+                            }
+                          : m,
+                      );
+                      return;
+                    }
+                    setCornerChamferConfig({ sizeIn: size });
+                    setCornerChamferModal(null);
+                  }}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {edgeArcModal && selectedEdge ? (
           <div
             className="ls-seam-modal-backdrop"
@@ -4036,6 +4490,13 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             {cornerRadiusFirstEdge
               ? "Click the other edge that shares this corner (next segment around the shape)."
               : "Click two adjacent edges at one corner (convex or inside / re-entrant)."}
+          </div>
+        ) : null}
+        {tool === "chamferCorner" && cornerChamferConfig && !cornerChamferModal ? (
+          <div className="ls-floating-hint ls-floating-hint--subtle">
+            {cornerChamferFirstEdge
+              ? "Click the other adjacent edge at this corner to create the chamfer."
+              : "Click two adjacent edges at one corner to cut in a straight chamfer."}
           </div>
         ) : null}
         {tool === "connectCorner" ? (

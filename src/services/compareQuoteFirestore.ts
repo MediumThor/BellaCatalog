@@ -17,6 +17,7 @@ import {
   buildDefaultCompareOptionPayload,
   buildOptionRecordFields,
 } from "../compare/AddPriceOptionModal";
+import { deleteMirroredJobOptionImage, mirrorJobOptionImage } from "./jobOptionImageStorage";
 import type { CatalogItem } from "../types/catalog";
 import type {
   CustomerRecord,
@@ -32,6 +33,43 @@ const optionsCol = () => collection(firebaseDb, "jobComparisonOptions");
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+export async function prepareJobComparisonOptionFields(
+  ownerUserId: string,
+  item: CatalogItem,
+  jobId: string,
+  quoteBasisSqFt: number,
+  payload: Parameters<typeof buildOptionRecordFields>[3]
+): Promise<Omit<JobComparisonOptionRecord, "id" | "ownerUserId" | "createdAt" | "updatedAt">> {
+  const fields = buildOptionRecordFields(item, jobId, quoteBasisSqFt, payload);
+  const sourceImageUrl = fields.imageUrl?.trim() || null;
+  if (!sourceImageUrl) {
+    return fields;
+  }
+  try {
+    const mirrored = await mirrorJobOptionImage({
+      ownerUserId,
+      jobId,
+      sourceImageUrl,
+      catalogItemId: item.id,
+      productName: item.displayName || item.productName,
+    });
+    if (!mirrored) {
+      return fields;
+    }
+    return {
+      ...fields,
+      imageUrl: mirrored.downloadUrl,
+      sourceImageUrl,
+      imageStoragePath: mirrored.storagePath,
+    };
+  } catch {
+    return {
+      ...fields,
+      sourceImageUrl,
+    };
+  }
 }
 
 export async function createCustomer(
@@ -238,6 +276,8 @@ export function subscribeJob(
 }
 
 export async function deleteJobComparisonOption(optionId: string): Promise<void> {
+  const existing = await getJobComparisonOption(optionId);
+  await deleteMirroredJobOptionImage(existing?.imageStoragePath);
   await deleteDoc(doc(firebaseDb, "jobComparisonOptions", optionId));
 }
 
@@ -313,7 +353,7 @@ export async function fetchOptionsForJob(
 /** Deletes all comparison options for the job, then the job document. */
 export async function deleteJob(jobId: string, ownerUserId: string): Promise<void> {
   const opts = await fetchOptionsForJob(jobId, ownerUserId);
-  await Promise.all(opts.map((o) => deleteDoc(doc(firebaseDb, "jobComparisonOptions", o.id))));
+  await Promise.all(opts.map((o) => deleteJobComparisonOption(o.id)));
   await deleteDoc(doc(firebaseDb, "jobs", jobId));
 }
 
@@ -341,7 +381,7 @@ export async function addCatalogItemsToJobBatch(
   for (const item of items) {
     try {
       const payload = buildDefaultCompareOptionPayload(item);
-      const fields = buildOptionRecordFields(item, job.id, quoteBasisSqFt, payload);
+      const fields = await prepareJobComparisonOptionFields(ownerUserId, item, job.id, quoteBasisSqFt, payload);
       await addJobComparisonOption(ownerUserId, fields);
       added++;
     } catch (e) {

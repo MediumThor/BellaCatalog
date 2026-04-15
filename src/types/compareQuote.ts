@@ -23,6 +23,8 @@ export interface LayoutQuoteSettings {
   miterPerLf: number;
   /** Material-only: bill by layout area used vs full slab area (when ordering whole slabs). */
   materialChargeMode: MaterialChargeMode;
+  /** Optional slab-specific billing overrides keyed by `${optionId}:${slabId}`. */
+  slabChargeModes?: Record<string, MaterialChargeMode>;
 }
 
 export const DEFAULT_LAYOUT_QUOTE_SETTINGS: LayoutQuoteSettings = {
@@ -33,6 +35,7 @@ export const DEFAULT_LAYOUT_QUOTE_SETTINGS: LayoutQuoteSettings = {
   profilePerLf: 0,
   miterPerLf: 0,
   materialChargeMode: "sqft_used",
+  slabChargeModes: {},
 };
 
 /** Rows in Layout Studio commercial summary; `true` = exclude from customer-facing quote. */
@@ -152,6 +155,10 @@ export interface JobComparisonOptionRecord {
   thickness: string | null;
   size: string | null;
   imageUrl: string | null;
+  /** Original vendor/source image URL captured when the option was added. */
+  sourceImageUrl?: string | null;
+  /** Firebase Storage path for the mirrored image snapshot used by this job option. */
+  imageStoragePath?: string | null;
   sourceUrl: string | null;
   selectedPriceType: string | null;
   selectedPriceLabel: string | null;

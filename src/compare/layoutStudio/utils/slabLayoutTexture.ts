@@ -1,6 +1,7 @@
 import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
 import { centroid } from "./geometry";
 import { planDisplayPointsForSlabPlacement } from "./pieceInches";
+import { piecePixelsPerInch } from "./sourcePages";
 
 /**
  * Maps slab inch coordinates (same space as `<image x={0} y={0} width={W} height={H}>`) into plan coordinates
@@ -112,7 +113,7 @@ export function slabTextureRenderParamsTrace(input: {
   piece: LayoutPiece;
   placement: PiecePlacement;
   slab: LayoutSlab;
-  pixelsPerInch: number;
+  pixelsPerInch: number | null;
   allPieces?: readonly LayoutPiece[];
 }): {
   matrixStr: string;
@@ -122,7 +123,8 @@ export function slabTextureRenderParamsTrace(input: {
 } | null {
   const { piece, placement, slab, pixelsPerInch, allPieces } = input;
   if (!slab.imageUrl || slab.widthIn <= 0 || slab.heightIn <= 0) return null;
-  if (!pixelsPerInch || pixelsPerInch <= 0) return null;
+  const planScalePerInch = piecePixelsPerInch(piece, pixelsPerInch);
+  if (!planScalePerInch) return null;
   const planCentroid = planCentroidForTexture(piece, allPieces);
   if (!planCentroid) return null;
 
@@ -130,7 +132,7 @@ export function slabTextureRenderParamsTrace(input: {
     placement,
     planCentroid,
     slabCentroid: { x: placement.x, y: placement.y },
-    planScalePerInch: pixelsPerInch,
+    planScalePerInch,
   });
   return {
     matrixStr: svgMatrixFromAffine(m),

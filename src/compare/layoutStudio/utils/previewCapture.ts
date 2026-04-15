@@ -1,5 +1,6 @@
 import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
 import { mirrorLocalInches, piecePolygonInches, transformedPieceInches } from "./pieceInches";
+import { piecesHaveAnyScale } from "./sourcePages";
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -16,10 +17,10 @@ export async function captureLayoutPreview(input: {
   slab: LayoutSlab;
   pieces: LayoutPiece[];
   placements: PiecePlacement[];
-  pixelsPerInch: number;
+  pixelsPerInch: number | null;
 }): Promise<Blob | null> {
   const { slab, pieces, placements, pixelsPerInch } = input;
-  if (!pixelsPerInch || pixelsPerInch <= 0) return null;
+  if (!piecesHaveAnyScale(pieces, pixelsPerInch)) return null;
 
   const scale = 4;
   const w = Math.max(320, Math.round(slab.widthIn * scale));

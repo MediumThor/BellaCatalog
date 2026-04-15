@@ -5,6 +5,7 @@ import {
 } from "./blankPlanEdgeArc";
 import { planDisplayPoints } from "./blankPlanGeometry";
 import { centroid, rotatePoints } from "./geometry";
+import { piecePixelsPerInch } from "./sourcePages";
 
 /** Flip local X before rotation on the slab (keeps layout ↔ slab mapping consistent). */
 export function mirrorLocalInches(local: LayoutPoint[], mirrored?: boolean): LayoutPoint[] {
@@ -46,16 +47,17 @@ export function planCentroidForSlabPlacement(
 /** Piece polygon in inches relative to centroid (from source pixels + PPI). Uses plan transform in blank workspace. */
 export function piecePolygonInches(
   piece: LayoutPiece,
-  pixelsPerInch: number,
+  pixelsPerInch: number | null,
   allPieces?: readonly LayoutPiece[]
 ): LayoutPoint[] {
-  if (!pixelsPerInch || pixelsPerInch <= 0) return [];
+  const ppi = piecePixelsPerInch(piece, pixelsPerInch);
+  if (!ppi) return [];
   const pts = planDisplayPointsForSlabPlacement(piece, allPieces);
   if (pts.length < 3) return [];
   const c = centroid(pts);
   return pts.map((p) => ({
-    x: (p.x - c.x) / pixelsPerInch,
-    y: (p.y - c.y) / pixelsPerInch,
+    x: (p.x - c.x) / ppi,
+    y: (p.y - c.y) / ppi,
   }));
 }
 
@@ -75,11 +77,13 @@ export function worldDisplayToSlabInches(
   wy: number,
   piece: LayoutPiece,
   placement: PiecePlacement,
-  pixelsPerInch: number,
+  pixelsPerInch: number | null,
   allPieces: readonly LayoutPiece[]
 ): LayoutPoint {
+  const ppi = piecePixelsPerInch(piece, pixelsPerInch);
+  if (!ppi) return { x: placement.x, y: placement.y };
   const c = planCentroidForSlabPlacement(piece, allPieces);
-  const rel = { x: (wx - c.x) / pixelsPerInch, y: (wy - c.y) / pixelsPerInch };
+  const rel = { x: (wx - c.x) / ppi, y: (wy - c.y) / ppi };
   const m = mirrorLocalInches([rel], placement.mirrored)[0];
   const r = rotatePoints([m], placement.rotation)[0];
   return { x: placement.x + r.x, y: placement.y + r.y };

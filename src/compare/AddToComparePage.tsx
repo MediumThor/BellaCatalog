@@ -4,15 +4,16 @@ import { useAuth } from "../auth/AuthProvider";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { useMergedCatalog } from "../hooks/useMergedCatalog";
 import {
-  addJobComparisonOption,
   getJob,
+  prepareJobComparisonOptionFields,
+  addJobComparisonOption,
   subscribeOptionsForJob,
   updateJob,
 } from "../services/compareQuoteFirestore";
 import type { CatalogItem } from "../types/catalog";
 import type { JobComparisonOptionRecord } from "../types/compareQuote";
 import { jobQuoteSquareFootage } from "../utils/quotedPrice";
-import { AddPriceOptionModal, buildOptionRecordFields } from "./AddPriceOptionModal";
+import { AddPriceOptionModal } from "./AddPriceOptionModal";
 
 export function AddToComparePage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -85,7 +86,7 @@ export function AddToComparePage() {
         }}
         onConfirm={async (payload) => {
           if (!user?.uid || !pendingItem) return;
-          const fields = buildOptionRecordFields(pendingItem, job.id, quoteBasisSqFt, payload);
+          const fields = await prepareJobComparisonOptionFields(user.uid, pendingItem, job.id, quoteBasisSqFt, payload);
           await addJobComparisonOption(user.uid, fields);
           if (job.status === "draft") {
             await updateJob(job.id, { status: "comparing" });

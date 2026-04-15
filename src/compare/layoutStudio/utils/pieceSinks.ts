@@ -9,6 +9,7 @@ import type {
 import { outwardNormalForEdge, planDisplayPoints } from "./blankPlanGeometry";
 import { ensureClosedRing, normalizeClosedRing, pointInPolygon } from "./geometry";
 import { worldDisplayToSlabInches } from "./pieceInches";
+import { piecePixelsPerInch } from "./sourcePages";
 
 /** Standard drill for widespread / single-hole faucet drilling on deck. */
 export const FAUCET_HOLE_DIAMETER_IN = 1.375;
@@ -70,20 +71,22 @@ export function sinkPlacementFromEdgeInCanonical(
   piece: LayoutPiece,
   edgeIndex: number,
   allPieces: readonly LayoutPiece[],
-  templateKind: PieceSinkTemplateKind
+  templateKind: PieceSinkTemplateKind,
+  coordPerInch = 1,
 ): { centerX: number; centerY: number; rotationDeg: number } | null {
   const display = planDisplayPoints(piece, allPieces);
   const ring = normalizeClosedRing(display);
   const n = ring.length;
   if (n < 3 || edgeIndex < 0 || edgeIndex >= n) return null;
+  const safeCoordPerInch = Number.isFinite(coordPerInch) && coordPerInch > 0 ? coordPerInch : 1;
   const outward = outwardNormalForEdge(display, edgeIndex);
   const inward = { x: -outward.x, y: -outward.y };
   const a = ring[edgeIndex]!;
   const b = ring[(edgeIndex + 1) % n]!;
   const M = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   const dims = sinkTemplateDims(templateKind);
-  const depth = dims.depthIn;
-  const along = SINK_FRONT_SETBACK_FROM_EDGE_IN + depth / 2;
+  const depth = dims.depthIn * safeCoordPerInch;
+  const along = (SINK_FRONT_SETBACK_FROM_EDGE_IN * safeCoordPerInch) + depth / 2;
   const Cworld = {
     x: M.x + inward.x * along,
     y: M.y + inward.y * along,
@@ -176,8 +179,12 @@ export function faucetHoleCentersXInches(
 /**
  * Local sink frame: +X along width, +Y toward front; back rim of cutout at y = −depth/2.
  * Faucet hole centers sit on the deck **outside** the cutout (y more negative than the back rim).
+ * Pass `coordPerInch` when the active local frame is already scaled into source pixels.
  */
-export function localFaucetHoleCentersInches(sink: PieceSinkCutout): LayoutPoint[] {
+export function localFaucetHoleCentersInches(
+  sink: PieceSinkCutout,
+  coordPerInch = 1,
+): LayoutPoint[] {
   const dims = sinkTemplateDims(sink.templateKind);
   const n = Math.max(1, Math.min(5, Math.floor(sink.faucetHoleCount) || 1));
   const spread = sink.spreadIn;
@@ -187,7 +194,7 @@ export function localFaucetHoleCentersInches(sink: PieceSinkCutout): LayoutPoint
     FAUCET_DECK_GAP_IN -
     FAUCET_DECK_EXTRA_OFFSET_IN;
   const xs = faucetHoleCentersXInches(n, spread, sink.evenHoleBias);
-  return xs.map((x) => ({ x, y: yDeck }));
+  return xs.map((x) => ({ x: x * coordPerInch, y: yDeck * coordPerInch }));
 }
 
 export function localToWorldDisplay(
@@ -213,9 +220,15 @@ export function sinkLocalToSlabMatrixStr(
   pixelsPerInch: number,
   allPieces: readonly LayoutPiece[]
 ): string {
+  /**
+   * Sink paths rendered on the slab are authored in sink-local inches. Traced/source-backed pieces store
+   * sink geometry in display pixels, so convert a 1-inch local basis into display units before mapping
+   * through `worldDisplayToSlabInches()`. Blank-plan pieces naturally resolve to 1 unit per inch.
+   */
+  const coordPerInch = piecePixelsPerInch(piece, pixelsPerInch) ?? 1;
   const o = localToWorldDisplay(0, 0, sink, piece, allPieces);
-  const ex = localToWorldDisplay(1, 0, sink, piece, allPieces);
-  const ey = localToWorldDisplay(0, 1, sink, piece, allPieces);
+  const ex = localToWorldDisplay(coordPerInch, 0, sink, piece, allPieces);
+  const ey = localToWorldDisplay(0, coordPerInch, sink, piece, allPieces);
   const ox = worldDisplayToSlabInches(o.x, o.y, piece, placement, pixelsPerInch, allPieces);
   const exs = worldDisplayToSlabInches(ex.x, ex.y, piece, placement, pixelsPerInch, allPieces);
   const eys = worldDisplayToSlabInches(ey.x, ey.y, piece, placement, pixelsPerInch, allPieces);
@@ -256,7 +269,7 @@ export function sinkCutoutRingsPlanWorld(
   const main = hull.map((p) => localToWorldDisplay(p.x, p.y, sink, piece, allPieces));
   const rings: { x: number; y: number }[][] = [main];
   const holeR = FAUCET_HOLE_RADIUS_IN * coordPerInch;
-  const centers = localFaucetHoleCentersInches(sink);
+  const centers = localFaucetHoleCentersInches(sink, coordPerInch);
   const steps = 20;
   for (const c of centers) {
     const ring: { x: number; y: number }[] = [];
@@ -361,7 +374,7 @@ function sampleSinkHullInLocal(sink: PieceSinkCutout, coordPerInch: number): Lay
 
 function sampleFaucetHullInLocal(sink: PieceSinkCutout, coordPerInch: number): LayoutPoint[] {
   const holeR = FAUCET_HOLE_RADIUS_IN * coordPerInch;
-  const centers = localFaucetHoleCentersInches(sink);
+  const centers = localFaucetHoleCentersInches(sink, coordPerInch);
   const pts: LayoutPoint[] = [];
   const steps = 12;
   for (const c of centers) {
@@ -636,7 +649,7 @@ export function hitTestSinkAtWorld(
       if (pointInPolygon(lp, closed)) return sink;
     }
     const holeR = FAUCET_HOLE_RADIUS_IN * coordPerInch;
-    for (const fc of localFaucetHoleCentersInches(sink)) {
+    for (const fc of localFaucetHoleCentersInches(sink, coordPerInch)) {
       const dx = lp.x - fc.x;
       const dy = lp.y - fc.y;
       if (dx * dx + dy * dy <= holeR * holeR * 1.44) return sink;

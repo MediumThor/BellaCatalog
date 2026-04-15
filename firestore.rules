@@ -33,6 +33,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /catalogCollections/{collectionId} {
+      allow read: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
+    }
+
     /**
      * Read-only layout quote snapshots for customer share links (QR / URL).
      * Writes are owner-only; reads are public so unauthenticated recipients can open the page.

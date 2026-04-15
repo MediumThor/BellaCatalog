@@ -1,6 +1,7 @@
 import type { JobComparisonOptionRecord } from "../../../types/compareQuote";
-import type { LayoutSummary, SavedLayoutStudioState } from "../types";
+import type { SavedLayoutStudioState } from "../types";
 import { hasPlacementOverlaps } from "./placementOverlap";
+import { countPiecesMissingScale, sourceHasAnyCalibratedPage } from "./sourcePages";
 
 export type QuoteReadinessIssue = {
   /** Short machine key for tests / analytics */
@@ -31,11 +32,15 @@ export function collectQuoteReadinessIssues(input: {
     issues.push({ id: "no_pieces", message: "No layout pieces yet — add shapes in Plan before quoting." });
   }
 
-  const summary: LayoutSummary = draft.summary;
-  if (summary.unplacedPieceCount > 0) {
+  const placementByPieceId = new Map(draft.placements.map((placement) => [placement.pieceId, placement]));
+  const unplacedPieceCount = draft.pieces.reduce((count, piece) => {
+    const placement = placementByPieceId.get(piece.id);
+    return !placement || !placement.placed ? count + 1 : count;
+  }, 0);
+  if (unplacedPieceCount > 0) {
     issues.push({
       id: "unplaced",
-      message: `${summary.unplacedPieceCount} piece(s) are not placed on a slab.`,
+      message: `${unplacedPieceCount} piece(s) are not placed on a slab.`,
     });
   }
 
@@ -46,10 +51,18 @@ export function collectQuoteReadinessIssues(input: {
     });
   }
 
-  if (!isBlank && draft.source && (!draft.calibration.isCalibrated || draft.calibration.pixelsPerInch == null)) {
+  if (!isBlank && draft.source && !sourceHasAnyCalibratedPage(draft.source, draft.calibration)) {
     issues.push({
       id: "uncalibrated",
       message: "Scale is not set — area and edge estimates may be unreliable.",
+    });
+  }
+
+  const missingScaleCount = countPiecesMissingScale(draft.pieces, draft.calibration.pixelsPerInch);
+  if (missingScaleCount > 0) {
+    issues.push({
+      id: "pieces_missing_scale",
+      message: `${missingScaleCount} piece(s) were traced on a page without scale.`,
     });
   }
 

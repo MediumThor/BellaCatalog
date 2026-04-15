@@ -6,6 +6,7 @@ import {
   piecePolygonInches,
   transformedPieceInches,
 } from "./pieceInches";
+import { piecesHaveAnyScale } from "./sourcePages";
 
 const EPS = 1e-4;
 
@@ -61,7 +62,7 @@ function worldPolygonAt(
   cy: number,
   rotationDeg: number,
   mirrored: boolean,
-  pixelsPerInch: number,
+  pixelsPerInch: number | null,
   allPieces: LayoutPiece[]
 ): LayoutPoint[] {
   const local = piecePolygonInches(piece, pixelsPerInch, allPieces);
@@ -74,7 +75,7 @@ function localTransformedBounds(
   piece: LayoutPiece,
   rotationDeg: number,
   mirrored: boolean,
-  pixelsPerInch: number,
+  pixelsPerInch: number | null,
   allPieces: LayoutPiece[]
 ): { minX: number; minY: number; maxX: number; maxY: number } | null {
   const local = piecePolygonInches(piece, pixelsPerInch, allPieces);
@@ -99,7 +100,7 @@ function polyFullyInsideInsetSlab(
 }
 
 /** Intrinsic plan area (sort key); orientation does not change value. */
-function localAreaForSort(piece: LayoutPiece, pixelsPerInch: number, allPieces: LayoutPiece[]): number {
+function localAreaForSort(piece: LayoutPiece, pixelsPerInch: number | null, allPieces: LayoutPiece[]): number {
   const local = piecePolygonInches(piece, pixelsPerInch, allPieces);
   if (local.length < 3) return 0;
   return Math.abs(polygonArea(local));
@@ -119,7 +120,7 @@ type NestPositionResult = {
 export function computeSlabAutoNest(input: {
   pieces: LayoutPiece[];
   placements: PiecePlacement[];
-  pixelsPerInch: number;
+  pixelsPerInch: number | null;
   slabId: string;
   slabWidthIn: number;
   slabHeightIn: number;
@@ -144,7 +145,7 @@ export function computeSlabAutoNest(input: {
   const edgeInset = Math.max(0, edgeInsetInches);
   const slabW = slabWidthIn;
   const slabH = slabHeightIn;
-  if (!(slabW > 0) || !(slabH > 0) || !pixelsPerInch || pixelsPerInch <= 0) {
+  if (!(slabW > 0) || !(slabH > 0) || !piecesHaveAnyScale(pieces, pixelsPerInch)) {
     return {
       placements: placements.slice(),
       warnings: ["Scale or slab size is not available — nothing was moved."],

@@ -12,24 +12,23 @@ export function indexToLetters(index: number): string {
   return s;
 }
 
-/**
- * Default stored name for the next countertop piece: first → "Piece A", second → "Piece B", …
- * Matches {@link pieceLetterLabelByPieceId} when names stay in default alphabetical order.
- */
+/** Default stored name for the next countertop piece: first → "Piece A", second → "Piece B", … */
 export function defaultNonSplashPieceName(nonSplashPieceCountBeforeAdd: number): string {
   return `Piece ${indexToLetters(nonSplashPieceCountBeforeAdd)}`;
 }
 
 /**
- * Countertop pieces only (excludes backsplash and miter strips), ordered by name — maps id → "Piece A", "Piece B", …
+ * Countertop pieces only (excludes backsplash and miter strips) — maps id → stored piece name.
+ * Falls back to the default alphabetical naming scheme when a piece name is blank.
  */
-export function pieceLetterLabelByPieceId(pieces: readonly LayoutPiece[]): Map<string, string> {
-  const nonSplash = pieces
-    .filter((p) => !isPlanStripPiece(p))
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+export function pieceLabelByPieceId(pieces: readonly LayoutPiece[]): Map<string, string> {
   const m = new Map<string, string>();
-  for (let i = 0; i < nonSplash.length; i++) {
-    m.set(nonSplash[i].id, `Piece ${indexToLetters(i)}`);
+  let nonSplashIndex = 0;
+  for (const piece of pieces) {
+    if (isPlanStripPiece(piece)) continue;
+    const trimmedName = piece.name.trim();
+    m.set(piece.id, trimmedName || defaultNonSplashPieceName(nonSplashIndex));
+    nonSplashIndex += 1;
   }
   return m;
 }

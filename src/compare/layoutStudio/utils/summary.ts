@@ -7,6 +7,7 @@ import {
   polygonAreaWithArcEdges,
 } from "./blankPlanEdgeArc";
 import { parseSizeToInchesPair } from "./slabDimensions";
+import { piecePixelsPerInch } from "./sourcePages";
 
 function finishedEdgeLengthPx(piece: LayoutPiece, lengths: number[]): number {
   const profile = piece.edgeTags?.profileEdgeIndices;
@@ -65,8 +66,7 @@ export function computeLayoutSummary(input: {
   let splashAreaSqFt = 0;
   let miterPieceCount = 0;
   let miterAreaSqFt = 0;
-
-  const ppi = pixelsPerInch && pixelsPerInch > 0 ? pixelsPerInch : null;
+  let anyCalibratedPiece = false;
 
   for (const piece of pieces) {
     if (piece.pieceRole === "splash") splashPieceCount += 1;
@@ -74,7 +74,9 @@ export function computeLayoutSummary(input: {
     const placed = piece.sinks?.length ?? 0;
     const legacy = Math.max(0, Math.floor(piece.sinkCount || 0));
     sinkCount += placed > 0 ? placed : legacy;
+    const ppi = piecePixelsPerInch(piece, pixelsPerInch);
     if (!ppi) continue;
+    anyCalibratedPiece = true;
     const ring = piece.points.length >= 3 ? piece.points : [];
     if (ring.length < 3) continue;
     const areaPx = pieceHasArcEdges(piece)
@@ -98,7 +100,7 @@ export function computeLayoutSummary(input: {
   }
   let estimatedSlabCount = usedSlabs.size;
 
-  if (ppi && slabs.length > 0) {
+  if (anyCalibratedPiece && slabs.length > 0) {
     const totalSlabArea = slabs.reduce((acc, s) => acc + s.widthIn * s.heightIn, 0);
     const totalPieceAreaIn2 = areaSqFt * 144;
     if (totalSlabArea > 0) {

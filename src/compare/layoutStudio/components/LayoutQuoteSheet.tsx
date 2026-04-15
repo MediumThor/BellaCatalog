@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { formatMoney } from "../../../utils/priceHelpers";
 import type { LayoutQuoteDisplayModel } from "../utils/layoutQuoteModel";
 
 type Props = {
@@ -7,11 +6,19 @@ type Props = {
   model: LayoutQuoteDisplayModel;
   /** Live plan preview (PlaceLayoutPreview) — takes precedence over plan snapshot image. */
   livePlan?: ReactNode;
-  /** When set, used for the placement hero instead of model.placementImageUrl. */
-  livePlacementUrl?: string | null;
+  /** Live placement preview — takes precedence over model.placementImageUrl. */
+  livePlacement?: ReactNode;
+  /** Optional live placement preview per material section, aligned by index. */
+  liveMaterialSections?: Array<ReactNode | null>;
 };
 
-export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }: Props) {
+export function LayoutQuoteSheet({
+  sheetId,
+  model,
+  livePlan,
+  livePlacement,
+  liveMaterialSections,
+}: Props) {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,8 +35,17 @@ export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }:
     };
   }, [lightboxUrl]);
 
-  const placementUrl = livePlacementUrl ?? model.placementImageUrl;
+  const placementUrl = model.placementImageUrl;
   const printed = new Date(model.generatedAt).toLocaleString();
+  const hasMaterialSections = model.materialSections.length > 0;
+  const hasLiveMaterialSections = (liveMaterialSections?.some((section) => section != null) ?? false);
+  const primaryPreviewNode = livePlacement ?? (!hasMaterialSections ? livePlan ?? null : null);
+  const primaryPreviewUrl =
+    primaryPreviewNode == null
+      ? placementUrl ?? (!hasMaterialSections ? model.planImageUrl : null)
+      : null;
+  const showPrimaryPreview = primaryPreviewNode != null || primaryPreviewUrl != null;
+  const showPlanReference = !hasMaterialSections && model.planImageUrl != null && (livePlacement != null || placementUrl != null);
 
   return (
     <>
@@ -60,47 +76,106 @@ export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }:
           <p className="ls-layout-quote-strong">{model.productName}</p>
           <p className="ls-layout-quote-muted">{model.vendorManufacturerLine}</p>
           <p className="ls-layout-quote-muted">
-            Selected slab reference: <strong>{model.activeSlabLabel}</strong>
+            {model.activeSlabLabelTitle}: <strong>{model.activeSlabLabel}</strong>
           </p>
         </section>
 
-        <div className="ls-layout-quote-grid">
-          <section className="ls-layout-quote-section">
-            <h2 className="ls-layout-quote-h2">Plan layout</h2>
-            {livePlan ? (
-              <div className="ls-layout-quote-live-plan">{livePlan}</div>
-            ) : model.planImageUrl ? (
-              <button
-                type="button"
-                className="ls-layout-quote-img-btn"
-                onClick={() => setLightboxUrl(model.planImageUrl)}
-              >
-                <img src={model.planImageUrl} alt="" className="ls-layout-quote-hero-img" />
-                <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
-              </button>
-            ) : (
-              <p className="ls-layout-quote-muted">No plan snapshot on this link.</p>
-            )}
-          </section>
+        {(!hasMaterialSections || !hasLiveMaterialSections) && (showPrimaryPreview || showPlanReference) ? (
+          <div className={`ls-layout-quote-grid${showPlanReference ? "" : " ls-layout-quote-grid--single"}`}>
+            <section className="ls-layout-quote-section">
+              <h2 className="ls-layout-quote-h2">
+                {livePlacement != null || placementUrl != null ? "Layout view" : "Plan layout"}
+              </h2>
+              {primaryPreviewNode ? (
+                <div className="ls-layout-quote-live-plan">{primaryPreviewNode}</div>
+              ) : primaryPreviewUrl ? (
+                <button
+                  type="button"
+                  className="ls-layout-quote-img-btn"
+                  onClick={() => setLightboxUrl(primaryPreviewUrl)}
+                >
+                  <img src={primaryPreviewUrl} alt="" className="ls-layout-quote-hero-img" />
+                  <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
+                </button>
+              ) : (
+                <p className="ls-layout-quote-muted">No layout preview on this quote.</p>
+              )}
+            </section>
 
-          <section className="ls-layout-quote-section">
-            <h2 className="ls-layout-quote-h2">Slab placement</h2>
-            {placementUrl ? (
-              <button
-                type="button"
-                className="ls-layout-quote-img-btn"
-                onClick={() => setLightboxUrl(placementUrl)}
-              >
-                <img src={placementUrl} alt="" className="ls-layout-quote-hero-img" />
-                <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
-              </button>
-            ) : (
-              <p className="ls-layout-quote-muted">Save layout from placement to include a slab snapshot.</p>
-            )}
-          </section>
-        </div>
+            {showPlanReference ? (
+              <section className="ls-layout-quote-section">
+                <h2 className="ls-layout-quote-h2">Plan layout</h2>
+                <button
+                  type="button"
+                  className="ls-layout-quote-img-btn"
+                  onClick={() => setLightboxUrl(model.planImageUrl)}
+                >
+                  <img src={model.planImageUrl} alt="" className="ls-layout-quote-hero-img" />
+                  <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
+                </button>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
 
-        {model.slabThumbs.length > 0 ? (
+        {hasMaterialSections ? (
+          <section className="ls-layout-quote-section">
+            <h2 className="ls-layout-quote-h2">Materials included</h2>
+            <div className="ls-layout-quote-material-list">
+              {model.materialSections.map((section, idx) => (
+                <article key={`${section.title}-${idx}`} className="ls-layout-quote-material-card">
+                  <div className="ls-layout-quote-material-card-head">
+                    <div>
+                      <p className="ls-layout-quote-strong">{section.title}</p>
+                      {section.subtitle ? <p className="ls-layout-quote-muted">{section.subtitle}</p> : null}
+                    </div>
+                    {section.estimate ? (
+                      <div className="ls-layout-quote-material-estimate">
+                        <span className="ls-layout-quote-material-estimate-label">Estimate</span>
+                        <strong>{section.estimate}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {liveMaterialSections?.[idx] ? (
+                    <div className="ls-layout-quote-live-plan">{liveMaterialSections[idx]}</div>
+                  ) : section.placementImageUrl ? (
+                    <button
+                      type="button"
+                      className="ls-layout-quote-img-btn"
+                      onClick={() => setLightboxUrl(section.placementImageUrl)}
+                    >
+                      <img src={section.placementImageUrl} alt="" className="ls-layout-quote-hero-img" />
+                      <span className="ls-layout-quote-img-hint ls-no-print">Click to expand</span>
+                    </button>
+                  ) : null}
+
+                  {section.slabThumbs.length > 0 ? (
+                    <div className="ls-layout-quote-slab-grid" aria-label={`${section.title} slab thumbnails`}>
+                      {section.slabThumbs.map((slab, slabIdx) => (
+                        <button
+                          key={`${section.title}-slab-${slabIdx}`}
+                          type="button"
+                          className="ls-layout-quote-slab-card"
+                          onClick={() => setLightboxUrl(slab.imageUrl)}
+                        >
+                          <img src={slab.imageUrl} alt="" className="ls-layout-quote-slab-card-img" />
+                          <span className="ls-layout-quote-slab-card-lbl">{slab.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {section.note ? (
+                    <p className="ls-layout-quote-notes">
+                      <strong>Notes:</strong> {section.note}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : model.slabThumbs.length > 0 ? (
           <section className="ls-layout-quote-section">
             <h2 className="ls-layout-quote-h2">Slab options on this layout</h2>
             <div className="ls-layout-quote-slab-grid" aria-label="Slab thumbnails">
@@ -119,55 +194,28 @@ export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }:
           </section>
         ) : null}
 
+        {model.sinkNames.length > 0 ? (
+          <section className="ls-layout-quote-section">
+            <h2 className="ls-layout-quote-h2">Sink names</h2>
+            <div className="ls-layout-quote-sink-list" aria-label="Sink names">
+              {model.sinkNames.map((sinkName, idx) => (
+                <span key={`${sinkName}-${idx}`} className="ls-layout-quote-sink-pill">
+                  {sinkName}
+                </span>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="ls-layout-quote-section">
           <h2 className="ls-layout-quote-h2">Estimate summary</h2>
           <dl className="ls-layout-quote-dl">
-            <div>
-              <dt>Layout area (est.)</dt>
-              <dd>{model.summary.areaSqFt.toFixed(1)} sq ft</dd>
-            </div>
-            <div>
-              <dt>Profile edge (est.)</dt>
-              <dd>
-                {model.summary.profileEdgeLf > 0
-                  ? `${model.summary.profileEdgeLf.toFixed(1)} lf`
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Miter edge (est.)</dt>
-              <dd>
-                {(model.summary.miterEdgeLf ?? 0) > 0
-                  ? `${(model.summary.miterEdgeLf ?? 0).toFixed(1)} lf`
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Slab count (est.)</dt>
-              <dd>{model.summary.estimatedSlabCount}</dd>
-            </div>
-            <div>
-              <dt>Sinks</dt>
-              <dd>{model.summary.sinkCount}</dd>
-            </div>
-            <div>
-              <dt>Splash (est.)</dt>
-              <dd>
-                {(model.summary.splashAreaSqFt ?? 0) > 0
-                  ? `${(model.summary.splashAreaSqFt ?? 0).toFixed(1)} sq ft`
-                  : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>Installed estimate</dt>
-              <dd>{model.quotedTotal != null ? formatMoney(model.quotedTotal) : "—"}</dd>
-            </div>
-            {model.quotedPerSqft != null ? (
-              <div>
-                <dt>Per sq ft (installed)</dt>
-                <dd>{formatMoney(model.quotedPerSqft)}</dd>
+            {model.customerRows.map((row, idx) => (
+              <div key={`${row.label}-${idx}`}>
+                <dt>{row.label}</dt>
+                <dd>{renderDisplayValue(row.value)}</dd>
               </div>
-            ) : null}
+            ))}
           </dl>
         </section>
 
@@ -210,4 +258,17 @@ export function LayoutQuoteSheet({ sheetId, model, livePlan, livePlacementUrl }:
       ) : null}
     </>
   );
+}
+
+function renderDisplayValue(value: string | string[]) {
+  if (Array.isArray(value)) {
+    return (
+      <div className="ls-layout-quote-value-list">
+        {value.map((entry, idx) => (
+          <span key={`${entry}-${idx}`}>{entry}</span>
+        ))}
+      </div>
+    );
+  }
+  return value;
 }

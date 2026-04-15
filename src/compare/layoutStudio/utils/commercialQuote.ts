@@ -4,16 +4,21 @@ import {
   type JobRecord,
   type LayoutQuoteCustomerRowId,
   type LayoutQuoteSettings,
+  type MaterialChargeMode,
 } from "../../../types/compareQuote";
-import type { LayoutSlab } from "../types";
+import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
 import { FALLBACK_SLAB_HEIGHT_IN, FALLBACK_SLAB_WIDTH_IN } from "./slabDimensions";
 import {
   fabricationForMaterialSqft,
   QUOTED_MATERIAL_MARKUP,
 } from "../../../utils/quotedPrice";
+import { polygonArea } from "./geometry";
+import { pieceHasArcEdges, polygonAreaWithArcEdges } from "./blankPlanEdgeArc";
+import { piecePixelsPerInch } from "./sourcePages";
 
 export type CommercialQuoteBreakdown = {
   materialTotal: number;
+  rawMaterialTotal: number;
   fabricationTotal: number;
   sinkAddOnTotal: number;
   splashAddOnTotal: number;
@@ -28,6 +33,31 @@ export type CommercialQuoteBreakdown = {
   materialAreaSqFt: number;
   countertopSqFt: number;
   materialChargeMode: LayoutQuoteSettings["materialChargeMode"];
+};
+
+export type SlabMaterialQuoteLine = {
+  slabId: string;
+  slabLabel: string;
+  pieceCount: number;
+  mode: MaterialChargeMode;
+  usedAreaSqFt: number;
+  billedAreaSqFt: number;
+  slabAreaSqFt: number;
+  rawMaterialTotal: number;
+  materialTotal: number;
+};
+
+export type QuoteAnalyticsSummary = {
+  slabCostTotal: number | null;
+  slabCostPerSqft: number | null;
+  sellPerSqft: number | null;
+  materialMarkupProfit: number | null;
+  fabricationProfit: number | null;
+  grossProfit: number | null;
+  grossMarginPct: number | null;
+  slabsUsedCount: number;
+  revenuePerSlab: number | null;
+  utilizationPct: number | null;
 };
 
 const CUSTOMER_ROW_IDS: LayoutQuoteCustomerRowId[] = [
@@ -83,6 +113,93 @@ function slabAreaSqFt(slabs: LayoutSlab[]): number {
   return (s.widthIn * s.heightIn) / 144;
 }
 
+function slabAreaSqFtFromSlab(slab: LayoutSlab): number {
+  return Math.max(0, (slab.widthIn * slab.heightIn) / 144);
+}
+
+export function slabChargeModeKey(optionId: string, slabId: string): string {
+  return `${optionId}:${slabId}`;
+}
+
+export function slabChargeModeForSettings(
+  settings: LayoutQuoteSettings,
+  optionId: string,
+  slabId: string,
+): MaterialChargeMode {
+  return settings.slabChargeModes?.[slabChargeModeKey(optionId, slabId)] ?? settings.materialChargeMode;
+}
+
+function pieceAreaSqFt(piece: LayoutPiece, fallbackPixelsPerInch?: number | null): number {
+  const ppi = piecePixelsPerInch(piece, fallbackPixelsPerInch);
+  if (!ppi || piece.points.length < 3) return 0;
+  const areaPx = pieceHasArcEdges(piece)
+    ? polygonAreaWithArcEdges(piece)
+    : polygonArea(piece.points);
+  return areaPx / (ppi * ppi) / 144;
+}
+
+export function computeSlabMaterialQuoteLines(input: {
+  option: JobComparisonOptionRecord;
+  pieces: LayoutPiece[];
+  placements: PiecePlacement[];
+  pixelsPerInch: number | null;
+  slabs: LayoutSlab[];
+  settings: LayoutQuoteSettings;
+}): SlabMaterialQuoteLine[] | null {
+  const { option, pieces, placements, pixelsPerInch, slabs, settings } = input;
+  const catalogLinePrice = option.selectedPriceValue;
+  if (catalogLinePrice == null || !Number.isFinite(catalogLinePrice)) {
+    return null;
+  }
+  const unit = (option.priceUnit ?? "").trim();
+  if (unit !== "sqft" && unit !== "slab") {
+    return null;
+  }
+  const markup = settings.materialMarkup > 0 ? settings.materialMarkup : QUOTED_MATERIAL_MARKUP;
+  const piecesById = new Map(pieces.map((piece) => [piece.id, piece]));
+  return slabs
+    .map((slab) => {
+      const slabPlacements = placements.filter((placement) => placement.placed && placement.slabId === slab.id);
+      if (!slabPlacements.length) return null;
+      const usedAreaSqFtRaw = slabPlacements.reduce((sum, placement) => {
+        const piece = piecesById.get(placement.pieceId);
+        return sum + (piece ? pieceAreaSqFt(piece, pixelsPerInch) : 0);
+      }, 0);
+      const slabArea = slabAreaSqFtFromSlab(slab);
+      const usedAreaSqFt =
+        slabArea > 0
+          ? Math.min(Math.max(0, usedAreaSqFtRaw), slabArea)
+          : Math.max(0, usedAreaSqFtRaw);
+      const mode = slabChargeModeForSettings(settings, option.id, slab.id);
+      const billedAreaSqFt = mode === "full_slab" ? slabArea : usedAreaSqFt;
+      let rawMaterialTotal = 0;
+      let materialTotal = 0;
+      if (unit === "sqft") {
+        rawMaterialTotal = usedAreaSqFt * catalogLinePrice;
+        materialTotal = billedAreaSqFt * catalogLinePrice * markup;
+      } else if (slabArea > 0) {
+        const ratio = mode === "full_slab" ? 1 : billedAreaSqFt / slabArea;
+        rawMaterialTotal = catalogLinePrice;
+        materialTotal = catalogLinePrice * ratio * markup;
+      } else {
+        rawMaterialTotal = catalogLinePrice;
+        materialTotal = catalogLinePrice * markup;
+      }
+      return {
+        slabId: slab.id,
+        slabLabel: slab.label,
+        pieceCount: slabPlacements.length,
+        mode,
+        usedAreaSqFt: Math.round(usedAreaSqFt * 100) / 100,
+        billedAreaSqFt: Math.round(billedAreaSqFt * 100) / 100,
+        slabAreaSqFt: Math.round(slabArea * 100) / 100,
+        rawMaterialTotal,
+        materialTotal,
+      } satisfies SlabMaterialQuoteLine;
+    })
+    .filter((line): line is SlabMaterialQuoteLine => line != null);
+}
+
 export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
   const raw = job.layoutQuoteSettings;
   if (!raw || typeof raw !== "object") return { ...DEFAULT_LAYOUT_QUOTE_SETTINGS };
@@ -114,6 +231,18 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
     raw.materialChargeMode === "full_slab" || raw.materialChargeMode === "sqft_used"
       ? raw.materialChargeMode
       : DEFAULT_LAYOUT_QUOTE_SETTINGS.materialChargeMode;
+  const slabChargeModes =
+    raw.slabChargeModes && typeof raw.slabChargeModes === "object"
+      ? Object.entries(raw.slabChargeModes as Record<string, unknown>).reduce<Record<string, MaterialChargeMode>>(
+          (acc, [key, value]) => {
+            if (value === "full_slab" || value === "sqft_used") {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {},
+        )
+      : {};
   return {
     materialMarkup,
     fabricationPerSqftOverride,
@@ -122,6 +251,7 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
     profilePerLf,
     miterPerLf,
     materialChargeMode,
+    slabChargeModes,
   };
 }
 
@@ -138,6 +268,9 @@ export function computeCommercialLayoutQuote(input: {
   profileEdgeLf: number;
   miterEdgeLf: number;
   slabCount: number;
+  pieces: LayoutPiece[];
+  placements: PiecePlacement[];
+  pixelsPerInch: number | null;
   slabs: LayoutSlab[];
   settings: LayoutQuoteSettings;
 }): CommercialQuoteBreakdown | null {
@@ -150,6 +283,9 @@ export function computeCommercialLayoutQuote(input: {
     profileEdgeLf,
     miterEdgeLf,
     slabCount,
+    pieces,
+    placements,
+    pixelsPerInch,
     slabs,
     settings,
   } = input;
@@ -184,16 +320,44 @@ export function computeCommercialLayoutQuote(input: {
       : fabricationForMaterialSqft(scheduleMaterial);
 
   let materialTotal = 0;
+  let rawMaterialTotal = 0;
   let materialAreaSqFt = usedSf;
 
-  if (unit === "sqft") {
+  const slabQuoteLines = computeSlabMaterialQuoteLines({
+    option,
+    pieces,
+    placements,
+    pixelsPerInch,
+    slabs,
+    settings,
+  });
+
+  if (slabQuoteLines && slabQuoteLines.length > 0) {
+    rawMaterialTotal = slabQuoteLines.reduce((sum, line) => sum + line.rawMaterialTotal, 0);
+    materialTotal = slabQuoteLines.reduce((sum, line) => sum + line.materialTotal, 0);
+    materialAreaSqFt = slabQuoteLines.reduce((sum, line) => sum + line.billedAreaSqFt, 0);
+    if (unit === "sqft") {
+      catalogMaterialPerSqft = catalogLinePrice;
+    } else {
+      const billedSqFt = slabQuoteLines.reduce((sum, line) => sum + line.billedAreaSqFt, 0);
+      catalogMaterialPerSqft =
+        billedSqFt > 0
+          ? slabQuoteLines.reduce((sum, line) => {
+              const baseTotal = line.materialTotal / markup;
+              return sum + baseTotal;
+            }, 0) / billedSqFt
+          : null;
+    }
+  } else if (unit === "sqft") {
     const perSqftMarked = catalogLinePrice * markup;
     if (settings.materialChargeMode === "sqft_used") {
       materialAreaSqFt = usedSf;
+      rawMaterialTotal = usedSf * catalogLinePrice;
       materialTotal = usedSf * perSqftMarked;
     } else {
       const oneSlabSf = slabAreaSqFt(slabs);
       materialAreaSqFt = slabsN * oneSlabSf;
+      rawMaterialTotal = usedSf * catalogLinePrice;
       materialTotal = materialAreaSqFt * catalogLinePrice * markup;
     }
   } else if (unit === "slab") {
@@ -201,13 +365,16 @@ export function computeCommercialLayoutQuote(input: {
       const materialPerSqftMarked = catalogMaterialPerSqft * markup;
       if (settings.materialChargeMode === "sqft_used") {
         materialAreaSqFt = usedSf;
+        rawMaterialTotal = usedSf * catalogMaterialPerSqft;
         materialTotal = usedSf * materialPerSqftMarked;
       } else {
+        rawMaterialTotal = catalogLinePrice * slabsN;
         materialTotal = catalogLinePrice * slabsN * markup;
         const oneSlabSf = slabAreaSqFt(slabs);
         materialAreaSqFt = slabsN * oneSlabSf;
       }
     } else {
+      rawMaterialTotal = catalogLinePrice * slabsN;
       materialTotal = catalogLinePrice * slabsN * markup;
       materialAreaSqFt = slabsN * slabAreaSqFt(slabs);
     }
@@ -231,6 +398,7 @@ export function computeCommercialLayoutQuote(input: {
 
   return {
     materialTotal,
+    rawMaterialTotal,
     fabricationTotal,
     sinkAddOnTotal,
     splashAddOnTotal,
@@ -242,5 +410,47 @@ export function computeCommercialLayoutQuote(input: {
     materialAreaSqFt,
     countertopSqFt: ctSf,
     materialChargeMode: settings.materialChargeMode,
+  };
+}
+
+export function computeQuoteAnalytics(input: {
+  commercial: CommercialQuoteBreakdown | null;
+  customerTotal: number | null;
+  quoteAreaSqFt: number;
+  slabQuoteLines: SlabMaterialQuoteLine[];
+}): QuoteAnalyticsSummary {
+  const { commercial, customerTotal, quoteAreaSqFt, slabQuoteLines } = input;
+  const slabCostTotal = commercial?.rawMaterialTotal ?? null;
+  const slabCostPerSqft =
+    slabCostTotal != null && quoteAreaSqFt > 0 ? slabCostTotal / quoteAreaSqFt : null;
+  const sellPerSqft =
+    customerTotal != null && quoteAreaSqFt > 0 ? customerTotal / quoteAreaSqFt : null;
+  const materialMarkupProfit =
+    commercial != null ? commercial.materialTotal - commercial.rawMaterialTotal : null;
+  const fabricationProfit = commercial?.fabricationTotal ?? null;
+  const grossProfit =
+    customerTotal != null && slabCostTotal != null ? customerTotal - slabCostTotal : null;
+  const grossMarginPct =
+    grossProfit != null && customerTotal != null && customerTotal !== 0
+      ? (grossProfit / customerTotal) * 100
+      : null;
+  const slabsUsedCount = slabQuoteLines.length;
+  const revenuePerSlab =
+    customerTotal != null && slabsUsedCount > 0 ? customerTotal / slabsUsedCount : null;
+  const totalUsedSqFt = slabQuoteLines.reduce((sum, line) => sum + line.usedAreaSqFt, 0);
+  const totalSlabSqFt = slabQuoteLines.reduce((sum, line) => sum + line.slabAreaSqFt, 0);
+  const utilizationPct =
+    totalSlabSqFt > 0 ? (totalUsedSqFt / totalSlabSqFt) * 100 : null;
+  return {
+    slabCostTotal,
+    slabCostPerSqft,
+    sellPerSqft,
+    materialMarkupProfit,
+    fabricationProfit,
+    grossProfit,
+    grossMarginPct,
+    slabsUsedCount,
+    revenuePerSlab,
+    utilizationPct,
   };
 }

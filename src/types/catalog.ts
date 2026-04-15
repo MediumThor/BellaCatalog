@@ -134,6 +134,39 @@ export type SortKey =
   | "priceHigh"
   | "tier";
 
+export type CatalogCollectionType = "manual" | "smart";
+
+export interface CatalogCollectionSnapshot {
+  searchQuery: string;
+  vendor: string;
+  manufacturers: string[];
+  materials: string[];
+  thicknesses: string[];
+  tierGroups: string[];
+  finishes: string[];
+  sizeClasses: string[];
+  priceTypes: string[];
+  colorFamilies: string[];
+  undertones: string[];
+  patternTags: string[];
+  movementLevels: string[];
+  styleTags: string[];
+  sortKey: SortKey;
+  hideWithoutPicture: boolean;
+}
+
+export interface CatalogCollection {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string;
+  type: CatalogCollectionType;
+  itemIds: string[];
+  smartSnapshot: CatalogCollectionSnapshot | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ColumnVisibility {
   manufacturer: boolean;
   category: boolean;

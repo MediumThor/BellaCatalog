@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
-import { pieceIdsWithSlabPlacementOverlap } from "../utils/placementOverlap";
-import { edgeStripLetterLabelByPieceId, pieceLetterLabelByPieceId } from "../utils/pieceLabels";
+import type { LayoutPiece, LayoutPoint, LayoutSlab, PiecePlacement } from "../types";
+import { distancePointToSegment, planDisplayPoints } from "../utils/blankPlanGeometry";
+import {
+  horizontalSeamPreviewChord,
+  seamGeometryFromAxisAlignedEdge,
+  type SeamFromEdgeGeometry,
+  verticalSeamPreviewChord,
+} from "../utils/blankPlanPolygonOps";
+import { normalizeClosedRing } from "../utils/geometry";
+import { slabPlacementSpacingState } from "../utils/placementOverlap";
+import { edgeStripLetterLabelByPieceId, pieceLabelByPieceId } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
   mirrorLocalInches,
   piecePolygonInches,
   transformedPieceInches,
+  worldDisplayToSlabInches,
 } from "../utils/pieceInches";
+import { piecesHaveAnyScale } from "../utils/sourcePages";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 import { IconRotateCCW, IconRotateCW } from "./PlanToolbarIcons";
 
@@ -43,6 +53,26 @@ function formatSlabRulerInches(n: number): string {
 }
 
 type SlabMargins = { lm: number; rm: number; tm: number; bm: number; tick: number; fs: number };
+
+type SlabSeamEdgeHit = {
+  slabId: string;
+  pieceId: string;
+  edgeIndex: number;
+  a: LayoutPoint;
+  b: LayoutPoint;
+};
+
+export type PlaceSeamRequest = {
+  pieceId: string;
+  edgeIndex: number;
+  dimA: number;
+  dimB: number;
+};
+
+function formatDimInches(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  return String(Math.round(n * 1000) / 1000);
+}
 
 function computeSlabMargins(slab: LayoutSlab): SlabMargins {
   const w = slab.widthIn;
@@ -107,6 +137,10 @@ type Props = {
    * When true, dragging a piece on the slab moves only horizontally or vertically (axis locks after a short drag).
    */
   orthoMove?: boolean;
+  /** Place phase: edge hover + click to split the current placed piece. */
+  seamMode?: boolean;
+  /** Commit a seam split on the active piece and keep slab placement in sync. */
+  onPlaceSeamRequest?: (request: PlaceSeamRequest) => boolean;
 };
 
 /** Pixels of pointer travel before ortho mode picks horizontal vs vertical. */
@@ -139,6 +173,8 @@ export function PlaceWorkspace({
   addSlabDisabled = false,
   addSlabTitle,
   orthoMove = false,
+  seamMode = false,
+  onPlaceSeamRequest,
 }: Props) {
   const svgRefs = useRef<Map<string, SVGSVGElement | null>>(new Map());
   /** Last slab used during an active drag (handles gaps between slab cards). */
@@ -153,8 +189,18 @@ export function PlaceWorkspace({
     /** Pointer position minus piece centroid in slab inch space at pointer-down. */
     grabOffset: { x: number; y: number };
   } | null>(null);
+  const [hoverSeamEdge, setHoverSeamEdge] = useState<SlabSeamEdgeHit | null>(null);
+  const [seamModal, setSeamModal] = useState<{
+    slabId: string;
+    pieceId: string;
+    edgeIndex: number;
+    geometry: SeamFromEdgeGeometry;
+    valA: string;
+    valB: string;
+  } | null>(null);
 
   const activeSlab = slabs.find((s) => s.id === activeSlabId) ?? slabs[0] ?? null;
+  const ppiReady = piecesHaveAnyScale(pieces, pixelsPerInch);
 
   const useTabs =
     slabViewMode === "tabs" && slabs.length > 1 && showSlabTabs;
@@ -173,23 +219,100 @@ export function PlaceWorkspace({
     return m;
   }, [placements]);
 
-  const placementsRef = useRef(placements);
-  placementsRef.current = placements;
+  const seamEdgeSegmentsBySlab = useMemo(() => {
+    const out = new Map<string, SlabSeamEdgeHit[]>();
+    if (readOnly || !seamMode || !ppiReady) return out;
+    for (const piece of pieces) {
+      if (isPlanStripPiece(piece)) continue;
+      const placement = placementByPiece.get(piece.id);
+      if (!placement?.placed || !placement.slabId) continue;
+      const world = planDisplayPoints(piece, pieces);
+      const ring = normalizeClosedRing(world);
+      const n = ring.length;
+      if (n < 2) continue;
+      const slabId = placement.slabId;
+      const slabSegs = out.get(slabId) ?? [];
+      for (let edgeIndex = 0; edgeIndex < n; edgeIndex += 1) {
+        if (!seamGeometryFromAxisAlignedEdge(world, edgeIndex)) continue;
+        const aWorld = ring[edgeIndex]!;
+        const bWorld = ring[(edgeIndex + 1) % n]!;
+        slabSegs.push({
+          slabId,
+          pieceId: piece.id,
+          edgeIndex,
+          a: worldDisplayToSlabInches(
+            aWorld.x,
+            aWorld.y,
+            piece,
+            placement,
+            pixelsPerInch,
+            pieces,
+          ),
+          b: worldDisplayToSlabInches(
+            bWorld.x,
+            bWorld.y,
+            piece,
+            placement,
+            pixelsPerInch,
+            pieces,
+          ),
+        });
+      }
+      if (slabSegs.length > 0) out.set(slabId, slabSegs);
+    }
+    return out;
+  }, [placementByPiece, ppiReady, pieces, pixelsPerInch, readOnly, seamMode]);
+
+  const seamPreviewLine = useMemo(() => {
+    if (!seamModal) return null;
+    const piece = pieces.find((p) => p.id === seamModal.pieceId);
+    const placement = placementByPiece.get(seamModal.pieceId);
+    if (!piece || !placement?.placed || !placement.slabId) return null;
+    const world = planDisplayPoints(piece, pieces);
+    const ring = normalizeClosedRing(world);
+    const n = ring.length;
+    if (n < 2) return null;
+    const edgeIndex = seamModal.edgeIndex % n;
+    const start = ring[edgeIndex]!;
+    const end = ring[(edgeIndex + 1) % n]!;
+    const hintY = (start.y + end.y) / 2;
+    const hintX = (start.x + end.x) / 2;
+    const dimA = parseFloat(seamModal.valA);
+    if (!Number.isFinite(dimA)) return null;
+    if (seamModal.geometry.kind === "vertical") {
+      const x = seamModal.geometry.xMin + dimA;
+      const { y0, y1 } = verticalSeamPreviewChord(world, x, hintY);
+      return {
+        slabId: placement.slabId,
+        a: worldDisplayToSlabInches(x, y0, piece, placement, pixelsPerInch, pieces),
+        b: worldDisplayToSlabInches(x, y1, piece, placement, pixelsPerInch, pieces),
+      };
+    }
+    const y = seamModal.geometry.yMin + dimA;
+    const { x0, x1 } = horizontalSeamPreviewChord(world, y, hintX);
+    return {
+      slabId: placement.slabId,
+      a: worldDisplayToSlabInches(x0, y, piece, placement, pixelsPerInch, pieces),
+      b: worldDisplayToSlabInches(x1, y, piece, placement, pixelsPerInch, pieces),
+    };
+  }, [pieces, pixelsPerInch, placementByPiece, seamModal]);
 
   const dragRef = useRef(drag);
   dragRef.current = drag;
-
-  const collidingPieceIds = useMemo(
+  const placementSpacing = useMemo(
     () =>
-      pieceIdsWithSlabPlacementOverlap({
+      slabPlacementSpacingState({
         pieces,
         placements,
         pixelsPerInch,
+        nearDistanceIn: 1.5,
       }),
-    [pieces, placements, pixelsPerInch]
+    [pieces, placements, pixelsPerInch],
   );
+  const collidingPieceIds = placementSpacing.collidingPieceIds;
+  const nearCollisionPieceIds = placementSpacing.nearbyPieceIds;
 
-  const pieceLetterLabelById = useMemo(() => pieceLetterLabelByPieceId(pieces), [pieces]);
+  const pieceLabelById = useMemo(() => pieceLabelByPieceId(pieces), [pieces]);
   const stripLetterLabelById = useMemo(() => edgeStripLetterLabelByPieceId(pieces), [pieces]);
 
   /** Slab placement: stable alphabetical order by piece name when drawing pieces. */
@@ -247,14 +370,86 @@ export function PlaceWorkspace({
     [slabs, clientToSlab]
   );
 
+  const openSeamModal = useCallback(
+    (edge: SlabSeamEdgeHit) => {
+      const piece = pieces.find((p) => p.id === edge.pieceId);
+      if (!piece) return;
+      const world = planDisplayPoints(piece, pieces);
+      const geometry = seamGeometryFromAxisAlignedEdge(world, edge.edgeIndex);
+      if (!geometry) return;
+      onActiveSlab(edge.slabId);
+      onSelectPiece(piece.id);
+      setSeamModal({
+        slabId: edge.slabId,
+        pieceId: piece.id,
+        edgeIndex: edge.edgeIndex,
+        geometry,
+        valA: formatDimInches(geometry.dimA),
+        valB: formatDimInches(geometry.dimB),
+      });
+    },
+    [onActiveSlab, onSelectPiece, pieces]
+  );
+
+  const pickSeamEdge = useCallback(
+    (slabId: string, clientX: number, clientY: number): SlabSeamEdgeHit | null => {
+      const point = clientToSlab(slabId, clientX, clientY);
+      const svg = svgRefs.current.get(slabId);
+      const slab = slabs.find((s) => s.id === slabId);
+      if (!point || !svg || !slab) return null;
+      const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0) return null;
+      const hitRadiusIn = Math.max(0.18, (slab.widthIn / rect.width) * 10);
+      let best: SlabSeamEdgeHit | null = null;
+      let bestDistance = hitRadiusIn;
+      for (const edge of seamEdgeSegmentsBySlab.get(slabId) ?? []) {
+        const distance = distancePointToSegment(point, edge.a, edge.b);
+        if (distance <= bestDistance) {
+          bestDistance = distance;
+          best = edge;
+        }
+      }
+      return best;
+    },
+    [clientToSlab, seamEdgeSegmentsBySlab, slabs]
+  );
+
+  useEffect(() => {
+    if (!seamMode || readOnly || !ppiReady) {
+      setHoverSeamEdge(null);
+      setSeamModal(null);
+    }
+  }, [ppiReady, readOnly, seamMode]);
+
+  useEffect(() => {
+    if (!seamModal) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSeamModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [seamModal]);
+
   const handlePointerDownPiece = (pieceId: string, slabId: string, ev: React.PointerEvent) => {
     if (readOnly) return;
-    if (!pixelsPerInch || pixelsPerInch <= 0) return;
     ev.stopPropagation();
     ev.preventDefault();
     const pl = placementByPiece.get(pieceId);
     const slab = slabs.find((s) => s.id === slabId);
     if (!pl || !slab) return;
+    if (seamMode && ppiReady) {
+      onActiveSlab(slabId);
+      const hovered =
+        hoverSeamEdge?.slabId === slabId && hoverSeamEdge.pieceId === pieceId
+          ? hoverSeamEdge
+          : pickSeamEdge(slabId, ev.clientX, ev.clientY);
+      if (hovered) {
+        openSeamModal(hovered);
+      } else {
+        onSelectPiece(pieceId);
+      }
+      return;
+    }
     const pointerInSlab = clientToSlab(slabId, ev.clientX, ev.clientY);
     if (!pointerInSlab) return;
     onSelectPiece(pieceId);
@@ -309,26 +504,11 @@ export function PlaceWorkspace({
   );
 
   const handleEndDrag = useCallback(() => {
-    const d = dragRef.current;
-    if (!d) return;
-    if (!readOnly && pixelsPerInch && pixelsPerInch > 0) {
-      const colliding = pieceIdsWithSlabPlacementOverlap({
-        pieces,
-        placements: placementsRef.current,
-        pixelsPerInch,
-      });
-      if (colliding.has(d.pieceId)) {
-        onPlacementChange(
-          placementsRef.current.map((p) =>
-            p.pieceId === d.pieceId ? { ...p, ...d.startPlacement } : p
-          )
-        );
-      }
-    }
+    if (!dragRef.current) return;
     setDrag(null);
     lastDragSlabRef.current = null;
     placementOrthoAxisRef.current = null;
-  }, [pieces, pixelsPerInch, onPlacementChange, readOnly]);
+  }, []);
 
   useEffect(() => {
     if (!drag) return;
@@ -343,6 +523,22 @@ export function PlaceWorkspace({
     };
   }, [drag, handleEndDrag]);
 
+  const handleSeamPointerMove =
+    (slabId: string) => (ev: React.PointerEvent<SVGSVGElement>) => {
+      if (readOnly || !seamMode || !ppiReady || drag) return;
+      const hovered = pickSeamEdge(slabId, ev.clientX, ev.clientY);
+      setHoverSeamEdge((prev) => {
+        if (
+          prev?.slabId === hovered?.slabId &&
+          prev?.pieceId === hovered?.pieceId &&
+          prev?.edgeIndex === hovered?.edgeIndex
+        ) {
+          return prev;
+        }
+        return hovered;
+      });
+    };
+
   /** Clicking slab stone (not a piece) focuses this slab for “place from Live Layout Preview” and deselects pieces. */
   const handleSvgBackgroundPointerDown =
     (slabId: string) => (ev: React.PointerEvent<SVGSVGElement>) => {
@@ -350,6 +546,11 @@ export function PlaceWorkspace({
       const tag = (ev.target as Element | null)?.tagName?.toLowerCase();
       if (tag === "polygon") return;
       onActiveSlab(slabId);
+      if (seamMode && ppiReady) {
+        if (hoverSeamEdge?.slabId !== slabId) setHoverSeamEdge(null);
+        onSelectPiece(null);
+        return;
+      }
       onSelectPiece(null);
     };
 
@@ -366,8 +567,6 @@ export function PlaceWorkspace({
       </div>
     );
   }
-
-  const ppiReady = !!(pixelsPerInch && pixelsPerInch > 0);
 
   const renderSlabStage = (slab: LayoutSlab) => {
     const slabMargins = computeSlabMargins(slab);
@@ -431,11 +630,21 @@ export function PlaceWorkspace({
             viewBox={viewBox}
             preserveAspectRatio="xMidYMid meet"
             onPointerDown={readOnly || !ppiReady ? undefined : handleSvgBackgroundPointerDown(slab.id)}
+            onPointerMove={readOnly || !ppiReady || !seamMode ? undefined : handleSeamPointerMove(slab.id)}
+            onPointerLeave={
+              readOnly || !ppiReady || !seamMode
+                ? undefined
+                : () =>
+                    setHoverSeamEdge((prev) =>
+                      prev?.slabId === slab.id ? null : prev
+                    )
+            }
             width="100%"
             height="100%"
           >
             <image
               href={slab.imageUrl}
+              xlinkHref={slab.imageUrl}
               x={0}
               y={0}
               width={slab.widthIn}
@@ -463,7 +672,7 @@ export function PlaceWorkspace({
                   const isStrip = isPlanStripPiece(piece);
                   const labelText = isStrip
                     ? (stripLetterLabelById.get(piece.id) ?? "—")
-                    : (pieceLetterLabelById.get(piece.id) ?? piece.name);
+                    : (pieceLabelById.get(piece.id) ?? piece.name);
                   const xs = rotated.map((q) => q.x);
                   const ys = rotated.map((q) => q.y);
                   const bw = Math.max(...xs) - Math.min(...xs);
@@ -476,11 +685,22 @@ export function PlaceWorkspace({
                   const longHoriz = bw >= bh;
                   const labelRot = longHoriz ? 0 : 90;
                   const dimensionText = `${bw.toFixed(1)}" x ${bh.toFixed(1)}"`;
+                  const offSlab = rotated.some((q) => {
+                    const x = pl.x + q.x;
+                    const y = pl.y + q.y;
+                    return x < -1e-4 || x > slab.widthIn + 1e-4 || y < -1e-4 || y > slab.heightIn + 1e-4;
+                  });
                   const colliding = collidingPieceIds.has(piece.id);
-                  const fill = colliding
+                  const warning = colliding || offSlab;
+                  const nearCollision = !warning && nearCollisionPieceIds.has(piece.id);
+                  const fill = warning
                     ? sel
                       ? "rgba(230, 55, 55, 0.42)"
                       : "rgba(220, 45, 45, 0.36)"
+                    : nearCollision
+                      ? sel
+                        ? "rgba(255, 148, 41, 0.38)"
+                        : "rgba(242, 137, 30, 0.3)"
                     : sel
                       ? "rgba(201,162,39,0.28)"
                       : "rgba(120,200,255,0.2)";
@@ -491,7 +711,7 @@ export function PlaceWorkspace({
                       points={pts}
                       fill={fill}
                       style={{
-                        cursor: readOnly ? "default" : "grab",
+                        cursor: readOnly ? "default" : seamMode ? "crosshair" : "grab",
                         pointerEvents:
                           drag?.pieceId === piece.id && !readOnly ? "none" : undefined,
                       }}
@@ -503,7 +723,7 @@ export function PlaceWorkspace({
                           allPieces={pieces}
                           coordPerInch={1}
                           slabPlacement={pl}
-                          pixelsPerInchForSlab={pixelsPerInch!}
+                          pixelsPerInchForSlab={piece.sourcePixelsPerInch ?? pixelsPerInch ?? undefined}
                           appearance="cutout"
                           interactive={false}
                         />
@@ -532,6 +752,43 @@ export function PlaceWorkspace({
                   );
                 })
               : null}
+            {ppiReady && seamMode
+              ? (seamEdgeSegmentsBySlab.get(slab.id) ?? []).map((edge) => {
+                  const highlighted =
+                    (hoverSeamEdge?.slabId === edge.slabId &&
+                      hoverSeamEdge.pieceId === edge.pieceId &&
+                      hoverSeamEdge.edgeIndex === edge.edgeIndex) ||
+                    (seamModal?.slabId === edge.slabId &&
+                      seamModal.pieceId === edge.pieceId &&
+                      seamModal.edgeIndex === edge.edgeIndex);
+                  if (!highlighted) return null;
+                  return (
+                    <line
+                      key={`seam-edge-${edge.slabId}-${edge.pieceId}-${edge.edgeIndex}`}
+                      x1={edge.a.x}
+                      y1={edge.a.y}
+                      x2={edge.b.x}
+                      y2={edge.b.y}
+                      stroke="rgba(232, 64, 64, 0.98)"
+                      strokeWidth={0.22}
+                      strokeLinecap="round"
+                      pointerEvents="none"
+                    />
+                  );
+                })
+              : null}
+            {seamPreviewLine && seamPreviewLine.slabId === slab.id ? (
+              <line
+                x1={seamPreviewLine.a.x}
+                y1={seamPreviewLine.a.y}
+                x2={seamPreviewLine.b.x}
+                y2={seamPreviewLine.b.y}
+                stroke="rgba(232,212,139,0.95)"
+                strokeWidth={0.24}
+                strokeDasharray="1.1 0.55"
+                pointerEvents="none"
+              />
+            ) : null}
             <g className="ls-place-slab-rulers" pointerEvents="none" aria-hidden>
               <rect
                 x={-slabRulers.lm}
@@ -674,7 +931,6 @@ export function PlaceWorkspace({
         ) : null}
         {showSlabBottomToolbar ? (
           <div className="ls-place-slab-drawing-host ls-place-slab-drawing-host--with-bottom-toolbar">
-            {slabStage}
             <div
               className={`ls-place-slab-bottom-toolbar${!hasMainSlabToolbar ? " ls-place-slab-bottom-toolbar--actions-only" : ""}`}
               role="toolbar"
@@ -761,6 +1017,7 @@ export function PlaceWorkspace({
                 </div>
               ) : null}
             </div>
+            {slabStage}
           </div>
         ) : (
           slabStage
@@ -770,40 +1027,152 @@ export function PlaceWorkspace({
   };
 
   return (
-    <div
-      className={`ls-place-wrap${readOnly ? " ls-place-wrap--readonly" : ""}${drag ? " ls-place-wrap--dragging" : ""}`}
-      onPointerMove={!readOnly && ppiReady && drag ? handlePointerMove : undefined}
-    >
-      {useTabs ? (
-        <div className="ls-place-slab-tabs-row">
-          <div className="ls-slab-tabs" role="tablist">
-            {slabs.map((s) => (
+    <>
+      <div
+        className={`ls-place-wrap${readOnly ? " ls-place-wrap--readonly" : ""}${drag ? " ls-place-wrap--dragging" : ""}`}
+        onPointerMove={!readOnly && ppiReady && drag ? handlePointerMove : undefined}
+      >
+        <div className="ls-place-scroll-shell">
+          {useTabs ? (
+            <div className="ls-place-slab-tabs-row">
+              <div className="ls-slab-tabs" role="tablist">
+                {slabs.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={s.id === activeSlab.id}
+                    className={`ls-slab-tab ${s.id === activeSlab.id ? "is-active" : ""}`}
+                    onClick={() => onActiveSlab(s.id)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {!ppiReady ? (
+            <p className="ls-place-ppi-hint ls-muted">
+              Set scale on the Plan tab to size pieces on the slab. Slab dimensions below match the catalog (inch rulers).
+            </p>
+          ) : null}
+          {ppiReady && seamMode ? (
+            <p className="ls-place-ppi-hint ls-muted">
+              Hover an eligible edge on the slab until it turns red, then click to place a seam.
+            </p>
+          ) : null}
+          <div className="ls-place-slab-scroll-pane">
+            <div
+              className={
+                useColumn && slabs.length > 1 ? "ls-place-slab-column" : "ls-place-slab-column ls-place-slab-column--single"
+              }
+            >
+              {slabsToRender.map((slab) => renderSlabStage(slab))}
+            </div>
+          </div>
+        </div>
+      </div>
+      {seamModal ? (
+        <div
+          className="ls-seam-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ls-place-seam-modal-title"
+          onClick={() => setSeamModal(null)}
+        >
+          <div className="ls-seam-modal glass-panel" onClick={(e) => e.stopPropagation()}>
+            <h2 id="ls-place-seam-modal-title" className="ls-seam-modal-title">
+              Place seam
+            </h2>
+            <p className="ls-seam-modal-sub">
+              The seam stays perpendicular to the selected plan edge. Edit one side and the other updates so both dimensions add up to that edge length.
+            </p>
+            <div className="ls-seam-modal-fields">
+              <label className="ls-seam-modal-field">
+                {seamModal.geometry.labelA} (in)
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.125}
+                  step={0.125}
+                  value={seamModal.valA}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const g = seamModal.geometry;
+                    const total =
+                      g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const n = parseFloat(v);
+                    setSeamModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            valA: v,
+                            valB: Number.isFinite(n) ? formatDimInches(total - n) : prev.valB,
+                          }
+                        : prev
+                    );
+                  }}
+                />
+              </label>
+              <label className="ls-seam-modal-field">
+                {seamModal.geometry.labelB} (in)
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.125}
+                  step={0.125}
+                  value={seamModal.valB}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const g = seamModal.geometry;
+                    const total =
+                      g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const n = parseFloat(v);
+                    setSeamModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            valB: v,
+                            valA: Number.isFinite(n) ? formatDimInches(total - n) : prev.valA,
+                          }
+                        : prev
+                    );
+                  }}
+                />
+              </label>
+            </div>
+            <div className="ls-seam-modal-actions">
               <button
-                key={s.id}
                 type="button"
-                role="tab"
-                aria-selected={s.id === activeSlab.id}
-                className={`ls-slab-tab ${s.id === activeSlab.id ? "is-active" : ""}`}
-                onClick={() => onActiveSlab(s.id)}
+                className="ls-btn ls-btn-secondary"
+                onClick={() => setSeamModal(null)}
               >
-                {s.label}
+                Cancel
               </button>
-            ))}
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                onClick={() => {
+                  const dimA = Number(seamModal.valA);
+                  const dimB = Number(seamModal.valB);
+                  if (!Number.isFinite(dimA) || !Number.isFinite(dimB)) return;
+                  const ok = onPlaceSeamRequest?.({
+                    pieceId: seamModal.pieceId,
+                    edgeIndex: seamModal.edgeIndex,
+                    dimA,
+                    dimB,
+                  });
+                  if (ok === false) return;
+                  setHoverSeamEdge(null);
+                  setSeamModal(null);
+                }}
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
-      {!ppiReady ? (
-        <p className="ls-place-ppi-hint ls-muted">
-          Set scale on the Plan tab to size pieces on the slab. Slab dimensions below match the catalog (inch rulers).
-        </p>
-      ) : null}
-      <div
-        className={
-          useColumn && slabs.length > 1 ? "ls-place-slab-column" : "ls-place-slab-column ls-place-slab-column--single"
-        }
-      >
-        {slabsToRender.map((slab) => renderSlabStage(slab))}
-      </div>
-    </div>
+    </>
   );
 }

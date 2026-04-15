@@ -4,14 +4,15 @@ export function createDefaultLayoutState(): SavedLayoutStudioState {
   const t = new Date().toISOString();
   return {
     version: LAYOUT_STUDIO_VERSION,
+    workspaceKind: "blank",
     source: null,
     calibration: {
-      isCalibrated: false,
+      isCalibrated: true,
       pointA: null,
       pointB: null,
       realDistance: null,
-      unit: null,
-      pixelsPerInch: null,
+      unit: "in",
+      pixelsPerInch: 1,
     },
     pieces: [],
     placements: [],

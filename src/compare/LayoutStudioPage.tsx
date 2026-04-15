@@ -166,8 +166,8 @@ function SavedAreaLayoutPreview({
 
 export function LayoutStudioPage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const location = useLocation();
   const { user } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const optionFromQuery = searchParams.get("option");
@@ -218,6 +218,17 @@ export function LayoutStudioPage() {
       () => setLoadError("Could not load customers.")
     );
   }, [hasJobContext, user?.uid]);
+
+  useEffect(() => {
+    if (hasJobContext) return;
+    setJob(null);
+    setCustomer(null);
+    setOptions([]);
+    setLoadError(null);
+    if (searchParams.size > 0) {
+      setSearchParams(new URLSearchParams(), { replace: true });
+    }
+  }, [hasJobContext, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!user?.uid || hasJobContext || customers.length === 0) return;
@@ -334,12 +345,17 @@ export function LayoutStudioPage() {
       ? (activeAreaIdFromQuery ? jobAreas.find((area) => area.id === activeAreaIdFromQuery) : null) ??
         primaryAreaForJob(job)
       : null;
+  const defaultPlanCanvasExpanded = hasJobContext && location.pathname.startsWith("/layout/jobs/");
 
   const areaMaterialsJob =
-    areaMaterialsTarget && !hasJobContext
-      ? Object.values(jobsByCustomer)
-          .flat()
-          .find((candidate) => candidate.id === areaMaterialsTarget.jobId) ?? null
+    areaMaterialsTarget
+      ? hasJobContext
+        ? job?.id === areaMaterialsTarget.jobId
+          ? job
+          : null
+        : Object.values(jobsByCustomer)
+            .flat()
+            .find((candidate) => candidate.id === areaMaterialsTarget.jobId) ?? null
       : null;
   const areaMaterialsArea =
     areaMaterialsTarget && areaMaterialsJob
@@ -405,6 +421,107 @@ export function LayoutStudioPage() {
       },
       { replace: true }
     );
+  };
+
+  const openAddMaterialsForActiveArea = () => {
+    if (!job?.id || !activeArea?.id) return;
+    setAreaMaterialsError(null);
+    setAreaMaterialsTarget({ jobId: job.id, areaId: activeArea.id });
+  };
+
+  const removeMaterialFromActiveArea = (optionId: string) => {
+    if (!job || !activeArea) return;
+    const nextAssociatedOptionIds = activeAreaOptions
+      .filter((option) => option.id !== optionId)
+      .map((option) => option.id);
+    const nextSelectedOptionId =
+      activeArea.selectedOptionId === optionId ? nextAssociatedOptionIds[0] ?? null : activeArea.selectedOptionId ?? null;
+    const nextAreas = jobAreasForJob(job).map((area) =>
+      area.id === activeArea.id
+        ? {
+            ...area,
+            associatedOptionIds: nextAssociatedOptionIds,
+            selectedOptionId: nextSelectedOptionId,
+            updatedAt: new Date().toISOString(),
+          }
+        : area
+    );
+    void updateJob(job.id, {
+      areas: nextAreas,
+      areaType: nextAreas.map((area) => area.name).join(", "),
+    });
+  };
+
+  const handleAddMaterialsToArea = async (items: CatalogItem[]) => {
+    if (!user?.uid) {
+      setAreaMaterialsError("Sign in to add materials.");
+      return;
+    }
+    if (!areaMaterialsTarget || !areaMaterialsArea || !areaMaterialsJob) {
+      setAreaMaterialsError("Choose an area first.");
+      return;
+    }
+    if (items.length === 0) {
+      setAreaMaterialsError("Select at least one material.");
+      return;
+    }
+    setAreaMaterialsSaving(true);
+    setAreaMaterialsError(null);
+    const existingOptions =
+      hasJobContext && job?.id === areaMaterialsJob.id
+        ? options
+        : (jobOptionsByJobId[areaMaterialsJob.id] ?? []);
+    const existingIds = new Set(existingOptions.map((option) => option.id));
+    try {
+      const result = await addCatalogItemsToJobBatch(user.uid, areaMaterialsJob, items);
+      if (result.added === 0) {
+        setAreaMaterialsError(result.failures[0]?.message ?? "Could not add materials.");
+        return;
+      }
+      const refreshedOptions = await fetchOptionsForJob(areaMaterialsJob.id, user.uid);
+      setJobOptionsByJobId((prev) => ({ ...prev, [areaMaterialsJob.id]: refreshedOptions }));
+      if (hasJobContext && job?.id === areaMaterialsJob.id) {
+        setOptions(refreshedOptions);
+      }
+      const addedOptions = refreshedOptions.filter((option) => !existingIds.has(option.id));
+      const existingAssociatedOptionIds = Array.isArray(areaMaterialsArea.associatedOptionIds)
+        ? areaMaterialsArea.associatedOptionIds
+        : existingOptions.map((option) => option.id);
+      const nextAssociatedOptionIds = Array.from(
+        new Set([...existingAssociatedOptionIds, ...addedOptions.map((option) => option.id)])
+      );
+      const nextSelectedOptionId = addedOptions[0]?.id ?? areaMaterialsArea.selectedOptionId ?? null;
+      if (
+        nextSelectedOptionId !== areaMaterialsArea.selectedOptionId ||
+        nextAssociatedOptionIds.join("|") !== (areaMaterialsArea.associatedOptionIds ?? []).join("|")
+      ) {
+        const nextAreas = jobAreasForJob(areaMaterialsJob).map((area) =>
+          area.id === areaMaterialsArea.id
+            ? {
+                ...area,
+                associatedOptionIds: nextAssociatedOptionIds,
+                selectedOptionId: nextSelectedOptionId,
+                updatedAt: new Date().toISOString(),
+              }
+            : area
+        );
+        await updateJob(areaMaterialsJob.id, {
+          areas: nextAreas,
+          areaType: nextAreas.map((area) => area.name).join(", "),
+        });
+      }
+      if (result.failures.length > 0) {
+        setLoadError(
+          `Added ${result.added} material${result.added === 1 ? "" : "s"} to ${areaMaterialsArea.name}. ${result.failures.length} item${result.failures.length === 1 ? "" : "s"} could not be added.`
+        );
+      }
+      setAreaMaterialsTarget(null);
+      setAreaMaterialsError(null);
+    } catch (error) {
+      setAreaMaterialsError(error instanceof Error ? error.message : "Could not add materials.");
+    } finally {
+      setAreaMaterialsSaving(false);
+    }
   };
 
   if (!hasJobContext) {
@@ -567,13 +684,15 @@ export function LayoutStudioPage() {
                         </button>
                         <button
                           type="button"
-                          className="ls-btn ls-btn-secondary"
+                          className="ls-entry-icon-btn ls-entry-icon-btn--danger"
+                          aria-label={`Delete job ${jobRow.name}`}
+                          title="Delete job"
                           onClick={(event) => {
                             event.stopPropagation();
                             setConfirmState({ kind: "job", jobId: jobRow.id, jobName: jobRow.name });
                           }}
                         >
-                          Delete job
+                          <Trash2 aria-hidden="true" />
                         </button>
                         <button
                           type="button"
@@ -820,70 +939,7 @@ export function LayoutStudioPage() {
             setAreaMaterialsTarget(null);
             setAreaMaterialsError(null);
           }}
-          onAddMaterials={async (items: CatalogItem[]) => {
-            if (!user?.uid) {
-              setAreaMaterialsError("Sign in to add materials.");
-              return;
-            }
-            if (!areaMaterialsTarget || !areaMaterialsArea || !areaMaterialsJob) {
-              setAreaMaterialsError("Choose an area first.");
-              return;
-            }
-            if (items.length === 0) {
-              setAreaMaterialsError("Select at least one material.");
-              return;
-            }
-            setAreaMaterialsSaving(true);
-            setAreaMaterialsError(null);
-            const existingIds = new Set((jobOptionsByJobId[areaMaterialsJob.id] ?? []).map((option) => option.id));
-            try {
-              const result = await addCatalogItemsToJobBatch(user.uid, areaMaterialsJob, items);
-              if (result.added === 0) {
-                setAreaMaterialsError(result.failures[0]?.message ?? "Could not add materials.");
-                return;
-              }
-              const refreshedOptions = await fetchOptionsForJob(areaMaterialsJob.id, user.uid);
-              setJobOptionsByJobId((prev) => ({ ...prev, [areaMaterialsJob.id]: refreshedOptions }));
-              const addedOptions = refreshedOptions.filter((option) => !existingIds.has(option.id));
-              const existingAssociatedOptionIds = Array.isArray(areaMaterialsArea.associatedOptionIds)
-                ? areaMaterialsArea.associatedOptionIds
-                : (jobOptionsByJobId[areaMaterialsJob.id] ?? []).map((option) => option.id);
-              const nextAssociatedOptionIds = Array.from(
-                new Set([...existingAssociatedOptionIds, ...addedOptions.map((option) => option.id)])
-              );
-              const nextSelectedOptionId = addedOptions[0]?.id ?? areaMaterialsArea.selectedOptionId ?? null;
-              if (
-                nextSelectedOptionId !== areaMaterialsArea.selectedOptionId ||
-                nextAssociatedOptionIds.join("|") !== (areaMaterialsArea.associatedOptionIds ?? []).join("|")
-              ) {
-                const nextAreas = jobAreasForJob(areaMaterialsJob).map((area) =>
-                  area.id === areaMaterialsArea.id
-                    ? {
-                        ...area,
-                        associatedOptionIds: nextAssociatedOptionIds,
-                        selectedOptionId: nextSelectedOptionId,
-                        updatedAt: new Date().toISOString(),
-                      }
-                    : area
-                );
-                await updateJob(areaMaterialsJob.id, {
-                  areas: nextAreas,
-                  areaType: nextAreas.map((area) => area.name).join(", "),
-                });
-              }
-              if (result.failures.length > 0) {
-                setLoadError(
-                  `Added ${result.added} material${result.added === 1 ? "" : "s"} to ${areaMaterialsArea.name}. ${result.failures.length} item${result.failures.length === 1 ? "" : "s"} could not be added.`
-                );
-              }
-              setAreaMaterialsTarget(null);
-              setAreaMaterialsError(null);
-            } catch (error) {
-              setAreaMaterialsError(error instanceof Error ? error.message : "Could not add materials.");
-            } finally {
-              setAreaMaterialsSaving(false);
-            }
-          }}
+          onAddMaterials={handleAddMaterialsToArea}
         />
 
         <CreateCustomerModal
@@ -1127,8 +1183,23 @@ export function LayoutStudioPage() {
         options={activeAreaOptions}
         activeOption={activeOption}
         onOptionChange={handleOptionChange}
+        onRemoveMaterialOption={removeMaterialFromActiveArea}
+        onOpenAddMaterials={openAddMaterialsForActiveArea}
         ownerUserId={user.uid}
-        onBack={() => navigate(location.pathname.startsWith("/layout/jobs/") ? "/layout" : `/compare/jobs/${jobId}`)}
+        onBack={() => navigate("/layout", { replace: true })}
+        defaultPlanCanvasExpanded={defaultPlanCanvasExpanded}
+      />
+      <AreaMaterialsCatalogModal
+        open={Boolean(areaMaterialsTarget && areaMaterialsArea)}
+        areaName={areaMaterialsArea?.name ?? "Area"}
+        saving={areaMaterialsSaving}
+        error={areaMaterialsError}
+        onClose={() => {
+          if (areaMaterialsSaving) return;
+          setAreaMaterialsTarget(null);
+          setAreaMaterialsError(null);
+        }}
+        onAddMaterials={handleAddMaterialsToArea}
       />
     </>
   );
