@@ -118,6 +118,7 @@ import {
   slabTextureRenderParams,
   shouldFillPieceWithSlabTexture,
 } from "../utils/slabLayoutTexture";
+import { PLAN_PIECE_NO_TEXTURE_FILL } from "../utils/planPieceFill";
 import {
   assignOutletsToSplitPieces,
   clampOutletCenter,
@@ -3047,7 +3048,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                 strokeWidth={0.08}
               />
             ))}
-            {pieces.map((piece, idx) => {
+            {pieces.map((piece) => {
               const sel = piece.id === selectedPieceId;
               const disp = planDisplayPoints(piece, pieces);
               const ringOpen = normalizeClosedRing(disp);
@@ -3096,13 +3097,11 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               /** When slab texture is clipped in, do not stack a fill on top — it tints the stone. */
               const fill = slabTex
                 ? "none"
-                : isStrip
-                  ? "rgba(180,220,255,0.12)"
-                  : joinPieceHover && !sel
-                    ? "rgba(90, 170, 255, 0.2)"
-                    : sel
-                      ? "rgba(201,162,39,0.2)"
-                      : `rgba(120,200,255,${0.08 + (idx % 5) * 0.03})`;
+                : joinPieceHover && !sel
+                  ? "rgba(90, 170, 255, 0.2)"
+                  : sel
+                    ? "rgba(201,162,39,0.2)"
+                    : PLAN_PIECE_NO_TEXTURE_FILL;
               /** Miter-tagged edges: always dark blue for quote + fabrication cue. */
               const MITER_PLAN_STROKE = "#0d47a1";
               const edgeStroke = (ei: number) =>

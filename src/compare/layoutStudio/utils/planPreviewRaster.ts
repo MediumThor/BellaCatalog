@@ -1,4 +1,5 @@
 import type { LayoutPiece } from "../types";
+import { PLAN_PIECE_NO_TEXTURE_FILL } from "./planPieceFill";
 import { planDisplayPoints } from "./blankPlanGeometry";
 import { ensureClosedRing, normalizeClosedRing } from "./geometry";
 import { tracePiecesViewBoxDims } from "./tracePiecesViewBox";
@@ -98,7 +99,7 @@ export async function captureSimplifiedPlanPreview(args: {
   ctx.translate(-minX, -minY);
 
   ctx.lineJoin = "round";
-  pieces.forEach((piece, idx) => {
+  pieces.forEach((piece) => {
     const ring = pieceRingOpen(piece, workspaceKind, pieces);
     if (ring.length < 3) return;
     ctx.beginPath();
@@ -107,7 +108,7 @@ export async function captureSimplifiedPlanPreview(args: {
       else ctx.lineTo(q.x, q.y);
     });
     ctx.closePath();
-    ctx.fillStyle = `rgba(120, 200, 255, ${0.07 + (idx % 5) * 0.02})`;
+    ctx.fillStyle = PLAN_PIECE_NO_TEXTURE_FILL;
     ctx.strokeStyle = "rgba(190, 205, 220, 0.5)";
     ctx.lineWidth = 0.22;
     ctx.fill();

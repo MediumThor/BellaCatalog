@@ -70,6 +70,7 @@ import {
   piecePolygonInches,
   worldDisplayToSlabInches,
 } from "../utils/pieceInches";
+import { syncMiterParentEdgeTags } from "../utils/miterParentEdgeTags";
 import { isMiterStripPiece, isPlanStripPiece } from "../utils/pieceRoles";
 import { removeCornerFilletsBatch } from "../utils/blankPlanEdgeArc";
 import {
@@ -631,10 +632,11 @@ export function LayoutStudioScreen({
   const selectedFilletEdgesRef = useRef(selectedFilletEdges);
   selectedFilletEdgesRef.current = selectedFilletEdges;
   const [splashModalOpen, setSplashModalOpen] = useState(false);
-  const [edgeStripKind, setEdgeStripKind] = useState<"splash" | "miter">("splash");
+  /** Edge + strip kind are stored together so confirm always matches the modal that opened. */
   const [splashTargetEdge, setSplashTargetEdge] = useState<{
     pieceId: string;
     edgeIndex: number;
+    stripKind: "splash" | "miter";
   } | null>(null);
   const [splashHeightInput, setSplashHeightInput] = useState("4");
   type LayoutUndoSnap = { pieces: LayoutPiece[]; placements: PiecePlacement[]; slabClones: SlabCloneEntry[] };
@@ -2694,10 +2696,11 @@ export function LayoutStudioScreen({
     const b = ring[(edge.edgeIndex + 1) % n];
     const widthIn = Math.hypot(b.x - a.x, b.y - a.y) / coordPerInch;
     const splashId = crypto.randomUUID();
-    const stripRole = edgeStripKind === "miter" ? "miter" : "splash";
+    const stripKind = edge.stripKind;
+    const stripRole = stripKind === "miter" ? "miter" : "splash";
     const newPiece: LayoutPiece = {
       id: splashId,
-      name: edgeStripKind === "miter" ? `${parent.name} miter` : `${parent.name} splash`,
+      name: stripKind === "miter" ? `${parent.name} miter` : `${parent.name} splash`,
       materialOptionId: resolvedPieceMaterialOptionId(parent, workingPieces),
       points: canonical,
       sinkCount: 0,
@@ -2715,34 +2718,27 @@ export function LayoutStudioScreen({
       manualDimensions: { kind: "rectangle", widthIn, depthIn: h },
       planTransform: { x: 0, y: 0 },
       edgeTags:
-        edgeStripKind === "miter"
+        stripKind === "miter"
           ? {
               /** Inner contact edge with parent (mates with parent miter tag). */
               miterEdgeIndices: [0],
             }
           : undefined,
     };
-    const nextPieces = [
+    const nextPieces = syncMiterParentEdgeTags([
       ...workingPieces.map((p) => {
         if (p.id !== parent.id) return p;
         const rest = (p.edgeTags?.splashEdges ?? []).filter((e) => e.edgeIndex !== edge.edgeIndex);
-        const miterMerged =
-          edgeStripKind === "miter"
-            ? [...new Set([...(p.edgeTags?.miterEdgeIndices ?? []), edge.edgeIndex])].sort(
-                (a, b) => a - b,
-              )
-            : p.edgeTags?.miterEdgeIndices;
         return {
           ...p,
           edgeTags: {
             ...p.edgeTags,
-            ...(miterMerged?.length ? { miterEdgeIndices: miterMerged } : {}),
             splashEdges: [...rest, { edgeIndex: edge.edgeIndex, splashPieceId: splashId, heightIn: h }],
           },
         };
       }),
       newPiece,
-    ];
+    ]);
     if (sourcePlanEditorActive) {
       commitSourcePlanEditorPiecesWithUndo(nextPieces, (d, nextSourcePieces) => ({
         ...d,
@@ -2780,7 +2776,6 @@ export function LayoutStudioScreen({
     }
     setSplashModalOpen(false);
     setSplashTargetEdge(null);
-    setEdgeStripKind("splash");
     setSelectedPieceId(splashId);
   };
 
@@ -4787,8 +4782,7 @@ export function LayoutStudioScreen({
                       onSelectFilletEdges={setSelectedFilletEdges}
                       onPiecesChange={onPiecesChange}
                       onRequestSplashForEdge={(sel, kind) => {
-                        setSplashTargetEdge(sel);
-                        setEdgeStripKind(kind);
+                        setSplashTargetEdge({ ...sel, stripKind: kind });
                         setSplashHeightInput("4");
                         setSplashModalOpen(true);
                       }}
@@ -5324,8 +5318,7 @@ export function LayoutStudioScreen({
                           onSelectFilletEdges={setSelectedFilletEdges}
                           onPiecesChange={onPlanCanvasPiecesChange}
                           onRequestSplashForEdge={(sel, kind) => {
-                            setSplashTargetEdge(sel);
-                            setEdgeStripKind(kind);
+                            setSplashTargetEdge({ ...sel, stripKind: kind });
                             setSplashHeightInput("4");
                             setSplashModalOpen(true);
                           }}
@@ -5374,8 +5367,7 @@ export function LayoutStudioScreen({
                           onPiecesChangeLive={onTracePiecesChangeLive}
                           onPieceDragStart={pushUndoSnapshot}
                           onRequestSplashForEdge={(sel, kind) => {
-                            setSplashTargetEdge(sel);
-                            setEdgeStripKind(kind);
+                            setSplashTargetEdge({ ...sel, stripKind: kind });
                             setSplashHeightInput("4");
                             setSplashModalOpen(true);
                           }}
@@ -5664,7 +5656,6 @@ export function LayoutStudioScreen({
           onClick={() => {
             setSplashModalOpen(false);
             setSplashTargetEdge(null);
-            setEdgeStripKind("splash");
           }}
         >
           <div
@@ -5674,12 +5665,12 @@ export function LayoutStudioScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <p id="ls-splash-title" className="ls-card-title">
-              {edgeStripKind === "miter" ? "Miter strip height" : "Splash height"}
+              {splashTargetEdge?.stripKind === "miter" ? "Miter strip height" : "Splash height"}
             </p>
             <p className="ls-muted">
               Enter height in inches. A rectangle matching the selected edge length will be placed{" "}
               {SPLASH_PLAN_OFFSET_IN}&quot; away from that edge (perpendicular offset in plan view).
-              {edgeStripKind === "miter" ? (
+              {splashTargetEdge?.stripKind === "miter" ? (
                 <>
                   {" "}
                   In the live 3D preview, this miter strip folds <strong>down</strong> from the hinge instead
@@ -5705,13 +5696,12 @@ export function LayoutStudioScreen({
                 onClick={() => {
                   setSplashModalOpen(false);
                   setSplashTargetEdge(null);
-                  setEdgeStripKind("splash");
                 }}
               >
                 Cancel
               </button>
               <button type="button" className="ls-btn ls-btn-primary" onClick={() => confirmSplashForEdge()}>
-                {edgeStripKind === "miter" ? "Add miter" : "Add splash"}
+                {splashTargetEdge?.stripKind === "miter" ? "Add miter" : "Add splash"}
               </button>
             </div>
           </div>

@@ -25,6 +25,7 @@ import { isPlanStripPiece } from "../utils/pieceRoles";
 import { clipEdgeStrokeSegmentsForKitchenSinks, coordPerInchForPlan } from "../utils/pieceSinks";
 import { tracePiecesViewBoxDims } from "../utils/tracePiecesViewBox";
 import { piecePixelsPerInch, piecesHaveAnyScale } from "../utils/sourcePages";
+import { PLAN_PIECE_NO_TEXTURE_FILL } from "../utils/planPieceFill";
 import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 import type { PlaceSeamRequest } from "./PlaceWorkspace";
@@ -623,7 +624,7 @@ export function PlaceLayoutPreview({
               height={workspaceKind === "blank" ? blankVb.height : sourceVb.height}
               fill={`url(#${gradId})`}
             />
-            {pieces.map((piece, idx) => {
+            {pieces.map((piece) => {
               const sel = piece.id === selectedPieceId;
               const placement = placementByPiece.get(piece.id);
               const slab =
@@ -641,19 +642,13 @@ export function PlaceLayoutPreview({
               : normalizeClosedRing(piece.points);
 
           const placedMapped = !!slabTex;
-          const unplacedNeutral =
-            !isStrip && (!placement || !placement.placed || !placement.slabId || !slabTex);
 
           /** When slab texture is clipped in, avoid opaque fill — but keep a transparent fill when clickable so the hit target exists (`fill="none"` does not receive pointer events). */
           const fill = placedMapped
             ? pieceActivate
               ? "transparent"
               : "none"
-            : isStrip
-              ? "rgba(150, 185, 220, 0.14)"
-              : unplacedNeutral
-                ? "rgba(72, 80, 92, 0.42)"
-                : `rgba(120, 200, 255, ${0.07 + (idx % 5) * 0.02})`;
+            : PLAN_PIECE_NO_TEXTURE_FILL;
 
           const MITER_PLAN_STROKE = "#0d47a1";
           const edgeStroke = (ei: number) =>
@@ -661,13 +656,13 @@ export function PlaceLayoutPreview({
               ? "transparent"
               : piece.edgeTags?.miterEdgeIndices?.includes(ei)
                 ? MITER_PLAN_STROKE
-                : "rgba(190, 205, 220, 0.42)";
+                : "rgba(190, 205, 220, 0.22)";
           const edgeStrokeW = (ei: number) =>
             placedMapped
               ? 0
               : piece.edgeTags?.miterEdgeIndices?.includes(ei)
-                ? 0.2
-                : 0.16;
+                ? 0.025
+                : 0.02;
 
           const xs = ringOpen.map((q) => q.x);
           const ys = ringOpen.map((q) => q.y);

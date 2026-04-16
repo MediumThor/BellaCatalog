@@ -21,6 +21,7 @@ import {
   planPointToSlabInches,
   slabInchesToPlanTextureMatrix,
 } from "../utils/slabLayoutTexture";
+import { disposeSlabTextureWebGL, loadSlabTextureForWebGL } from "../utils/slabTextureWebGL";
 
 /**
  * Optional overrides for the 3D preview scene. Defaults match the pre-styling behavior that
@@ -221,9 +222,9 @@ function buildShapeFromPlanWithHoles(
 }
 
 /**
- * Maps slab inches onto extruded cap UVs. Must run against normals from {@link THREE.ExtrudeGeometry}
- * only — do not call {@link THREE.BufferGeometry#computeVertexNormals} again afterward, or rim
- * normals blend and this no longer matches cap faces.
+ * Maps slab inches onto extruded cap UVs. Uses face normals to find caps (|normal.z| large).
+ * After {@link applyMiter45ShearToExtrudeGeometry}, {@link THREE.BufferGeometry#computeVertexNormals}
+ * runs so cap normals are no longer exactly ±Z; we treat |nz| ≥ 0.5 as a cap so UVs still apply.
  */
 function fixLidUVsPlanMapped(
   geom: THREE.ExtrudeGeometry,
@@ -237,10 +238,14 @@ function fixLidUVsPlanMapped(
   if (!uv || !pos || !normal) return;
   const tw = Math.max(slabW, 1e-6);
   const th = Math.max(slabH, 1e-6);
-  const eps = 1e-3;
+  /**
+   * Cap faces are perpendicular to Z (|nz| ≈ 1). After miter shear + computeVertexNormals,
+   * strict `|nz| ≈ 1` can fail and we never write UVs → solid black. Side walls have |nz| ≈ 0.
+   */
+  const minCapNz = 0.5;
   for (let i = 0; i < pos.count; i++) {
     const nz = normal.getZ(i);
-    if (Math.abs(Math.abs(nz) - 1) > eps) continue;
+    if (Math.abs(nz) < minCapNz) continue;
     const planX = pos.getX(i);
     const planY = -pos.getY(i);
     const { sx, sy } = planPointToSlabInches(textureM, planX, planY);
@@ -478,38 +483,20 @@ export function PlaceLayoutPreview3D({
     }
 
     const textureCache = new Map<string, THREE.Texture>();
+    const maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
-    /** Some slab hosts omit CORS on `crossOrigin=anonymous` (WebGL upload fails); retry without. */
-    function loadImageElement(url: string, crossOrigin: "" | "anonymous"): Promise<HTMLImageElement> {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        if (crossOrigin) img.crossOrigin = crossOrigin;
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("image load failed"));
-        img.src = url;
-      });
-    }
-
-    const loadTexture = async (url: string): Promise<THREE.Texture | null> => {
-      const cached = textureCache.get(url);
+    /**
+     * Exact same bitmap URL as placement: {@link useResolvedLayoutSlabs} writes the winning
+     * candidate into `imageUrl`, and {@link PlaceWorkspace} uses that alone for the slab `<img>`.
+     * Do not fall through to `imageCandidates` here or 3D can disagree with layout.
+     */
+    const loadTextureForSlab = async (slab: LayoutSlab): Promise<THREE.Texture | null> => {
+      const u = slab.imageUrl?.trim();
+      if (!u) return null;
+      const cached = textureCache.get(u);
       if (cached) return cached;
-      let image: HTMLImageElement;
-      try {
-        image = await loadImageElement(url, "anonymous");
-      } catch {
-        try {
-          image = await loadImageElement(url, "");
-        } catch {
-          return null;
-        }
-      }
-      const tex = new THREE.Texture(image);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.wrapS = THREE.ClampToEdgeWrapping;
-      tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      tex.needsUpdate = true;
-      textureCache.set(url, tex);
+      const tex = await loadSlabTextureForWebGL(u, maxAniso);
+      if (tex) textureCache.set(u, tex);
       return tex;
     };
 
@@ -685,12 +672,31 @@ export function PlaceLayoutPreview3D({
           if (pivot) geom.translate(-pivot.x, -pivot.y, 0);
         }
 
-        const tex = await loadTexture(slab.imageUrl);
+        /**
+         * Do not await slab texture before adding geometry. `fetch` / `TextureLoader` can hang on
+         * some URLs; blocking here left the scene empty (blank 3D) until load completed.
+         */
         if (cancelled) {
           geom.dispose();
           return;
         }
-        addPieceMesh(geom, tex, piece, pieceExtrudeDepth);
+        const mesh = addPieceMesh(geom, null, piece, pieceExtrudeDepth);
+        const mats = mesh.material as THREE.MeshStandardMaterial[];
+        const lidMat = mats[0]!;
+        const sideMat = mats[1]!;
+        void loadTextureForSlab(slab).then((tex) => {
+          if (cancelled || !tex) return;
+          lidMat.map = tex;
+          lidMat.color.setHex(appearance.texturedLidTint);
+          lidMat.roughness = 0.44;
+          lidMat.metalness = 0.02;
+          lidMat.needsUpdate = true;
+          sideMat.map = tex;
+          sideMat.color.setHex(appearance.edgeTextureTint);
+          sideMat.roughness = 0.5;
+          sideMat.metalness = 0.03;
+          sideMat.needsUpdate = true;
+        });
       }
 
       if (cancelled) return;
@@ -858,7 +864,7 @@ export function PlaceLayoutPreview3D({
       }
       for (const g of geometries) g.dispose();
       for (const m of materials) m.dispose();
-      textureCache.forEach((t) => t.dispose());
+      textureCache.forEach((t) => disposeSlabTextureWebGL(t));
       textureCache.clear();
       renderer.dispose();
       if (renderer.domElement.parentNode === container) {

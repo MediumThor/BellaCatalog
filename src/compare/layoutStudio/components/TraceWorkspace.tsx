@@ -30,6 +30,7 @@ import {
   slabTextureRenderParamsTrace,
   shouldFillPieceWithSlabTexture,
 } from "../utils/slabLayoutTexture";
+import { TRACE_PLAN_NO_TEXTURE_FILL } from "../utils/planPieceFill";
 import { defaultNonSplashPieceName } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
@@ -1615,7 +1616,7 @@ export function TraceWorkspace({
             />
           )
         ) : null}
-        {pieces.map((piece, idx) => {
+        {pieces.map((piece) => {
           const sinkPiece =
             traceSinkPieces.find((candidate) => candidate.id === piece.id) ?? piece;
           const sel = piece.id === selectedPieceId;
@@ -1645,7 +1646,7 @@ export function TraceWorkspace({
               : "rgba(6,8,12,0.24)"
             : sel
               ? "rgba(201,162,39,0.18)"
-              : `rgba(72,140,228,${0.16 + (idx % 5) * 0.045})`;
+              : TRACE_PLAN_NO_TEXTURE_FILL;
           const stroke = sel ? "rgba(232,212,139,0.95)" : "rgba(74,132,212,0.86)";
           return (
             <g key={piece.id}>
