@@ -9,6 +9,7 @@ import { LayoutStudioScreen } from "./layoutStudio/components/LayoutStudioScreen
 import { PlaceWorkspace } from "./layoutStudio/components/PlaceWorkspace";
 import { useResolvedLayoutSlabs } from "./layoutStudio/hooks/useResolvedLayoutSlabs";
 import type { SavedJobLayoutPlan } from "./layoutStudio/types";
+import { stripMaterialOptionIdsFromJobPlan } from "./layoutStudio/services/persistLayout";
 import { slabsForOption } from "./layoutStudio/utils/slabDimensions";
 import {
   addCatalogItemsToJobBatch,
@@ -778,7 +779,7 @@ export function LayoutStudioPage() {
                         </button>
                         <button
                           type="button"
-                          className="ls-btn ls-btn-primary"
+                          className="ls-btn ls-btn-outline-accent"
                           onClick={(event) => {
                             event.stopPropagation();
                             setAreaModalJobId(jobRow.id);
@@ -822,9 +823,29 @@ export function LayoutStudioPage() {
                             const sinkSummaries = areaSinkSummaries(area);
                             return (
                               <div key={area.id} className="ls-entry-area-row">
+                                <div className="ls-entry-area-header">
+                                  <h4 className="ls-entry-area-title">{area.name}</h4>
+                                  <button
+                                    type="button"
+                                    className="ls-entry-icon-btn ls-entry-icon-btn--danger"
+                                    disabled={areas.length <= 1}
+                                    aria-label={`Delete area ${area.name}`}
+                                    title={areas.length <= 1 ? "Delete the job instead" : "Delete area"}
+                                    onClick={() =>
+                                      setConfirmState({
+                                        kind: "area",
+                                        jobId: jobRow.id,
+                                        jobName: jobRow.name,
+                                        areaId: area.id,
+                                        areaName: area.name,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 aria-hidden="true" />
+                                  </button>
+                                </div>
                                 <div className="ls-entry-area-head">
                                   <div className="ls-entry-area-copy">
-                                    <span className="ls-entry-pill">{area.name}</span>
                                     <div className="ls-entry-area-meta-list">
                                       <div className="ls-entry-area-materials">
                                         <span className="ls-entry-area-meta-label">Materials</span>
@@ -889,24 +910,6 @@ export function LayoutStudioPage() {
                                     </div>
                                   </div>
                                   <div className="ls-entry-area-head-actions">
-                                    <button
-                                      type="button"
-                                      className="ls-entry-icon-btn ls-entry-icon-btn--danger"
-                                      disabled={areas.length <= 1}
-                                      aria-label={`Delete area ${area.name}`}
-                                      title={areas.length <= 1 ? "Delete the job instead" : "Delete area"}
-                                      onClick={() =>
-                                        setConfirmState({
-                                          kind: "area",
-                                          jobId: jobRow.id,
-                                          jobName: jobRow.name,
-                                          areaId: area.id,
-                                          areaName: area.name,
-                                        })
-                                      }
-                                    >
-                                      <Trash2 aria-hidden="true" />
-                                    </button>
                                     {areaState?.layoutPreviewImageUrl ? (
                                       <span className="ls-entry-area-status">Saved layout available</span>
                                     ) : null}
@@ -1016,7 +1019,7 @@ export function LayoutStudioPage() {
               <iframe
                 title="Job quote preview"
                 className="ls-entry-modal-frame"
-                src={`/compare/jobs/${quoteTarget.jobId}/quote?area=${encodeURIComponent(quoteTarget.areaId)}&option=${encodeURIComponent(quoteTarget.optionId)}`}
+                src={`/layout/jobs/${quoteTarget.jobId}/quote?area=${encodeURIComponent(quoteTarget.areaId)}&option=${encodeURIComponent(quoteTarget.optionId)}`}
               />
             </div>
           </div>
@@ -1215,18 +1218,22 @@ export function LayoutStudioPage() {
                       importedAssociatedOptionIds.includes(importSource.area.selectedOptionId)
                         ? importSource.area.selectedOptionId
                         : importedAssociatedOptionIds[0] ?? null;
-                    const importedPlan = importSource?.area.layoutStudioPlan
+                    const importedPlanBase: SavedJobLayoutPlan | null = importSource?.area.layoutStudioPlan
                       ? {
                           ...structuredClone(importSource.area.layoutStudioPlan),
                           updatedAt: createdAt,
                         }
                       : null;
+                    const importedPlan =
+                      importedPlanBase && !sameJobImport
+                        ? stripMaterialOptionIdsFromJobPlan(importedPlanBase)
+                        : importedPlanBase;
                     const createdAreas = buildJobAreas(newAreaName.trim(), createdAt).map((area, index) => ({
                       ...area,
                       id: `${area.id}-${existingAreas.length + index + 1}`,
                       associatedOptionIds: sameJobImport ? [...importedAssociatedOptionIds] : area.associatedOptionIds,
                       selectedOptionId: sameJobImport ? importedSelectedOptionId : area.selectedOptionId,
-                      layoutStudioPlan: importedPlan ? structuredClone(importedPlan) : null,
+                      layoutStudioPlan: importedPlan,
                     }));
                     const nextAreas = [
                       ...existingAreas,
@@ -1338,7 +1345,7 @@ export function LayoutStudioPage() {
     return (
       <div className="compare-page">
         <p className="compare-warning">{loadError}</p>
-        <Link className="btn btn-ghost" to={`/compare/jobs/${jobId}`}>
+        <Link className="btn btn-ghost" to={`/layout/jobs/${jobId}`}>
           ← Back to job
         </Link>
       </div>

@@ -158,6 +158,10 @@ export function sourcePiecesToPlanEditorPieces(
         const center = scalePointToInches({ x: sink.centerX, y: sink.centerY }, frame, ppi);
         return { ...sink, centerX: center.x, centerY: center.y };
       }),
+      outlets: piece.outlets?.map((outlet) => {
+        const center = scalePointToInches({ x: outlet.centerX, y: outlet.centerY }, frame, ppi);
+        return { ...outlet, centerX: center.x, centerY: center.y };
+      }),
       edgeArcSagittaIn: piece.edgeArcSagittaIn?.map((value) => (value == null ? null : value / ppi)),
       edgeArcCircleIn: piece.edgeArcCircleIn?.map((circle) =>
         circle ? scaleCircleToInches(circle, frame, ppi) : null,
@@ -199,6 +203,10 @@ export function planEditorPiecesToSourcePieces(
       sinks: piece.sinks?.map((sink) => {
         const center = scalePointToPixels({ x: sink.centerX, y: sink.centerY }, frame, ppi);
         return { ...sink, centerX: center.x, centerY: center.y };
+      }),
+      outlets: piece.outlets?.map((outlet) => {
+        const center = scalePointToPixels({ x: outlet.centerX, y: outlet.centerY }, frame, ppi);
+        return { ...outlet, centerX: center.x, centerY: center.y };
       }),
       edgeArcSagittaIn: piece.edgeArcSagittaIn?.map((value) => (value == null ? null : value * ppi)),
       edgeArcCircleIn: piece.edgeArcCircleIn?.map((circle) =>

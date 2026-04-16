@@ -53,7 +53,7 @@ export function AddToComparePage() {
   return (
     <div className="compare-page compare-add-page">
       <nav className="compare-breadcrumb">
-        <Link to={`/compare/jobs/${job.id}`}>← Job: {job.name}</Link>
+        <Link to={`/layout/jobs/${job.id}`}>← Job: {job.name}</Link>
       </nav>
       <h1 className="compare-title">Add catalog products to compare</h1>
       <p className="compare-lead">
@@ -93,7 +93,7 @@ export function AddToComparePage() {
           }
           setModalOpen(false);
           setPendingItem(null);
-          nav(`/compare/jobs/${job.id}`);
+          nav(`/layout/jobs/${job.id}`);
         }}
       />
     </div>

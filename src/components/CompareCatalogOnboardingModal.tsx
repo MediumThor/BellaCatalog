@@ -124,7 +124,7 @@ export function CompareCatalogOnboardingModal({
       onClearSelection();
     }
     if (added > 0 && failures.length === 0) {
-      navigate(`/compare/jobs/${job.id}`);
+      navigate(`/layout/jobs/${job.id}`);
       onClose();
       return;
     }
@@ -292,7 +292,7 @@ export function CompareCatalogOnboardingModal({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  navigate(`/compare/jobs/${result.jobId}`);
+                  navigate(`/layout/jobs/${result.jobId}`);
                   closeAndReset();
                 }}
               >

@@ -12,11 +12,12 @@ import {
   computeCommercialLayoutQuote,
   computeQuoteAnalytics,
   computeSlabMaterialQuoteLines,
-  customerQuoteTotalFromBreakdown,
 } from "../utils/commercialQuote";
+import { materialBilledVsVendorTone } from "../utils/materialBilledCostTone";
 import type { LayoutPiece, LayoutSlab, PiecePlacement, SavedLayoutStudioState } from "../types";
 import { piecesHaveAnyScale } from "../utils/sourcePages";
 import { LayoutSlabPricingModal } from "./LayoutSlabPricingModal";
+import { QuoteAnalyticsVisuals } from "./QuoteAnalyticsVisuals";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
 import { PlaceWorkspace } from "./PlaceWorkspace";
 import { IconEye, IconEyeOff } from "./PlanToolbarIcons";
@@ -72,6 +73,7 @@ export function QuotePhaseView({
   const profileEdgeLf = draft.summary.profileEdgeLf ?? 0;
   const miterEdgeLf = draft.summary.miterEdgeLf ?? 0;
   const splashAreaSqFt = draft.summary.splashAreaSqFt ?? 0;
+  const miterAreaSqFt = draft.summary.miterAreaSqFt ?? 0;
   const installationPerSqft =
     Number.isFinite(quoteSettings.installationPerSqft) && quoteSettings.installationPerSqft >= 0
       ? quoteSettings.installationPerSqft
@@ -85,7 +87,7 @@ export function QuotePhaseView({
     const miter = draft.summary.miterAreaSqFt ?? 0;
     return Math.max(0, total - splash - miter);
   }, [draft.summary.areaSqFt, draft.summary.splashAreaSqFt, draft.summary.miterAreaSqFt]);
-  const fabricatedSqFt = countertopSqFt + splashAreaSqFt;
+  const fabricatedSqFt = countertopSqFt + splashAreaSqFt + miterAreaSqFt;
 
   const commercial = useMemo(
     () =>
@@ -94,6 +96,7 @@ export function QuotePhaseView({
         jobSquareFootage: quoteAreaSqFt,
         countertopSqFt,
         splashAreaSqFt,
+        miterAreaSqFt,
         sinkCount: draft.summary.sinkCount,
         profileEdgeLf,
         miterEdgeLf,
@@ -109,6 +112,7 @@ export function QuotePhaseView({
       quoteAreaSqFt,
       countertopSqFt,
       splashAreaSqFt,
+      miterAreaSqFt,
       draft.summary.sinkCount,
       profileEdgeLf,
       miterEdgeLf,
@@ -133,10 +137,11 @@ export function QuotePhaseView({
     [option, pieces, placements, ppi, quoteSettings, slabs],
   );
 
+  /** Full installed estimate; row visibility toggles do not change this total. */
   const customerTotal = useMemo(() => {
     if (!commercial) return null;
-    return customerQuoteTotalFromBreakdown(commercial, customerExclusions);
-  }, [commercial, customerExclusions]);
+    return commercial.grandTotal;
+  }, [commercial]);
 
   const customerPerSqft =
     customerTotal != null && quoteAreaSqFt > 0 ? customerTotal / quoteAreaSqFt : null;
@@ -174,6 +179,15 @@ export function QuotePhaseView({
     () => pieces.reduce((sum, piece) => sum + (piece.sinks?.length ?? piece.sinkCount ?? 0), 0),
     [pieces]
   );
+  const visibleOutletCount = useMemo(
+    () =>
+      pieces.reduce((sum, piece) => {
+        const n = piece.outlets?.length ?? 0;
+        const leg = n > 0 ? 0 : Math.max(0, Math.floor(piece.outletCount ?? 0));
+        return sum + n + leg;
+      }, 0),
+    [pieces],
+  );
   const slabPlacementMode: "tabs" | "column" = fullscreen ? "column" : "tabs";
 
   return (
@@ -190,25 +204,44 @@ export function QuotePhaseView({
           </div>
           {customerTotal != null ? (
             <div className="ls-quote-overview-total">
-              <div className="ls-quote-overview-total-head">
-                <span className="ls-quote-overview-total-label">Installed estimate</span>
-                <button
-                  type="button"
-                  className="ls-quote-overview-visibility-btn"
-                  onClick={() => setShowOverviewPrice((value) => !value)}
-                  aria-pressed={showOverviewPrice}
-                  aria-label={showOverviewPrice ? "Hide installed estimate" : "Show installed estimate"}
-                  title={showOverviewPrice ? "Hide installed estimate" : "Show installed estimate"}
+              {customerPerSqft != null ? (
+                <div className="ls-quote-overview-total-block">
+                  <span className="ls-quote-overview-total-label">Per sq ft (layout area)</span>
+                  <span
+                    className={`ls-quote-overview-total-value ls-quote-overview-total-value--per-sqft${
+                      showOverviewPrice ? "" : " is-masked"
+                    }`}
+                    aria-label={
+                      showOverviewPrice
+                        ? `Per sq ft layout area ${formatMoney(customerPerSqft)} per sqft`
+                        : "Per sq ft hidden"
+                    }
+                  >
+                    {showOverviewPrice ? `${formatMoney(customerPerSqft)}/sqft` : "Hidden"}
+                  </span>
+                </div>
+              ) : null}
+              <div className="ls-quote-overview-total-block ls-quote-overview-total-block--grand">
+                <div className="ls-quote-overview-total-head">
+                  <span className="ls-quote-overview-total-label">Installed estimate</span>
+                  <button
+                    type="button"
+                    className="ls-quote-overview-visibility-btn"
+                    onClick={() => setShowOverviewPrice((value) => !value)}
+                    aria-pressed={showOverviewPrice}
+                    aria-label={showOverviewPrice ? "Hide quote pricing" : "Show quote pricing"}
+                    title={showOverviewPrice ? "Hide quote pricing" : "Show quote pricing"}
+                  >
+                    {showOverviewPrice ? <IconEyeOff /> : <IconEye />}
+                  </button>
+                </div>
+                <strong
+                  className={`ls-quote-overview-total-value${showOverviewPrice ? "" : " is-masked"}`}
+                  aria-label={showOverviewPrice ? `Installed estimate ${formatMoney(customerTotal)}` : "Installed estimate hidden"}
                 >
-                  {showOverviewPrice ? <IconEyeOff /> : <IconEye />}
-                </button>
+                  {showOverviewPrice ? formatMoney(customerTotal) : "Hidden"}
+                </strong>
               </div>
-              <strong
-                className={`ls-quote-overview-total-value${showOverviewPrice ? "" : " is-masked"}`}
-                aria-label={showOverviewPrice ? `Installed estimate ${formatMoney(customerTotal)}` : "Installed estimate hidden"}
-              >
-                {showOverviewPrice ? formatMoney(customerTotal) : "Hidden"}
-              </strong>
             </div>
           ) : null}
         </div>
@@ -228,6 +261,10 @@ export function QuotePhaseView({
           <div className="ls-quote-metric">
             <span className="ls-quote-metric-value">{visibleSinkCount}</span>
             <span className="ls-quote-metric-label">Sink cutouts</span>
+          </div>
+          <div className="ls-quote-metric">
+            <span className="ls-quote-metric-value">{visibleOutletCount}</span>
+            <span className="ls-quote-metric-label">Outlet cutouts</span>
           </div>
         </div>
         {unplacedPieceCount > 0 ? (
@@ -319,16 +356,26 @@ export function QuotePhaseView({
         </div>
         {analyticsOpen ? (
           <>
-            <p className="ls-muted ls-quote-exclude-legend">
-              Cost to us uses supplier/catalog material cost before markup and does not change with customer slab
-              pricing mode. Fabrication profit currently reflects the charged fabrication amount, and installation is
-              only reflected in gross profit, because labor cost is not modeled separately yet.
-            </p>
+            <details className="ls-quote-analytics-help">
+              <summary>How to read these metrics</summary>
+              <div className="ls-quote-analytics-help-body">
+                <strong>Cost to us</strong> is total supplier slab cost before markup. <strong>Vendor catalog / sq ft</strong>{" "}
+                is the catalog line price per sq ft from the selected vendor price.{" "}
+                <strong>Our cost / sq ft (material billed)</strong> is slab cost divided by the material charge area for this
+                layout (material used or full slabs, per pricing mode). Fabrication profit is the charged fab amount;
+                installation is only in gross profit because labor cost is not modeled separately.
+              </div>
+            </details>
             <div className="ls-quote-analytics-grid" aria-label="Quote cost analytics">
               <AnalyticsCard label="Cost to us" value={analytics.slabCostTotal != null ? formatMoney(analytics.slabCostTotal) : "—"} />
               <AnalyticsCard
-                label="Cost / sq ft"
-                value={analytics.slabCostPerSqft != null ? formatMoney(analytics.slabCostPerSqft) : "—"}
+                label="Vendor catalog / sq ft"
+                value={analytics.vendorCatalogPerSqft != null ? `${formatMoney(analytics.vendorCatalogPerSqft)}/sqft` : "—"}
+              />
+              <AnalyticsCard
+                label="Our cost / sq ft (material billed)"
+                value={analytics.slabCostPerSqft != null ? `${formatMoney(analytics.slabCostPerSqft)}/sqft` : "—"}
+                tone={materialBilledVsVendorTone(analytics.slabCostPerSqft, analytics.vendorCatalogPerSqft)}
               />
               <AnalyticsCard
                 label="Material markup profit"
@@ -359,6 +406,13 @@ export function QuotePhaseView({
                 value={analytics.utilizationPct != null ? `${analytics.utilizationPct.toFixed(1)}%` : "—"}
               />
             </div>
+            {commercial ? (
+              <QuoteAnalyticsVisuals
+                commercial={commercial}
+                grossMarginPct={analytics.grossMarginPct}
+                utilizationPct={analytics.utilizationPct}
+              />
+            ) : null}
           </>
         ) : null}
       </div>
@@ -368,7 +422,8 @@ export function QuotePhaseView({
           <div className="ls-quote-summary-head-text">
             <p className="ls-card-title">Commercial summary</p>
             <p className="ls-quote-exclude-legend ls-muted">
-              Checked lines are included in the customer-facing quote. Dollar lines adjust the installed estimate.
+              Click a row to include or exclude it from the customer-facing quote PDF/link. Installed estimate always uses
+              the full commercial total; toggles only change what is shown.
             </p>
           </div>
           <button
@@ -385,8 +440,8 @@ export function QuotePhaseView({
             <span className="ls-quote-material-mode-title">Slab pricing basis</span>
             <span className="ls-quote-material-mode-value">{materialChargeModeLabel}</span>
             <span className="ls-muted ls-quote-material-mode-hint">
-              Controlled from `Slab pricing` above. Fabrication and installation use fabricated sq ft (pieces +
-              splash, {fabricatedSqFt.toFixed(1)} est.).
+              Controlled from `Slab pricing` above. Fabrication and installation use fabricated sq ft (countertop +
+              splash + miter, {fabricatedSqFt.toFixed(1)} est.).
             </span>
           </div>
         </div>
@@ -497,7 +552,17 @@ export function QuotePhaseView({
                 rowId="sinkCutouts"
                 excluded={customerExclusions.sinkCutouts}
                 onExcludeChange={onSetCustomerExclusion}
-                dt="Sink cutouts"
+                dt={
+                  <>
+                    Cutouts{" "}
+                    {commercial.cutoutEachPrice > 0 ? (
+                      <span className="ls-quote-dl-sub">
+                        ({commercial.sinkCutoutCount} sink + {commercial.outletCutoutCount} outlet ×{" "}
+                        {formatMoney(commercial.cutoutEachPrice)})
+                      </span>
+                    ) : null}
+                  </>
+                }
                 dd={formatMoney(commercial.sinkAddOnTotal)}
               />
               <QuoteDlRow
@@ -506,7 +571,7 @@ export function QuotePhaseView({
                 onExcludeChange={onSetCustomerExclusion}
                 dt={
                   <>
-                    Splash add-on{" "}
+                    Backsplash polish{" "}
                     <span className="ls-quote-dl-sub">
                       ({commercial.splashLinearFeet.toFixed(1)} lf × {formatMoney(splashPerLf)})
                     </span>
@@ -528,9 +593,39 @@ export function QuotePhaseView({
                 dt="Miter add-on"
                 dd={formatMoney(commercial.miterAddOnTotal)}
               />
+              {commercial.lineItemRows.map((row) => (
+                <QuoteDlRow
+                  key={row.id}
+                  rowId="customLineItems"
+                  excluded={customerExclusions.customLineItems}
+                  onExcludeChange={onSetCustomerExclusion}
+                  dt={
+                    row.kind === "per_sqft_pieces" ? (
+                      <>
+                        {row.label}{" "}
+                        <span className="ls-quote-dl-sub">
+                          ({countertopSqFt.toFixed(1)} sq ft × {formatMoney(row.amount)})
+                        </span>
+                      </>
+                    ) : (
+                      row.label
+                    )
+                  }
+                  dd={formatMoney(row.total)}
+                />
+              ))}
             </>
           ) : null}
 
+          {customerPerSqft != null ? (
+            <QuoteDlRow
+              rowId="perSqFt"
+              excluded={customerExclusions.perSqFt}
+              onExcludeChange={onSetCustomerExclusion}
+              dt="Per sq ft (layout area)"
+              dd={`${formatMoney(customerPerSqft)}/sqft`}
+            />
+          ) : null}
           <QuoteDlRow
             rowId="installedEstimate"
             excluded={customerExclusions.installedEstimate}
@@ -538,23 +633,7 @@ export function QuotePhaseView({
             dt="Installed estimate"
             dd={customerTotal != null ? formatMoney(customerTotal) : "—"}
           />
-          {customerPerSqft != null ? (
-            <QuoteDlRow
-              rowId="perSqFt"
-              excluded={customerExclusions.perSqFt}
-              onExcludeChange={onSetCustomerExclusion}
-              dt="Per sq ft (layout area)"
-              dd={formatMoney(customerPerSqft)}
-            />
-          ) : null}
 
-          {commercial && customerTotal != null && customerTotal !== commercial.grandTotal ? (
-            <div className="ls-quote-dl-row ls-quote-dl-row--internal">
-              <div className="ls-quote-dl-exclude-spacer" aria-hidden />
-              <dt>Internal total (all lines)</dt>
-              <dd>{formatMoney(commercial.grandTotal)}</dd>
-            </div>
-          ) : null}
         </dl>
 
         {(job.assumptions || option.notes) ? (
@@ -594,45 +673,36 @@ function chargeModeLabel(mode: MaterialChargeMode): string {
   return mode === "full_slab" ? "Full slab" : "Material used";
 }
 
-function CustomerExcludeCheckbox({
-  rowId,
-  excluded,
-  onChange,
-}: {
-  rowId: LayoutQuoteCustomerRowId;
-  excluded: boolean;
-  onChange: (rowId: LayoutQuoteCustomerRowId, next: boolean) => void | Promise<void>;
-}) {
-  return (
-    <label className="ls-quote-exclude" title="Include in customer quote">
-      <input
-        type="checkbox"
-        className="ls-quote-exclude-input"
-        checked={!excluded}
-        onChange={(e) => void onChange(rowId, !e.target.checked)}
-        aria-label="Include in customer quote"
-      />
-      <span className="ls-quote-exclude-box" aria-hidden />
-    </label>
-  );
-}
-
 function QuoteDlRow({
   rowId,
   excluded,
   onExcludeChange,
   dt,
   dd,
+  className,
 }: {
   rowId: LayoutQuoteCustomerRowId;
   excluded: boolean;
   onExcludeChange: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
   dt: ReactNode;
   dd: ReactNode;
+  className?: string;
 }) {
+  const included = !excluded;
   return (
-    <div className="ls-quote-dl-row">
-      <CustomerExcludeCheckbox rowId={rowId} excluded={excluded} onChange={onExcludeChange} />
+    <div
+      className={`ls-quote-dl-row ls-quote-dl-row--selectable${included ? " is-included" : " is-excluded"}${className ? ` ${className}` : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={included}
+      onClick={() => void onExcludeChange(rowId, !excluded)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void onExcludeChange(rowId, !excluded);
+        }
+      }}
+    >
       <dt>{dt}</dt>
       <dd>{dd}</dd>
     </div>
@@ -646,7 +716,7 @@ function AnalyticsCard({
 }: {
   label: string;
   value: ReactNode;
-  tone?: "positive" | "negative";
+  tone?: "positive" | "negative" | "equal";
 }) {
   return (
     <div className={`ls-quote-analytics-card${tone ? ` is-${tone}` : ""}`}>

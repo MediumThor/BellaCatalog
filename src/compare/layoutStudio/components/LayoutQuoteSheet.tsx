@@ -151,22 +151,6 @@ export function LayoutQuoteSheet({
                     </button>
                   ) : null}
 
-                  {section.slabThumbs.length > 0 ? (
-                    <div className="ls-layout-quote-slab-grid" aria-label={`${section.title} slab thumbnails`}>
-                      {section.slabThumbs.map((slab, slabIdx) => (
-                        <button
-                          key={`${section.title}-slab-${slabIdx}`}
-                          type="button"
-                          className="ls-layout-quote-slab-card"
-                          onClick={() => setLightboxUrl(slab.imageUrl)}
-                        >
-                          <img src={slab.imageUrl} alt="" className="ls-layout-quote-slab-card-img" />
-                          <span className="ls-layout-quote-slab-card-lbl">{slab.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
                   {section.note ? (
                     <p className="ls-layout-quote-notes">
                       <strong>Notes:</strong> {section.note}
@@ -212,7 +196,10 @@ export function LayoutQuoteSheet({
           <h2 className="ls-layout-quote-h2">Estimate summary</h2>
           <dl className="ls-layout-quote-dl">
             {model.customerRows.map((row, idx) => (
-              <div key={`${row.label}-${idx}`}>
+              <div
+                key={`${row.label}-${idx}`}
+                className={row.tone === "internal" ? "ls-layout-quote-dl-row--internal" : undefined}
+              >
                 <dt>{row.label}</dt>
                 <dd>{renderDisplayValue(row.value)}</dd>
               </div>

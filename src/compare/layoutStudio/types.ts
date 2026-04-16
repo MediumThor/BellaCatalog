@@ -45,6 +45,17 @@ export type FaucetEvenHoleBias = "left" | "right";
  * A sink + faucet hole group placed on a piece (plan coordinates).
  * Positions are in the same space as `LayoutPiece.points` (inches on blank plan; source pixels when tracing).
  */
+/**
+ * Standard electrical outlet cutout on plan (2.25" × 4"); same coordinate frame as {@link PieceSinkCutout}.
+ */
+export interface PieceOutletCutout {
+  id: string;
+  centerX: number;
+  centerY: number;
+  /** Degrees: 0 = back edge toward -Y in local coordinates (matches sink convention). */
+  rotationDeg: number;
+}
+
 export interface PieceSinkCutout {
   id: string;
   /** Required label for quoting. */
@@ -87,6 +98,12 @@ export interface LayoutPiece {
   sinkCount: number;
   /** Placed sink + faucet groups (quoting); does not change piece area. */
   sinks?: PieceSinkCutout[];
+  /** Placed outlet cutouts (2.25" × 4"); quoted at same per-cut rate as sink cutouts. */
+  outlets?: PieceOutletCutout[];
+  /**
+   * @deprecated Legacy numeric count; prefer `outlets`. Still summed for quote if present.
+   */
+  outletCount?: number;
   notes?: string;
   edgeTags?: {
     /** Legacy / generic finished edges when no profile tags exist. */
@@ -159,6 +176,8 @@ export interface LayoutSummary {
   areaSqFt: number;
   finishedEdgeLf: number;
   sinkCount: number;
+  /** Sum of per-piece `outletCount` (electrical outlet cutouts). */
+  outletCount: number;
   /** Linear feet from edges tagged as profile (explicit quote semantics). */
   profileEdgeLf?: number;
   /** Linear feet from edges tagged as miter joints. */
@@ -285,6 +304,8 @@ export interface SavedLayoutStudioState {
 export interface LayoutSlab {
   id: string;
   imageUrl: string;
+  /** Ordered fallback list for slab image rendering; first loadable candidate wins. */
+  imageCandidates?: string[];
   label: string;
   widthIn: number;
   heightIn: number;

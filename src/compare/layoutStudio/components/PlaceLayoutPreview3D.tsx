@@ -12,6 +12,7 @@ import {
 import { flattenOutlineRingWithArcs, pieceHasArcEdges } from "../utils/blankPlanEdgeArc";
 import { isPlanStripPiece, stripFoldsDownFromHinge } from "../utils/pieceRoles";
 import { centroid, normalizeClosedRing } from "../utils/geometry";
+import { allOutletCutoutRingsPlanWorld } from "../utils/pieceOutlets";
 import { allSinkCutoutRingsPlanWorld, coordPerInchForPlan } from "../utils/pieceSinks";
 import { DEFAULT_SLAB_THICKNESS_IN } from "../utils/parseThicknessInches";
 import { piecePixelsPerInch, piecesHaveAnyScale } from "../utils/sourcePages";
@@ -644,7 +645,10 @@ export function PlaceLayoutPreview3D({
             }))
           : chordPts;
 
-        const holeRings = allSinkCutoutRingsPlanWorld(piece, pieces, pieceCoordPerInch);
+        const holeRings = [
+          ...allSinkCutoutRingsPlanWorld(piece, pieces, pieceCoordPerInch),
+          ...allOutletCutoutRingsPlanWorld(piece, pieces, pieceCoordPerInch),
+        ];
 
         const shape = buildShapeFromPlanWithHoles(pts, holeRings);
         let geom: THREE.ExtrudeGeometry;

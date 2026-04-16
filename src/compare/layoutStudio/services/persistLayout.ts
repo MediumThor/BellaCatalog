@@ -17,6 +17,7 @@ import {
 } from "../types";
 import { normalizeLegacyStripPieces } from "../utils/pieceRoles";
 import { ensurePlacementsForPieces } from "../utils/placements";
+import { splashLinearFeetFromPieces } from "../utils/commercialQuote";
 import { computeLayoutSummary } from "../utils/summary";
 import { slabsForOption } from "../utils/slabDimensions";
 
@@ -60,6 +61,20 @@ function draftToJobPlan(draft: SavedLayoutStudioState): SavedJobLayoutPlan {
   };
 }
 
+/**
+ * When copying a plan into another job, piece `materialOptionId` values still point at the source job’s
+ * option ids. Layout / Place filters pieces by the active material option and would hide all of them.
+ */
+export function stripMaterialOptionIdsFromJobPlan(plan: SavedJobLayoutPlan): SavedJobLayoutPlan {
+  return {
+    ...plan,
+    pieces: (plan.pieces ?? []).map((piece) => {
+      const { materialOptionId: _omit, ...rest } = piece;
+      return rest;
+    }),
+  };
+}
+
 /** @deprecated Legacy hydrate — use hydrateMergedLayoutState */
 export function hydrateLayoutFromOption(option: JobComparisonOptionRecord): SavedLayoutStudioState {
   return mergeSavedState(option.layoutStudio);
@@ -74,12 +89,36 @@ export function hydrateMergedLayoutState(
   areaId?: string | null
 ): SavedLayoutStudioState {
   const base = createDefaultLayoutState();
-  const selectedArea = areaId ? jobAreasForJob(job ?? { areaType: "", areas: [] }).find((area) => area.id === areaId) : null;
-  const areaPlan = selectedArea?.layoutStudioPlan ?? job?.layoutStudioPlan ?? null;
-  const areaPlacement =
-    (areaId ? option?.layoutAreaStates?.[areaId ?? ""]?.layoutStudioPlacement : null) ??
-    option?.layoutStudioPlacement ??
-    null;
+  const areas = jobAreasForJob(job ?? { areaType: "", areas: [] });
+  const selectedArea = areaId ? areas.find((area) => area.id === areaId) : null;
+  /** Jobs with a persisted `areas` array use per-area plans only; do not fall back to legacy `job.layoutStudioPlan`. */
+  const usePerAreaPlansOnly = Array.isArray(job?.areas) && job.areas.length > 0;
+  const areaPlan = (() => {
+    if (!areaId) {
+      return job?.layoutStudioPlan ?? null;
+    }
+    if (usePerAreaPlansOnly) {
+      const perArea = selectedArea?.layoutStudioPlan ?? null;
+      if (perArea != null) return perArea;
+      /** Single-area jobs may still have the canonical plan only on `job.layoutStudioPlan`. */
+      if (areas.length === 1 && job?.layoutStudioPlan) {
+        return job.layoutStudioPlan;
+      }
+      return null;
+    }
+    return selectedArea?.layoutStudioPlan ?? job?.layoutStudioPlan ?? null;
+  })();
+  /** Per-area placement when multi-area state exists; otherwise legacy single-area fallbacks. */
+  const areaPlacement: SavedOptionLayoutPlacement | null = (() => {
+    if (!areaId) {
+      return option?.layoutStudioPlacement ?? null;
+    }
+    const perArea = option?.layoutAreaStates?.[areaId]?.layoutStudioPlacement;
+    if (option?.layoutAreaStates != null) {
+      return perArea ?? null;
+    }
+    return perArea ?? option?.layoutStudioPlacement ?? null;
+  })();
 
   if (areaPlan) {
     const p = areaPlan;
@@ -104,15 +143,34 @@ export function hydrateMergedLayoutState(
         preview: { ...merged.preview, ...pl.preview },
       };
     } else if (option?.layoutStudio) {
-      const leg = mergeSavedState(option.layoutStudio);
-      merged = {
-        ...merged,
-        placements: leg.placements,
-        slabClones: leg.slabClones ?? [],
-        preview: { ...merged.preview, ...leg.preview },
-      };
+      const shouldUseLegacyOptionLayout =
+        !areaId || option?.layoutAreaStates == null;
+      if (shouldUseLegacyOptionLayout) {
+        const leg = mergeSavedState(option.layoutStudio);
+        merged = {
+          ...merged,
+          placements: leg.placements,
+          slabClones: leg.slabClones ?? [],
+          preview: { ...merged.preview, ...leg.preview },
+        };
+      }
     }
 
+    return recomputeDraftSummary(merged, option);
+  }
+
+  /** New or blank area: no plan saved yet — stay empty; do not hydrate from legacy option-only blob. */
+  if (usePerAreaPlansOnly && areaId && !areaPlan) {
+    let merged: SavedLayoutStudioState = base;
+    if (areaPlacement) {
+      const pl = areaPlacement;
+      merged = {
+        ...base,
+        placements: pl.placements ?? [],
+        slabClones: pl.slabClones ?? [],
+        preview: { ...base.preview, ...pl.preview },
+      };
+    }
     return recomputeDraftSummary(merged, option);
   }
 
@@ -212,6 +270,10 @@ export async function persistLayoutDraft(
     updatedAt: t,
     ...(withPlacements.slabClones?.length ? { slabClones: withPlacements.slabClones } : {}),
   };
+  const splashLinearFeet = splashLinearFeetFromPieces(
+    withPlacements.pieces,
+    withPlacements.calibration.pixelsPerInch,
+  );
 
   const patch: Partial<JobComparisonOptionRecord> = {
     layoutStudioPlacement: placementBlob,
@@ -241,7 +303,7 @@ export async function persistLayoutDraft(
     patch.layoutQuoteReadyAt = t;
     patch.layoutProfileLf = withPlacements.summary.profileEdgeLf ?? 0;
     patch.layoutMiterLf = withPlacements.summary.miterEdgeLf ?? 0;
-    patch.layoutSplashLf = 0;
+    patch.layoutSplashLf = splashLinearFeet;
     patch.layoutSplashCount = withPlacements.summary.splashPieceCount ?? 0;
     if (areaId && patch.layoutAreaStates?.[areaId]) {
       patch.layoutAreaStates = {
@@ -251,7 +313,7 @@ export async function persistLayoutDraft(
           layoutQuoteReadyAt: t,
           layoutProfileLf: withPlacements.summary.profileEdgeLf ?? 0,
           layoutMiterLf: withPlacements.summary.miterEdgeLf ?? 0,
-          layoutSplashLf: 0,
+          layoutSplashLf: splashLinearFeet,
           layoutSplashCount: withPlacements.summary.splashPieceCount ?? 0,
         },
       };

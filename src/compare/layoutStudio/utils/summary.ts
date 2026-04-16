@@ -62,6 +62,7 @@ export function computeLayoutSummary(input: {
   let profileEdgeLf = 0;
   let miterEdgeLf = 0;
   let sinkCount = 0;
+  let outletCount = 0;
   let splashPieceCount = 0;
   let splashAreaSqFt = 0;
   let miterPieceCount = 0;
@@ -74,6 +75,9 @@ export function computeLayoutSummary(input: {
     const placed = piece.sinks?.length ?? 0;
     const legacy = Math.max(0, Math.floor(piece.sinkCount || 0));
     sinkCount += placed > 0 ? placed : legacy;
+    const outletPlaced = piece.outlets?.length ?? 0;
+    const outletLegacy = outletPlaced > 0 ? 0 : Math.max(0, Math.floor(piece.outletCount ?? 0));
+    outletCount += outletPlaced + outletLegacy;
     const ppi = piecePixelsPerInch(piece, pixelsPerInch);
     if (!ppi) continue;
     anyCalibratedPiece = true;
@@ -118,6 +122,7 @@ export function computeLayoutSummary(input: {
     areaSqFt: Math.round(areaSqFt * 100) / 100,
     finishedEdgeLf: Math.round(finishedEdgeLf * 100) / 100,
     sinkCount,
+    outletCount,
     profileEdgeLf: Math.round(profileEdgeLf * 100) / 100,
     miterEdgeLf: Math.round(miterEdgeLf * 100) / 100,
     splashPieceCount,

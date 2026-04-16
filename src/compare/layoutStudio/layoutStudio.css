@@ -625,6 +625,21 @@
   box-shadow: 0 12px 32px rgba(201, 162, 39, 0.28);
 }
 
+.ls-btn-outline-accent {
+  background: transparent;
+  border: 1px solid rgba(232, 212, 139, 0.85);
+  color: rgba(232, 212, 139, 0.95);
+  box-shadow: none;
+}
+
+.ls-btn-outline-accent:hover {
+  background: transparent;
+  border-color: rgba(255, 240, 200, 0.92);
+  color: rgba(255, 240, 200, 0.98);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 18px rgba(201, 162, 39, 0.18);
+}
+
 .ls-btn-secondary {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
@@ -2669,6 +2684,35 @@ select.ls-input optgroup {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+/* Quote tab: center the Materials control between back (left) and actions (right). */
+.ls-quote-toolbar.ls-plan-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.65rem;
+}
+
+.ls-quote-toolbar-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  min-width: 0;
+}
+
+.ls-quote-toolbar-cluster--start {
+  justify-self: start;
+}
+
+.ls-quote-toolbar-cluster--end {
+  justify-self: end;
+}
+
+.ls-quote-toolbar-material.ls-place-toolbar-group-material {
+  justify-self: center;
+  width: auto;
+  max-width: min(26rem, calc(100vw - 10rem));
+}
+
 .ls-place-toolbar-group-summary {
   flex: 1 1 auto;
   min-width: 16rem;
@@ -3435,6 +3479,14 @@ select.ls-input optgroup {
   width: 100%;
   max-width: 100%;
   max-height: min(78vh, 920px);
+  position: relative;
+}
+
+.ls-place-stage-bg-img {
+  position: absolute;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
 }
 
 .ls-place-stage--slab-aspect .ls-place-svg {
@@ -3443,6 +3495,8 @@ select.ls-input optgroup {
   max-height: none;
   min-height: 0;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 /* Hug slab height: base .ls-place-stage uses flex:1 + min-height which can center the slab with empty space above. */
@@ -4161,6 +4215,27 @@ select.ls-input optgroup {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.ls-entry-area-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ls-entry-area-title {
+  margin: 0;
+  flex: 1;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(244, 241, 234, 0.96);
+  line-height: 1.25;
+  min-width: 0;
+}
+
 .ls-entry-area-head {
   display: flex;
   align-items: flex-start;
@@ -4306,10 +4381,6 @@ select.ls-input optgroup {
   gap: 0.45rem;
   flex-wrap: wrap;
   align-items: center;
-}
-
-.ls-entry-area-head-actions .ls-entry-icon-btn {
-  align-self: flex-end;
 }
 
 .ls-entry-area-head-actions .ls-entry-area-actions-main {
@@ -5037,6 +5108,14 @@ select.ls-input optgroup {
   flex: 1;
 }
 
+.ls-quote-phase > .glass-panel,
+.ls-quote-phase > .ls-quote-visual-grid {
+  width: 100%;
+  max-width: min(70vw, 100%);
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
 .ls-quote-place-dual {
   padding: 0.65rem 0.75rem 0.85rem;
   display: flex;
@@ -5083,8 +5162,27 @@ select.ls-input optgroup {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.2rem;
+  gap: 0.35rem;
   min-width: 170px;
+}
+
+.ls-quote-overview-total-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  width: 100%;
+}
+
+.ls-quote-overview-total-block--grand {
+  margin-top: 0.15rem;
+  padding-top: 0.5rem;
+}
+
+.ls-quote-overview-total-block + .ls-quote-overview-total-block--grand {
+  margin-top: 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .ls-quote-overview-total-head {
@@ -5136,6 +5234,12 @@ select.ls-input optgroup {
   color: rgba(255, 248, 231, 0.98);
 }
 
+.ls-quote-overview-total-value--per-sqft {
+  font-size: clamp(1.05rem, 1.35vw, 1.28rem);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
 .ls-quote-overview-total-value.is-masked {
   color: rgba(244, 241, 234, 0.64);
 }
@@ -5182,6 +5286,43 @@ select.ls-input optgroup {
   flex: 0 0 auto;
 }
 
+.ls-quote-analytics-help {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--ls-radius-md);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ls-quote-analytics-help summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(244, 241, 234, 0.72);
+  user-select: none;
+  list-style-position: outside;
+}
+
+.ls-quote-analytics-help summary::-webkit-details-marker {
+  color: rgba(244, 241, 234, 0.45);
+}
+
+.ls-quote-analytics-help[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.ls-quote-analytics-help-body {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(244, 241, 234, 0.48);
+}
+
+.ls-quote-analytics-help-body strong {
+  color: rgba(244, 241, 234, 0.68);
+  font-weight: 600;
+}
+
 .ls-quote-analytics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5208,6 +5349,11 @@ select.ls-input optgroup {
   background: rgba(86, 24, 24, 0.28);
 }
 
+.ls-quote-analytics-card.is-equal {
+  border-color: rgba(96, 165, 250, 0.38);
+  background: rgba(24, 40, 72, 0.32);
+}
+
 .ls-quote-analytics-label {
   font-size: 0.76rem;
   letter-spacing: 0.08em;
@@ -5227,6 +5373,201 @@ select.ls-input optgroup {
 
 .ls-quote-analytics-card.is-negative .ls-quote-analytics-value {
   color: rgba(255, 156, 156, 0.98);
+}
+
+.ls-quote-analytics-card.is-equal .ls-quote-analytics-value {
+  color: rgba(147, 197, 253, 0.98);
+}
+
+.ls-quote-analytics-visuals {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr);
+  gap: 1rem 1.25rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  align-items: start;
+}
+
+.ls-quote-analytics-callouts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0 0 0.15rem;
+}
+
+.ls-quote-analytics-callout {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--ls-radius-md);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.ls-quote-analytics-callout--danger {
+  background: rgba(86, 28, 28, 0.45);
+  border: 1px solid rgba(214, 90, 90, 0.35);
+  color: rgba(255, 200, 200, 0.92);
+}
+
+.ls-quote-analytics-callout--caution {
+  background: rgba(72, 58, 20, 0.42);
+  border: 1px solid rgba(212, 168, 72, 0.35);
+  color: rgba(245, 224, 170, 0.92);
+}
+
+@media (max-width: 960px) {
+  .ls-quote-analytics-visuals {
+    grid-template-columns: 1fr;
+    gap: 0.85rem 1rem;
+  }
+}
+
+.ls-quote-analytics-visual-block {
+  min-width: 0;
+}
+
+.ls-quote-analytics-visual-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(244, 241, 234, 0.88);
+}
+
+.ls-quote-analytics-visual-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(244, 241, 234, 0.45);
+}
+
+.ls-quote-analytics-visual-hint strong {
+  color: rgba(244, 241, 234, 0.72);
+  font-weight: 600;
+}
+
+.ls-quote-revenue-stack {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.ls-quote-revenue-stack-seg {
+  min-width: 0;
+  height: 100%;
+  transition: opacity 0.15s ease;
+}
+
+.ls-quote-revenue-stack-seg:hover {
+  opacity: 0.88;
+}
+
+.ls-quote-revenue-stack-seg--raw {
+  background: linear-gradient(180deg, rgba(125, 155, 196, 0.95), rgba(88, 112, 148, 0.9));
+}
+
+.ls-quote-revenue-stack-seg--markup {
+  background: linear-gradient(180deg, rgba(86, 200, 140, 0.95), rgba(42, 120, 82, 0.92));
+}
+
+.ls-quote-revenue-stack-seg--fab {
+  background: linear-gradient(180deg, rgba(230, 180, 86, 0.95), rgba(168, 118, 48, 0.9));
+}
+
+.ls-quote-revenue-stack-seg--install {
+  background: linear-gradient(180deg, rgba(176, 140, 230, 0.95), rgba(110, 78, 168, 0.9));
+}
+
+.ls-quote-revenue-stack-seg--addons {
+  background: linear-gradient(180deg, rgba(94, 189, 212, 0.95), rgba(42, 124, 148, 0.9));
+}
+
+.ls-quote-revenue-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.72rem;
+  color: rgba(244, 241, 234, 0.55);
+}
+
+.ls-quote-revenue-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ls-quote-revenue-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.ls-quote-revenue-legend-label {
+  letter-spacing: 0.02em;
+}
+
+.ls-quote-revenue-legend-pct {
+  font-variant-numeric: tabular-nums;
+  color: rgba(244, 241, 234, 0.72);
+}
+
+.ls-quote-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ls-quote-meter-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(244, 241, 234, 0.5);
+}
+
+.ls-quote-meter-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(244, 241, 234, 0.92);
+  font-variant-numeric: tabular-nums;
+}
+
+.ls-quote-meter-track {
+  height: 8px;
+  margin-top: 0.35rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.ls-quote-meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.ls-quote-meter-fill--margin {
+  background: linear-gradient(90deg, rgba(78, 200, 160, 0.35), rgba(78, 200, 160, 0.95));
+}
+
+.ls-quote-meter-fill--util {
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.35), rgba(96, 165, 250, 0.95));
 }
 
 .ls-quote-phase-header {
@@ -5450,8 +5791,54 @@ select.ls-input optgroup {
     grid-template-columns: 1fr;
   }
 
+  .ls-quote-analytics {
+    padding: 0.85rem 0.75rem;
+  }
+
   .ls-quote-analytics-grid {
     grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .ls-quote-analytics-card {
+    padding: 0.65rem 0.7rem;
+  }
+
+  .ls-quote-analytics-label {
+    font-size: 0.72rem;
+  }
+
+  .ls-quote-analytics-value {
+    font-size: 0.98rem;
+  }
+
+  .ls-quote-analytics-visuals {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    gap: 0.75rem 0.85rem;
+  }
+
+  .ls-quote-analytics-visual-title {
+    font-size: 0.78rem;
+  }
+
+  .ls-quote-analytics-visual-hint {
+    margin-bottom: 0.5rem;
+    font-size: 0.74rem;
+  }
+
+  .ls-quote-revenue-legend {
+    gap: 0.3rem 0.55rem;
+    font-size: 0.68rem;
+  }
+
+  .ls-quote-meter-head {
+    font-size: 0.72rem;
+    gap: 0.35rem;
+  }
+
+  .ls-quote-meter-value {
+    font-size: 0.88rem;
   }
 
   .ls-quote-material-rollup-grid {
@@ -5460,6 +5847,51 @@ select.ls-input optgroup {
 
   .ls-quote-overview-total {
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .ls-quote-analytics {
+    padding: 0.7rem 0.55rem;
+  }
+
+  .ls-quote-analytics-help {
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .ls-quote-analytics-help summary {
+    font-size: 0.76rem;
+  }
+
+  .ls-quote-analytics-help-body {
+    font-size: 0.74rem;
+  }
+
+  .ls-quote-analytics-grid {
+    gap: 0.45rem;
+  }
+
+  .ls-quote-analytics-visuals {
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    gap: 0.65rem;
+  }
+
+  .ls-quote-revenue-legend {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .ls-quote-revenue-legend li {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ls-quote-analytics-callout {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.5rem;
   }
 }
 
@@ -5650,9 +6082,42 @@ select.ls-input optgroup {
 }
 
 .ls-modal--quote-settings {
-  width: min(480px, 100%);
+  width: min(680px, calc(100vw - 2rem));
   max-height: min(88vh, 720px);
   overflow-y: auto;
+}
+
+.ls-modal-backdrop--nested-line-item {
+  z-index: 75;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.ls-modal--line-item {
+  width: min(420px, calc(100vw - 2rem));
+  max-height: min(85vh, 560px);
+  overflow-y: auto;
+}
+
+.ls-quote-line-item-modal-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.ls-quote-line-item-modal-lead {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.ls-quote-line-item-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
 }
 
 .ls-modal-backdrop--slab-pricing {
@@ -5871,6 +6336,153 @@ select.ls-input optgroup {
   color: rgba(244, 241, 234, 0.42);
 }
 
+.ls-quote-line-items-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.ls-quote-line-item-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.12rem;
+  text-align: right;
+}
+
+.ls-quote-line-item-label {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.ls-quote-line-item-amt {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.ls-quote-custom-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ls-quote-custom-lines-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ls-quote-custom-lines-add {
+  padding: 0.28rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.ls-quote-custom-lines-empty {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.ls-quote-custom-lines-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.ls-quote-custom-lines-table {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: var(--ls-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.ls-quote-custom-lines-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ls-quote-custom-lines-row:last-child {
+  border-bottom: none;
+}
+
+.ls-quote-custom-lines-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.ls-quote-custom-lines-row-label {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: rgba(248, 245, 238, 0.95);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-quote-custom-lines-row-meta {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(244, 241, 234, 0.45);
+}
+
+.ls-quote-custom-lines-row-amount {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(232, 212, 139, 0.92);
+  white-space: nowrap;
+}
+
+.ls-quote-custom-lines-row-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.ls-quote-custom-line-edit,
+.ls-quote-custom-line-remove {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .ls-quote-custom-lines-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .ls-quote-custom-lines-row-amount {
+    justify-self: start;
+  }
+
+  .ls-quote-custom-lines-row-actions {
+    justify-content: flex-start;
+  }
+}
+
 .ls-quote-dl {
   margin: 0.5rem 0 0;
   display: flex;
@@ -5880,15 +6492,57 @@ select.ls-input optgroup {
 
 .ls-quote-dl-row {
   display: grid;
-  grid-template-columns: 1.35rem minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem 0.65rem;
   align-items: start;
-  padding-bottom: 0.45rem;
+  padding: 0.35rem 0.4rem 0.45rem;
+  margin: 0 -0.4rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.ls-quote-dl-row--selectable {
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ls-quote-dl-row--selectable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ls-quote-dl-row--selectable:focus-visible {
+  outline: 2px solid rgba(232, 212, 139, 0.55);
+  outline-offset: 2px;
+}
+
+.ls-quote-dl-row--selectable.is-included dt,
+.ls-quote-dl-row--selectable.is-included dd {
+  color: rgba(255, 252, 245, 0.98);
+}
+
+.ls-quote-dl-row--selectable.is-excluded dt,
+.ls-quote-dl-row--selectable.is-excluded dd {
+  color: rgba(244, 241, 234, 0.38);
+}
+
+.ls-quote-dl-row--selectable.is-excluded .ls-quote-dl-sub {
+  color: rgba(244, 241, 234, 0.28);
 }
 
 .ls-quote-dl-row--internal {
   opacity: 0.88;
+  cursor: default;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.ls-quote-dl-row--internal.ls-quote-dl-row--selectable {
+  cursor: pointer;
+}
+
+.ls-quote-dl-row--internal:hover {
+  background: transparent;
 }
 
 .ls-quote-dl-row--internal dt {
@@ -6293,6 +6947,17 @@ select.ls-input optgroup {
   font-weight: 500;
   text-align: right;
   color: rgba(244, 241, 234, 0.92);
+}
+
+.ls-layout-quote-dl-row--internal dt {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: rgba(244, 241, 234, 0.38);
+}
+
+.ls-layout-quote-dl-row--internal dd {
+  color: rgba(244, 241, 234, 0.72);
 }
 
 .ls-layout-quote-value-list {

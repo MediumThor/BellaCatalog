@@ -14,12 +14,9 @@ import {
   type JobComparisonOptionRecord,
   type JobRecord,
 } from "../types/compareQuote";
+import { computeCurrentLayoutQuoteForOption } from "./layoutStudio/utils/currentQuote";
 import { formatMoney } from "../utils/priceHelpers";
 import { exportQuotePackage } from "../utils/exportQuotePackage";
-import {
-  computeQuotedInstallForCompareOption,
-  jobQuoteSquareFootage,
-} from "../utils/quotedPrice";
 
 export function QuoteSummaryPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -69,8 +66,6 @@ export function QuoteSummaryPage() {
     : null;
   const areaMetrics = (option: JobComparisonOptionRecord | null) =>
     selectedArea ? option?.layoutAreaStates?.[selectedArea.id] ?? null : null;
-  const quoteAreaForOption = (option: JobComparisonOptionRecord | null) =>
-    areaMetrics(option)?.layoutEstimatedAreaSqFt ?? option?.layoutEstimatedAreaSqFt ?? job?.squareFootage ?? 0;
   const areaOptions = useMemo(() => {
     if (!selectedArea) return options;
     if (!Array.isArray(selectedArea.associatedOptionIds)) return options;
@@ -88,15 +83,25 @@ export function QuoteSummaryPage() {
 
   const finalOptionId = explicitOptionId ?? selectedArea?.selectedOptionId ?? areaOptions[0]?.id ?? job.finalOptionId;
   const finalOpt = areaOptions.find((o) => o.id === finalOptionId) ?? null;
-  const finalQuoted = finalOpt
-    ? computeQuotedInstallForCompareOption({
-        jobSquareFootage: quoteAreaForOption(finalOpt),
-        priceUnit: finalOpt.priceUnit,
-        catalogLinePrice: finalOpt.selectedPriceValue,
-        slabQuantity: finalOpt.slabQuantity,
-      })
-    : null;
-  const jobQuoteSqFt = finalOpt ? quoteAreaForOption(finalOpt) : jobQuoteSquareFootage(job, areaOptions);
+  const areaQuotes = useMemo(
+    () =>
+      new Map(
+        areaOptions.map((option) => [
+          option.id,
+          computeCurrentLayoutQuoteForOption({
+            job,
+            option,
+            areaId: selectedArea?.id ?? null,
+          }),
+        ]),
+      ),
+    [areaOptions, job, selectedArea?.id]
+  );
+  const finalQuoted = finalOpt ? (areaQuotes.get(finalOpt.id) ?? null) : null;
+  const jobQuoteSqFt =
+    finalQuoted?.quoteAreaSqFt ??
+    Array.from(areaQuotes.values()).find((quote) => quote.quoteAreaSqFt > 0)?.quoteAreaSqFt ??
+    0;
   const printed = new Date().toLocaleString();
 
   const handleExport = async () => {
@@ -139,7 +144,7 @@ export function QuoteSummaryPage() {
   return (
     <div className="compare-page quote-summary">
       <div className="quote-summary-toolbar no-print">
-        <Link className="btn btn-ghost" to={`/compare/jobs/${job.id}`}>
+        <Link className="btn btn-ghost" to={`/layout/jobs/${job.id}`}>
           ← Back to job
         </Link>
         <div className="compare-actions">
@@ -252,11 +257,11 @@ export function QuoteSummaryPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt>Quoted (installed est.)</dt>
+                    <dt>Installed price</dt>
                     <dd>
-                      {finalQuoted?.quotedPerSqft != null ? (
+                      {finalQuoted?.customerPerSqft != null ? (
                         <>
-                          {formatMoney(finalQuoted.quotedPerSqft)}
+                          {formatMoney(finalQuoted.customerPerSqft)}
                           <span className="product-sub"> / sq ft</span>
                         </>
                       ) : (
@@ -265,10 +270,10 @@ export function QuoteSummaryPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt>Estimated quoted total</dt>
+                    <dt>Installed estimate</dt>
                     <dd>
                       <strong>
-                        {finalQuoted?.quotedTotal != null ? formatMoney(finalQuoted.quotedTotal) : "—"}
+                        {finalQuoted?.customerTotal != null ? formatMoney(finalQuoted.customerTotal) : "—"}
                       </strong>
                     </dd>
                   </div>
@@ -291,23 +296,31 @@ export function QuoteSummaryPage() {
                     <dl className="quote-dl">
                       <div>
                         <dt>Est. layout area</dt>
-                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedAreaSqFt ?? finalOpt.layoutEstimatedAreaSqFt ?? "—"} sq ft</dd>
+                        <dd>{finalQuoted?.displayMetrics.areaSqFt ?? "—"} sq ft</dd>
                       </div>
                       <div>
                         <dt>Est. finished edge</dt>
-                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedFinishedEdgeLf ?? finalOpt.layoutEstimatedFinishedEdgeLf ?? "—"} lin ft</dd>
+                        <dd>{finalQuoted?.displayMetrics.finishedEdgeLf ?? "—"} lin ft</dd>
                       </div>
                       <div>
                         <dt>Sinks (layout)</dt>
-                        <dd>{areaMetrics(finalOpt)?.layoutSinkCount ?? finalOpt.layoutSinkCount ?? "—"}</dd>
+                        <dd>{finalQuoted?.displayMetrics.sinkCount ?? "—"}</dd>
                       </div>
                       <div>
                         <dt>Est. slabs (layout)</dt>
-                        <dd>{areaMetrics(finalOpt)?.layoutEstimatedSlabCount ?? finalOpt.layoutEstimatedSlabCount ?? "—"}</dd>
+                        <dd>{finalQuoted?.displayMetrics.estimatedSlabCount ?? "—"}</dd>
+                      </div>
+                      <div>
+                        <dt>Backsplash polish</dt>
+                        <dd>
+                          {finalQuoted && finalQuoted.displayMetrics.splashLinearFeet > 0
+                            ? `${finalQuoted.displayMetrics.splashLinearFeet.toFixed(1)} lin ft`
+                            : "—"}
+                        </dd>
                       </div>
                     </dl>
                     <p className="product-sub">
-                      Installed totals above use layout area when available (see Est. layout area).
+                      Installed totals above use the current Layout Studio commercial quote.
                     </p>
                     <Link
                       className="btn btn-ghost btn-sm"
@@ -331,23 +344,18 @@ export function QuoteSummaryPage() {
             <h2 className="quote-block-title">Shortlisted options ({areaOptions.length})</h2>
             <ul className="quote-shortlist">
               {areaOptions.map((o) => {
-                const q = computeQuotedInstallForCompareOption({
-                  jobSquareFootage: quoteAreaForOption(o),
-                  priceUnit: o.priceUnit,
-                  catalogLinePrice: o.selectedPriceValue,
-                  slabQuantity: o.slabQuantity,
-                });
+                const q = areaQuotes.get(o.id) ?? null;
                 return (
                   <li key={o.id}>
                     {o.productName} — {o.vendor} —{" "}
-                    {q.quotedTotal != null ? formatMoney(q.quotedTotal) : "—"} est. quoted total
+                    {q?.customerTotal != null ? formatMoney(q.customerTotal) : "—"} installed estimate
                     {job.finalOptionId === o.id ? (
                       <span className="compare-final-pill"> Final</span>
                     ) : null}
                     {(areaMetrics(o)?.layoutUpdatedAt ?? o.layoutUpdatedAt) ? (
                       <span className="product-sub">
                         {" "}
-                        · Layout: {areaMetrics(o)?.layoutEstimatedAreaSqFt ?? o.layoutEstimatedAreaSqFt ?? "—"} sq ft (est.)
+                        · Layout: {q?.displayMetrics.areaSqFt ?? "—"} sq ft (est.)
                       </span>
                     ) : null}
                   </li>

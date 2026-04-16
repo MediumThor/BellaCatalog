@@ -1,4 +1,5 @@
-import type { SVGProps } from "react";
+import type { ComponentProps, SVGProps } from "react";
+import { GiChicken } from "react-icons/gi";
 
 /** Inline SVG icons for blank plan toolbar — matches Layout Studio theme. */
 
@@ -321,10 +322,6 @@ export function IconFullscreenExit(props: SVGProps<SVGSVGElement>) {
 }
 
 /** Auto nest / pack pieces on slab (bird silhouette). */
-export function IconAutoNestBird(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
-      <path d="M12 4.5c-2.5 0-4.5 1.6-5.2 3.8L4 6.5l1.2 3.5c-.1.4-.2.8-.2 1.2 0 3.3 2.7 6 6 6 1.2 0 2.3-.4 3.2-1L20 19l-2.5-4.5c.9-1 1.5-2.3 1.5-3.7 0-3-2.5-5.3-5.5-5.3h-.5zm-.3 2.8c.8 0 1.4.6 1.4 1.4s-.6 1.4-1.4 1.4-1.4-.6-1.4-1.4.6-1.4 1.4-1.4z" />
-    </svg>
-  );
+export function IconAutoNestBird(props: ComponentProps<typeof GiChicken>) {
+  return <GiChicken aria-hidden focusable="false" {...props} />;
 }

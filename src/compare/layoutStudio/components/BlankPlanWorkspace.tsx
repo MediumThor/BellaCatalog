@@ -13,6 +13,7 @@ import type {
   LayoutPiece,
   LayoutPoint,
   LayoutSlab,
+  PieceOutletCutout,
   PiecePlacement,
   SnapAlignmentMode,
   TraceTool,
@@ -109,9 +110,20 @@ import {
   pointInPolygon,
 } from "../utils/geometry";
 import {
+  BLANK_VIEW_ZOOM_MAX,
+  BLANK_VIEW_ZOOM_MIN,
+  blankPlanZoomDisplayPct,
+} from "../utils/viewZoom";
+import {
   slabTextureRenderParams,
   shouldFillPieceWithSlabTexture,
 } from "../utils/slabLayoutTexture";
+import {
+  assignOutletsToSplitPieces,
+  clampOutletCenter,
+  hitTestOutletAtWorld,
+  mergeOutletsForJoin,
+} from "../utils/pieceOutlets";
 import {
   assignSinksToSplitPieces,
   clampSinkCenter,
@@ -119,6 +131,7 @@ import {
   hitTestSinkAtWorld,
   mergeSinksForJoin,
 } from "../utils/pieceSinks";
+import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 import {
   IconZoomFitSelection,
@@ -128,16 +141,10 @@ import {
   IconZoomResetView,
 } from "./PlanToolbarIcons";
 /** Fixed drafting area in plan inches; view zoom/pan does not depend on piece positions. */
-export const BLANK_PLAN_WORLD_W_IN = 480;
-export const BLANK_PLAN_WORLD_H_IN = 240;
-export const BLANK_VIEW_ZOOM_MIN = 0.5;
-export const BLANK_VIEW_ZOOM_MAX = 5;
+const BLANK_PLAN_WORLD_W_IN = 480;
+const BLANK_PLAN_WORLD_H_IN = 240;
 const VIEW_ZOOM_STEP = 0.25;
 
-/** Plan zoom readout: raw scale % is halved (5× max → “250%”). */
-export function blankPlanZoomDisplayPct(viewZoom: number): number {
-  return Math.round(viewZoom * 50);
-}
 /** Blank plan coordinates are inches; sink templates use the same units. */
 const BLANK_COORD_PER_INCH = 1;
 
@@ -164,6 +171,68 @@ function bulgeArrowTriangleD(
 function formatDimInches(n: number): string {
   if (!Number.isFinite(n)) return "";
   return String(Math.round(n * 1000) / 1000);
+}
+
+/**
+ * Source-traced pieces often come into the plan canvas a hair off-axis after scaling to inches.
+ * Accept a small drift so plan-mode seams behave like trace-mode seams.
+ */
+function seamGeometryFromPlanEdge(
+  worldRing: LayoutPoint[],
+  edgeIndex: number,
+): SeamFromEdgeGeometry | null {
+  const strict = seamGeometryFromAxisAlignedEdge(worldRing, edgeIndex);
+  if (strict) return strict;
+  const ring = normalizeClosedRing(worldRing);
+  const n = ring.length;
+  if (n < 3) return null;
+  const i = edgeIndex % n;
+  const a = ring[i]!;
+  const b = ring[(i + 1) % n]!;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  if (absDx < 1e-6 && absDy < 1e-6) return null;
+
+  const axisTolIn = 0.25;
+  const horizontalish = absDx >= absDy && absDy <= axisTolIn;
+  const verticalish = absDy > absDx && absDx <= axisTolIn;
+  if (!horizontalish && !verticalish) return null;
+
+  if (horizontalish) {
+    const xMin = Math.min(a.x, b.x);
+    const xMax = Math.max(a.x, b.x);
+    const span = xMax - xMin;
+    if (span <= 1e-6) return null;
+    const xSeam = (xMin + xMax) / 2;
+    return {
+      kind: "vertical",
+      xMin,
+      xMax,
+      xSeam,
+      dimA: xSeam - xMin,
+      dimB: xMax - xSeam,
+      labelA: "Left of seam",
+      labelB: "Right of seam",
+    };
+  }
+
+  const yMin = Math.min(a.y, b.y);
+  const yMax = Math.max(a.y, b.y);
+  const span = yMax - yMin;
+  if (span <= 1e-6) return null;
+  const ySeam = (yMin + yMax) / 2;
+  return {
+    kind: "horizontal",
+    yMin,
+    yMax,
+    ySeam,
+    dimA: ySeam - yMin,
+    dimB: yMax - ySeam,
+    labelA: "Upper side",
+    labelB: "Lower side",
+  };
 }
 
 function snapPlanPointToNearestInch(p: LayoutPoint): LayoutPoint {
@@ -275,6 +344,8 @@ type Props = {
   onSetSplashBottomEdge?: (edge: EdgeSel) => void;
   /** Blank plan: add a sink aligned to the selected edge (Layout Studio). */
   onRequestAddSinkForEdge?: (edge: EdgeSel) => void;
+  /** Blank plan: add a standard 2.25" × 4" outlet cutout from the selected edge. */
+  onRequestAddOutletForEdge?: (edge: EdgeSel) => void;
   onToggleProfileEdge: (sel: EdgeSel) => void;
   /** When set with placements + PPI, pieces placed on slabs show slab image clipped to the polygon (layout ↔ place sync). */
   slabs?: LayoutSlab[];
@@ -482,6 +553,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       onRequestSplashForEdge,
       onSetSplashBottomEdge,
       onRequestAddSinkForEdge,
+      onRequestAddOutletForEdge,
       onToggleProfileEdge,
       slabs,
       placements,
@@ -529,6 +601,13 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const [sinkDrag, setSinkDrag] = useState<{
       pieceId: string;
       sinkId: string;
+      start: LayoutPoint;
+      startCx: number;
+      startCy: number;
+    } | null>(null);
+    const [outletDrag, setOutletDrag] = useState<{
+      pieceId: string;
+      outletId: string;
       start: LayoutPoint;
       startCx: number;
       startCy: number;
@@ -1030,11 +1109,12 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         return;
       }
       const world = planDisplayPoints(pc, pieces);
-      const geom = seamGeometryFromAxisAlignedEdge(
+      const geom = seamGeometryFromPlanEdge(
         world,
         selectedEdge.edgeIndex,
       );
       if (!geom) {
+        window.alert("Seams can only be added from a straight horizontal or vertical edge.");
         return;
       }
       setSeamModal({
@@ -1087,6 +1167,16 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         const splitLegacy = legacyCount > 0;
         const sA = splitLegacy ? Math.floor(legacyCount / 2) : 0;
         const sB = splitLegacy ? legacyCount - sA : 0;
+        const existingOutlets = targetPiece.outlets ?? [];
+        const legacyOutletCount =
+          existingOutlets.length > 0 ? 0 : Math.max(0, Math.floor(targetPiece.outletCount ?? 0));
+        const { outletsA, outletsB } =
+          existingOutlets.length > 0
+            ? assignOutletsToSplitPieces(existingOutlets, ringA, ringB, ox, oy)
+            : { outletsA: [] as PieceOutletCutout[], outletsB: [] as PieceOutletCutout[] };
+        const splitOutletLegacy = legacyOutletCount > 0;
+        const outletCountA = splitOutletLegacy ? Math.floor(legacyOutletCount / 2) : 0;
+        const outletCountB = splitOutletLegacy ? legacyOutletCount - outletCountA : 0;
         const splitNameA = isPlanStripPiece(targetPiece)
           ? `${targetPiece.name} A`
           : nextPieceName(cur);
@@ -1099,6 +1189,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           name: splitNameA,
           points: localA,
           sinkCount: splitLegacy ? sA : 0,
+          outlets: existingOutlets.length > 0 ? outletsA : undefined,
+          outletCount: splitOutletLegacy ? outletCountA : undefined,
           sinks: existingSinks.length > 0 ? sinksA : undefined,
           manualDimensions: undefined,
           shapeKind: "polygon",
@@ -1110,6 +1202,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           name: splitNameB,
           points: localB,
           sinkCount: splitLegacy ? sB : 0,
+          outlets: existingOutlets.length > 0 ? outletsB : undefined,
+          outletCount: splitOutletLegacy ? outletCountB : undefined,
           sinks: existingSinks.length > 0 ? sinksB : undefined,
           manualDimensions: undefined,
           shapeKind: "polygon",
@@ -1827,12 +1921,25 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           (anchorPc.sinks?.length ?? 0) + (movePc.sinks?.length ?? 0) === 0
             ? anchorPc.sinkCount + movePc.sinkCount
             : 0;
+        const anchorOutlets = anchorPc.outlets ?? [];
+        const moveOutlets = movePc.outlets ?? [];
+        const mergedOutletList =
+          anchorOutlets.length > 0 || moveOutlets.length > 0
+            ? [...anchorOutlets, ...mergeOutletsForJoin(anchorPc, movePc, moveOutlets)]
+            : undefined;
+        const legacyOutlets =
+          anchorOutlets.length + moveOutlets.length === 0
+            ? Math.max(0, Math.floor(anchorPc.outletCount ?? 0)) +
+              Math.max(0, Math.floor(movePc.outletCount ?? 0))
+            : 0;
         const mergedPiece: LayoutPiece = {
           ...anchorPc,
           points: local,
           shapeKind: "polygon",
           manualDimensions: undefined,
           sinkCount: mergedSinks ? 0 : legacySinks,
+          outlets: mergedOutletList,
+          outletCount: legacyOutlets > 0 ? legacyOutlets : undefined,
           sinks: mergedSinks,
           edgeTags: undefined,
           /** New ring edges do not correspond to anchor/move arc metadata — stale sagittas skew slab centroid. */
@@ -1924,9 +2031,25 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
             }
           }
         }
-        /** Sink drag (selected piece only; vertices stay priority) */
+        /** Outlet / sink drag (selected piece only; vertices stay priority) */
         if (selectedPieceId) {
           const sp = pieces.find((x) => x.id === selectedPieceId);
+          if (sp?.outlets?.length) {
+            const hitO = hitTestOutletAtWorld(p, sp, pieces, BLANK_COORD_PER_INCH);
+            if (hitO) {
+              onPieceDragStart?.();
+              sinkDragOrthoAxisRef.current = null;
+              setOutletDrag({
+                pieceId: sp.id,
+                outletId: hitO.id,
+                start: { ...p },
+                startCx: hitO.centerX,
+                startCy: hitO.centerY,
+              });
+              e.preventDefault();
+              return;
+            }
+          }
           if (sp && sp.sinks?.length && !isPlanStripPiece(sp)) {
             const hit = hitTestSinkAtWorld(
               p,
@@ -2010,6 +2133,49 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         );
         return;
       }
+      if (outletDrag) {
+        let dx = p.x - outletDrag.start.x;
+        let dy = p.y - outletDrag.start.y;
+        if (dx !== 0 || dy !== 0) {
+          if (sinkDragOrthoAxisRef.current == null) {
+            sinkDragOrthoAxisRef.current =
+              Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+          }
+          if (sinkDragOrthoAxisRef.current === "x") dy = 0;
+          else if (sinkDragOrthoAxisRef.current === "y") dx = 0;
+        }
+        const pc = piecesRef.current.find((x) => x.id === outletDrag.pieceId);
+        if (!pc) return;
+        const outlet = pc.outlets?.find((o) => o.id === outletDrag.outletId);
+        if (!outlet) return;
+        const nextCenter = clampOutletCenter(
+          outlet,
+          pc,
+          piecesRef.current,
+          BLANK_COORD_PER_INCH,
+          outletDrag.startCx + dx,
+          outletDrag.startCy + dy,
+        );
+        const nextPieces = piecesRef.current.map((piece) =>
+          piece.id === pc.id
+            ? {
+                ...piece,
+                outlets: piece.outlets?.map((o) =>
+                  o.id === outlet.id
+                    ? {
+                        ...o,
+                        centerX: nextCenter.centerX,
+                        centerY: nextCenter.centerY,
+                      }
+                    : o,
+                ),
+              }
+            : piece,
+        );
+        (onPiecesChangeLive ?? onPiecesChange)(nextPieces);
+        setHoverEdge(null);
+        return;
+      }
       if (sinkDrag) {
         let dx = p.x - sinkDrag.start.x;
         let dy = p.y - sinkDrag.start.y;
@@ -2076,6 +2242,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
         tool === "select" &&
         !vertexDrag &&
         !dragRect &&
+        !outletDrag &&
         !sinkDrag &&
         !selectFilletMarquee
       ) {
@@ -2275,6 +2442,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       setDragRect(null);
       setVertexDrag(null);
       setPieceDrag(null);
+      sinkDragOrthoAxisRef.current = null;
+      setOutletDrag(null);
       setSinkDrag(null);
     };
 
@@ -2850,6 +3019,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
               setZoomBoxDrag(null);
               setVertexDrag(null);
               setPieceDrag(null);
+              setOutletDrag(null);
               setSinkDrag(null);
             }}
           >
@@ -3102,6 +3272,18 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                       piece={piece}
                       allPieces={pieces}
                       coordPerInch={BLANK_COORD_PER_INCH}
+                      interactive={false}
+                      appearance="cutout"
+                    />
+                  ) : null}
+                  {(piece.outlets?.length ?? 0) > 0 ? (
+                    <PieceOutletCutoutsSvg
+                      piece={piece}
+                      allPieces={pieces}
+                      coordPerInch={BLANK_COORD_PER_INCH}
+                      selectedOutletId={
+                        outletDrag?.pieceId === piece.id ? outletDrag.outletId : null
+                      }
                       interactive={false}
                       appearance="cutout"
                     />
@@ -4032,9 +4214,26 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
                   Sink
                 </button>
               ) : null}
+              {onRequestAddOutletForEdge ? (
+                <button
+                  type="button"
+                  className="ls-edge-popover-btn"
+                  title="2.25″ × 4″ outlet cutout"
+                  onClick={() => onRequestAddOutletForEdge(selectedEdge)}
+                >
+                  Outlet
+                </button>
+              ) : null}
               {(() => {
                 const pe = pieces.find((p) => p.id === selectedEdge.pieceId);
-                return pe && !isPlanStripPiece(pe);
+                return (
+                  pe &&
+                  !isPlanStripPiece(pe) &&
+                  seamGeometryFromPlanEdge(
+                    planDisplayPoints(pe, pieces),
+                    selectedEdge.edgeIndex,
+                  )
+                );
               })() ? (
                 <button
                   type="button"

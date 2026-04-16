@@ -13,6 +13,7 @@ import {
   sampleArcEdgePointsForStroke,
 } from "../utils/blankPlanEdgeArc";
 import { planDisplayPoints, planWorldOffset } from "../utils/blankPlanGeometry";
+import { seamGeometryFromAxisAlignedEdge, type SeamFromEdgeGeometry } from "../utils/blankPlanPolygonOps";
 import { centroid, ensureClosedRing, normalizeClosedRing } from "../utils/geometry";
 import {
   slabTextureRenderParams,
@@ -22,8 +23,11 @@ import {
 import { edgeStripLetterLabelByPieceId, pieceLabelByPieceId } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import { clipEdgeStrokeSegmentsForKitchenSinks, coordPerInchForPlan } from "../utils/pieceSinks";
+import { tracePiecesViewBoxDims } from "../utils/tracePiecesViewBox";
 import { piecePixelsPerInch, piecesHaveAnyScale } from "../utils/sourcePages";
+import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
+import type { PlaceSeamRequest } from "./PlaceWorkspace";
 
 const BLANK_PLAN_WORLD_W_IN = 480;
 const BLANK_PLAN_WORLD_H_IN = 240;
@@ -54,6 +58,10 @@ type Props = {
   variant?: "inline" | "fullscreen";
   /** When set, clicking a piece outline places it on the active slab (Place phase). */
   onPieceActivate?: (pieceId: string) => void;
+  /** Layout phase seam mode: hover eligible edges and click to open seam placement. */
+  seamMode?: boolean;
+  /** Commit a seam split requested from live layout preview. */
+  onPlaceSeamRequest?: (request: PlaceSeamRequest) => boolean;
   /** Hide +/- controls when embedding a static preview (e.g. Quote phase). */
   showZoomControls?: boolean;
   /** Disable wheel/drag zoom/pan interactions for static previews. */
@@ -63,6 +71,11 @@ type Props = {
   /** Optional override for piece label color in this preview. */
   labelColor?: string;
 };
+
+function formatDimInches(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  return String(Math.round(n * 1000) / 1000);
+}
 
 function blankViewBoxDims(pieces: LayoutPiece[]): { minX: number; minY: number; width: number; height: number } {
   let minX = Infinity;
@@ -88,44 +101,6 @@ function blankViewBoxDims(pieces: LayoutPiece[]): { minX: number; minY: number; 
   const width = Math.max(maxX - minX, 48);
   const height = Math.max(maxY - minY, 48);
   return { minX, minY, width, height };
-}
-
-function sourceViewBoxDims(
-  pieces: LayoutPiece[],
-  tracePlanWidth?: number | null,
-  tracePlanHeight?: number | null,
-): { minX: number; minY: number; width: number; height: number } {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const piece of pieces) {
-    for (const point of piece.points) {
-      minX = Math.min(minX, point.x);
-      minY = Math.min(minY, point.y);
-      maxX = Math.max(maxX, point.x);
-      maxY = Math.max(maxY, point.y);
-    }
-  }
-  if (!Number.isFinite(minX)) {
-    return {
-      minX: 0,
-      minY: 0,
-      width: Math.max(tracePlanWidth ?? 0, 1),
-      height: Math.max(tracePlanHeight ?? 0, 1),
-    };
-  }
-  const pad = 48;
-  minX -= pad;
-  minY -= pad;
-  maxX += pad;
-  maxY += pad;
-  return {
-    minX,
-    minY,
-    width: Math.max(maxX - minX, 96),
-    height: Math.max(maxY - minY, 96),
-  };
 }
 
 function piecePathD(piece: LayoutPiece, workspaceKind: "blank" | "source", allPieces: LayoutPiece[]): string {
@@ -180,6 +155,8 @@ export function PlaceLayoutPreview({
   previewInstanceId = "inline",
   variant = "inline",
   onPieceActivate,
+  seamMode = false,
+  onPlaceSeamRequest,
   showZoomControls = true,
   allowViewportInteraction = true,
   showSinkLabels = true,
@@ -230,6 +207,15 @@ export function PlaceLayoutPreview({
 
   const pieceLabelById = useMemo(() => pieceLabelByPieceId(pieces), [pieces]);
   const stripLetterLabelById = useMemo(() => edgeStripLetterLabelByPieceId(pieces), [pieces]);
+  const [hoverSeamEdge, setHoverSeamEdge] = useState<{ pieceId: string; edgeIndex: number } | null>(null);
+  const [seamModal, setSeamModal] = useState<{
+    pieceId: string;
+    edgeIndex: number;
+    geometry: SeamFromEdgeGeometry;
+    valA: string;
+    valB: string;
+    error?: string;
+  } | null>(null);
 
   const traceDims = useMemo(() => {
     let maxX = 0;
@@ -247,7 +233,7 @@ export function PlaceLayoutPreview({
 
   const blankVb = useMemo(() => blankViewBoxDims(pieces), [pieces]);
   const sourceVb = useMemo(
-    () => sourceViewBoxDims(pieces, tracePlanWidth, tracePlanHeight),
+    () => tracePiecesViewBoxDims(pieces, tracePlanWidth, tracePlanHeight),
     [pieces, tracePlanHeight, tracePlanWidth],
   );
 
@@ -295,6 +281,7 @@ export function PlaceLayoutPreview({
   }`;
 
   const coordPerInch = coordPerInchForPlan(workspaceKind, pixelsPerInch);
+  const pieceActivate = seamMode ? undefined : onPieceActivate;
 
   /** Blank plan uses inch space; slab texture math still expects a positive PPI for catalog slabs. */
   const effectivePpi =
@@ -327,6 +314,21 @@ export function PlaceLayoutPreview({
     resizeObserver.observe(viewport);
     return () => resizeObserver.disconnect();
   }, [isFullscreen]);
+
+  useEffect(() => {
+    if (seamMode) return;
+    setHoverSeamEdge(null);
+    setSeamModal(null);
+  }, [seamMode]);
+
+  useEffect(() => {
+    if (!seamModal) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSeamModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [seamModal]);
 
   useEffect(() => {
     if (isFullscreen) return;
@@ -643,7 +645,7 @@ export function PlaceLayoutPreview({
 
           /** When slab texture is clipped in, avoid opaque fill — but keep a transparent fill when clickable so the hit target exists (`fill="none"` does not receive pointer events). */
           const fill = placedMapped
-            ? onPieceActivate
+            ? pieceActivate
               ? "transparent"
               : "none"
             : isStrip
@@ -698,6 +700,18 @@ export function PlaceLayoutPreview({
           const ringCen = centroid(ringOpen);
           const { ox: arcOx, oy: arcOy } = planWorldOffset(piece, pieces);
 
+          const seamableEdges =
+            seamMode && !isStrip && placement?.placed && placement.slabId
+              ? ringOpen.flatMap((_, ei) => {
+                  const geometry = seamGeometryFromAxisAlignedEdge(ringOpen, ei);
+                  if (!geometry) return [];
+                  const a = ringOpen[ei];
+                  const b = ringOpen[(ei + 1) % ringOpen.length];
+                  if (!a || !b) return [];
+                  return [{ edgeIndex: ei, geometry, a, b }];
+                })
+              : [];
+
           return (
             <g key={piece.id}>
               {placedMapped ? (
@@ -732,16 +746,16 @@ export function PlaceLayoutPreview({
                 fill={fill}
                 stroke="none"
                 style={
-                  onPieceActivate
+                  pieceActivate
                     ? { cursor: "pointer", pointerEvents: "auto" }
                     : { pointerEvents: "none" }
                 }
                 onClick={
-                  onPieceActivate
+                  pieceActivate
                     ? (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        onPieceActivate(piece.id);
+                        pieceActivate(piece.id);
                       }
                     : undefined
                 }
@@ -783,15 +797,76 @@ export function PlaceLayoutPreview({
                   />
                 ));
               })}
+              {seamableEdges.map((edge) => {
+                const highlighted =
+                  (hoverSeamEdge?.pieceId === piece.id && hoverSeamEdge.edgeIndex === edge.edgeIndex) ||
+                  (seamModal?.pieceId === piece.id && seamModal.edgeIndex === edge.edgeIndex);
+                return (
+                  <g key={`${piece.id}-seam-${edge.edgeIndex}`}>
+                    <line
+                      x1={edge.a.x}
+                      y1={edge.a.y}
+                      x2={edge.b.x}
+                      y2={edge.b.y}
+                      stroke="transparent"
+                      strokeWidth={Math.max(edgeStrokeW(edge.edgeIndex) * 8, 10)}
+                      strokeLinecap="round"
+                      style={{ cursor: "crosshair" }}
+                      pointerEvents="stroke"
+                      onPointerEnter={() => setHoverSeamEdge({ pieceId: piece.id, edgeIndex: edge.edgeIndex })}
+                      onPointerMove={() => setHoverSeamEdge({ pieceId: piece.id, edgeIndex: edge.edgeIndex })}
+                      onPointerLeave={() =>
+                        setHoverSeamEdge((prev) =>
+                          prev?.pieceId === piece.id && prev.edgeIndex === edge.edgeIndex ? null : prev
+                        )
+                      }
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setHoverSeamEdge({ pieceId: piece.id, edgeIndex: edge.edgeIndex });
+                        setSeamModal({
+                          pieceId: piece.id,
+                          edgeIndex: edge.edgeIndex,
+                          geometry: edge.geometry,
+                          valA: formatDimInches(edge.geometry.dimA),
+                          valB: formatDimInches(edge.geometry.dimB),
+                        });
+                      }}
+                    />
+                    {highlighted ? (
+                      <line
+                        x1={edge.a.x}
+                        y1={edge.a.y}
+                        x2={edge.b.x}
+                        y2={edge.b.y}
+                        stroke="rgba(232, 64, 64, 0.98)"
+                        strokeWidth={Math.max(edgeStrokeW(edge.edgeIndex) * 2.2, 2.2)}
+                        strokeLinecap="round"
+                        pointerEvents="none"
+                      />
+                    ) : null}
+                  </g>
+                );
+              })}
               {!isPlanStripPiece(piece) ? (
-                <PieceSinkCutoutsSvg
-                  piece={piece}
-                  allPieces={pieces}
-                  coordPerInch={coordPerInch}
-                  showLabels={showSinkLabels}
-                  interactive={false}
-                  appearance="cutout"
-                />
+                <>
+                  <PieceSinkCutoutsSvg
+                    piece={piece}
+                    allPieces={pieces}
+                    coordPerInch={coordPerInch}
+                    showLabels={showSinkLabels}
+                    interactive={false}
+                    appearance="cutout"
+                  />
+                  <PieceOutletCutoutsSvg
+                    piece={piece}
+                    allPieces={pieces}
+                    coordPerInch={coordPerInch}
+                    showLabels={showSinkLabels}
+                    interactive={false}
+                    appearance="cutout"
+                  />
+                </>
               ) : null}
               {showLabels ? (
                 <text
@@ -817,6 +892,113 @@ export function PlaceLayoutPreview({
           </svg>
         </div>
       </div>
+      {seamModal ? (
+        <div
+          className="ls-seam-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`ls-place-preview-seam-modal-title-${pid}`}
+          onClick={() => setSeamModal(null)}
+        >
+          <div className="ls-seam-modal glass-panel" onClick={(e) => e.stopPropagation()}>
+            <h2 id={`ls-place-preview-seam-modal-title-${pid}`} className="ls-seam-modal-title">
+              Place seam
+            </h2>
+            <p className="ls-seam-modal-sub">
+              The seam stays perpendicular to the selected plan edge. Edit one side and the other updates so both
+              dimensions add up to that edge length.
+            </p>
+            <div className="ls-seam-modal-fields">
+              <label className="ls-seam-modal-field">
+                {seamModal.geometry.labelA} (in)
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.125}
+                  step={0.125}
+                  value={seamModal.valA}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const g = seamModal.geometry;
+                    const total = g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const n = parseFloat(v);
+                    setSeamModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            valA: v,
+                            valB: Number.isFinite(n) ? formatDimInches(total - n) : prev.valB,
+                            error: undefined,
+                          }
+                        : prev
+                    );
+                  }}
+                />
+              </label>
+              <label className="ls-seam-modal-field">
+                {seamModal.geometry.labelB} (in)
+                <input
+                  className="ls-input"
+                  type="number"
+                  min={0.125}
+                  step={0.125}
+                  value={seamModal.valB}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const g = seamModal.geometry;
+                    const total = g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const n = parseFloat(v);
+                    setSeamModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            valB: v,
+                            valA: Number.isFinite(n) ? formatDimInches(total - n) : prev.valA,
+                            error: undefined,
+                          }
+                        : prev
+                    );
+                  }}
+                />
+              </label>
+            </div>
+            {seamModal.error ? <p className="ls-seam-modal-inline-error">{seamModal.error}</p> : null}
+            <div className="ls-seam-modal-actions">
+              <button type="button" className="ls-btn ls-btn-ghost" onClick={() => setSeamModal(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                onClick={() => {
+                  const dimA = parseFloat(seamModal.valA);
+                  const dimB = parseFloat(seamModal.valB);
+                  if (!Number.isFinite(dimA) || !Number.isFinite(dimB) || dimA <= 0 || dimB <= 0) {
+                    setSeamModal((prev) => (prev ? { ...prev, error: "Enter valid seam dimensions greater than 0." } : prev));
+                    return;
+                  }
+                  const ok = onPlaceSeamRequest?.({ pieceId: seamModal.pieceId, edgeIndex: seamModal.edgeIndex, dimA, dimB });
+                  if (!ok) {
+                    setSeamModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            error: "Could not place a seam on that edge. Make sure it is a straight edge with valid dimensions.",
+                          }
+                        : prev
+                    );
+                    return;
+                  }
+                  setHoverSeamEdge(null);
+                  setSeamModal(null);
+                }}
+              >
+                Place seam
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

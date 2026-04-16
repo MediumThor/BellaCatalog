@@ -5,12 +5,8 @@ import {
   type JobComparisonOptionRecord,
   type JobRecord,
 } from "../types/compareQuote";
+import { computeCurrentLayoutQuoteForOption } from "../compare/layoutStudio/utils/currentQuote";
 import { formatMoney } from "./priceHelpers";
-import {
-  computeQuotedInstallForCompareOption,
-  effectiveQuoteSquareFootage,
-  jobQuoteSquareFootage,
-} from "./quotedPrice";
 
 type ExportMode = "directory" | "zip";
 
@@ -71,12 +67,7 @@ function quotedSummaryLines(
   areaId?: string | null
 ): string[] {
   const metrics = areaMetrics(option, areaId);
-  const quoted = computeQuotedInstallForCompareOption({
-    jobSquareFootage: metrics?.layoutEstimatedAreaSqFt ?? effectiveQuoteSquareFootage(job, option),
-    priceUnit: option.priceUnit,
-    catalogLinePrice: option.selectedPriceValue,
-    slabQuantity: option.slabQuantity,
-  });
+  const quoted = computeCurrentLayoutQuoteForOption({ job, option, areaId });
 
   const catalogLine = option.selectedPriceLabel
     ? `${option.selectedPriceLabel} (${option.priceUnit ?? "—"})${option.slabQuantity != null && option.priceUnit === "slab" ? ` · ${option.slabQuantity} slabs` : ""}`
@@ -90,8 +81,8 @@ function quotedSummaryLines(
     `Thickness: ${option.thickness || "—"}`,
     `Size: ${option.size || "—"}`,
     `Catalog line: ${catalogLine}`,
-    `Quoted per sq ft: ${quoted.quotedPerSqft != null ? formatMoney(quoted.quotedPerSqft) : "—"}`,
-    `Estimated quoted total: ${quoted.quotedTotal != null ? formatMoney(quoted.quotedTotal) : "—"}`,
+    `Installed price: ${quoted.customerPerSqft != null ? `${formatMoney(quoted.customerPerSqft)} / sq ft` : "—"}`,
+    `Installed estimate: ${quoted.customerTotal != null ? formatMoney(quoted.customerTotal) : "—"}`,
   ];
 
   if (option.notes.trim()) {
@@ -100,7 +91,7 @@ function quotedSummaryLines(
 
   if ((metrics?.layoutUpdatedAt ?? option.layoutUpdatedAt)) {
     lines.push(
-      `Layout Studio (visual est.): ${metrics?.layoutEstimatedAreaSqFt ?? option.layoutEstimatedAreaSqFt ?? "—"} sq ft area · ${metrics?.layoutEstimatedFinishedEdgeLf ?? option.layoutEstimatedFinishedEdgeLf ?? "—"} ft edge · ${metrics?.layoutSinkCount ?? option.layoutSinkCount ?? "—"} sinks · ${metrics?.layoutEstimatedSlabCount ?? option.layoutEstimatedSlabCount ?? "—"} slabs (est.)`
+      `Layout Studio: ${quoted.displayMetrics.areaSqFt || "—"} sq ft area · ${quoted.displayMetrics.finishedEdgeLf || "—"} ft edge · ${quoted.displayMetrics.sinkCount || "—"} sinks · ${quoted.displayMetrics.outletCount ?? 0} outlets · ${quoted.displayMetrics.estimatedSlabCount || "—"} slabs (est.) · ${quoted.displayMetrics.splashLinearFeet > 0 ? `${quoted.displayMetrics.splashLinearFeet.toFixed(1)} lf backsplash polish` : "no backsplash polish"}`
     );
   }
 
@@ -120,9 +111,13 @@ function buildSummaryText({
 }: ExportQuotePackageInput): string {
   const finalOption =
     options.find((option) => option.id === (areaSelectedOptionId ?? job.finalOptionId)) ?? null;
+  const finalQuote = finalOption ? computeCurrentLayoutQuoteForOption({ job, option: finalOption, areaId }) : null;
   const jobQuoteSqFt =
-    (finalOption ? areaMetrics(finalOption, areaId)?.layoutEstimatedAreaSqFt : null) ??
-    jobQuoteSquareFootage(job, options);
+    finalQuote?.quoteAreaSqFt ??
+    options
+      .map((option) => computeCurrentLayoutQuoteForOption({ job, option, areaId }).quoteAreaSqFt)
+      .find((areaSqFt) => areaSqFt > 0) ??
+    0;
   const lines: string[] = [
     "Bella Stone Quote Summary",
     "=========================",

@@ -10,7 +10,6 @@ import {
   priceEntryLabel,
   priceEntrySelectLabel,
 } from "../utils/compareSnapshot";
-import { computeQuotedInstallForCompareOption } from "../utils/quotedPrice";
 
 /** Default quote basis for quick-add flows (matches modal defaults: slab qty 1, no notes). */
 export function buildDefaultCompareOptionPayload(item: CatalogItem): {
@@ -63,15 +62,14 @@ export function AddPriceOptionModal({ open, item, quoteBasisSqFt, onClose, onCon
   const effectiveEntry: PriceEntry | null =
     entries.length > 0 ? entries[Math.min(selectedIndex, entries.length - 1)] ?? null : null;
 
-  const quoted =
+  const materialEstimate =
     effectiveEntry != null
-      ? computeQuotedInstallForCompareOption({
-          jobSquareFootage: quoteBasisSqFt,
-          priceUnit: effectiveEntry.unit,
-          catalogLinePrice: effectiveEntry.price ?? null,
-          slabQuantity: effectiveEntry.unit === "slab" ? slabQuantity : null,
-        })
-      : { quotedPerSqft: null, quotedTotal: null };
+      ? computeEstimatedMaterialCost(
+          quoteBasisSqFt,
+          effectiveEntry,
+          effectiveEntry.unit === "slab" ? slabQuantity : 1,
+        )
+      : null;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -86,19 +84,19 @@ export function AddPriceOptionModal({ open, item, quoteBasisSqFt, onClose, onCon
           Quote basis for “{item.displayName}”
         </h2>
         <p className="modal-sub">
-          Choose which pricing line to use for the <strong>quoted</strong> installed estimate (material markup +
-          fabrication schedule). List prices are not shown here.
+          Choose which catalog pricing line to attach to this option. Installed pricing now comes from Layout
+          Studio’s quote phase, where layout area, slab usage, fabrication, installation, and add-ons are
+          calculated together.
         </p>
         <p className="modal-sub">
-          Quote area:{" "}
-          <strong>{quoteBasisSqFt > 0 ? quoteBasisSqFt : "—"}</strong> sq ft (from Layout Studio when
-          saved; used for quoted totals when applicable).
+          Current layout area: <strong>{quoteBasisSqFt > 0 ? quoteBasisSqFt : "—"}</strong> sq ft. This is only
+          used here for the material-only estimate when the selected line is priced per square foot.
         </p>
 
         {entries.length === 0 ? (
           <p className="compare-warning">
-            This catalog row has no usable pricing lines. The option will be saved without a quoted
-            estimate until the catalog includes numeric prices.
+            This catalog row has no usable pricing lines. The option will be saved without pricing until the
+            catalog includes numeric prices.
           </p>
         ) : (
           <div className="form-stack">
@@ -134,19 +132,12 @@ export function AddPriceOptionModal({ open, item, quoteBasisSqFt, onClose, onCon
 
             <div className="compare-estimate-box" aria-live="polite">
               <div>
-                <span className="compare-estimate-label">Quoted (installed est.):</span>{" "}
-                {quoted.quotedPerSqft != null ? (
-                  <>
-                    <strong>{formatMoney(quoted.quotedPerSqft)}</strong>
-                    <span className="product-sub"> / sq ft</span>
-                  </>
-                ) : (
-                  <span className="product-sub">—</span>
-                )}
+                <span className="compare-estimate-label">Material-only estimate:</span>{" "}
+                <strong>{materialEstimate != null ? formatMoney(materialEstimate) : "—"}</strong>
               </div>
               <div>
-                <span className="compare-estimate-label">Est. quoted total:</span>{" "}
-                <strong>{quoted.quotedTotal != null ? formatMoney(quoted.quotedTotal) : "—"}</strong>
+                <span className="compare-estimate-label">Installed quote:</span>{" "}
+                <span className="product-sub">Calculated in Layout Studio quote phase</span>
               </div>
             </div>
           </div>

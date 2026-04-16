@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutPiece, LayoutPoint, LayoutSlab, PiecePlacement } from "../types";
-import { distancePointToSegment, planDisplayPoints } from "../utils/blankPlanGeometry";
+import { distancePointToSegment } from "../utils/blankPlanGeometry";
 import {
   horizontalSeamPreviewChord,
   seamGeometryFromAxisAlignedEdge,
@@ -13,11 +13,13 @@ import { edgeStripLetterLabelByPieceId, pieceLabelByPieceId } from "../utils/pie
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
   mirrorLocalInches,
+  planDisplayPointsForSlabPlacement,
   piecePolygonInches,
   transformedPieceInches,
   worldDisplayToSlabInches,
 } from "../utils/pieceInches";
 import { piecesHaveAnyScale } from "../utils/sourcePages";
+import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 import { IconRotateCCW, IconRotateCW } from "./PlanToolbarIcons";
 
@@ -176,6 +178,8 @@ export function PlaceWorkspace({
   seamMode = false,
   onPlaceSeamRequest,
 }: Props) {
+  const scrollShellRef = useRef<HTMLDivElement | null>(null);
+  const slabItemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const svgRefs = useRef<Map<string, SVGSVGElement | null>>(new Map());
   /** Last slab used during an active drag (handles gaps between slab cards). */
   const lastDragSlabRef = useRef<string | null>(null);
@@ -226,36 +230,29 @@ export function PlaceWorkspace({
       if (isPlanStripPiece(piece)) continue;
       const placement = placementByPiece.get(piece.id);
       if (!placement?.placed || !placement.slabId) continue;
-      const world = planDisplayPoints(piece, pieces);
+      const world = planDisplayPointsForSlabPlacement(piece, pieces);
       const ring = normalizeClosedRing(world);
       const n = ring.length;
       if (n < 2) continue;
+      const local = piecePolygonInches(piece, pixelsPerInch, pieces);
+      if (local.length < 3) continue;
+      const displayRing = normalizeClosedRing(
+        transformedPieceInches(mirrorLocalInches(local, placement.mirrored), placement.rotation).map((point) => ({
+          x: placement.x + point.x,
+          y: placement.y + point.y,
+        }))
+      );
+      if (displayRing.length !== n) continue;
       const slabId = placement.slabId;
       const slabSegs = out.get(slabId) ?? [];
       for (let edgeIndex = 0; edgeIndex < n; edgeIndex += 1) {
         if (!seamGeometryFromAxisAlignedEdge(world, edgeIndex)) continue;
-        const aWorld = ring[edgeIndex]!;
-        const bWorld = ring[(edgeIndex + 1) % n]!;
         slabSegs.push({
           slabId,
           pieceId: piece.id,
           edgeIndex,
-          a: worldDisplayToSlabInches(
-            aWorld.x,
-            aWorld.y,
-            piece,
-            placement,
-            pixelsPerInch,
-            pieces,
-          ),
-          b: worldDisplayToSlabInches(
-            bWorld.x,
-            bWorld.y,
-            piece,
-            placement,
-            pixelsPerInch,
-            pieces,
-          ),
+          a: displayRing[edgeIndex]!,
+          b: displayRing[(edgeIndex + 1) % n]!,
         });
       }
       if (slabSegs.length > 0) out.set(slabId, slabSegs);
@@ -268,7 +265,7 @@ export function PlaceWorkspace({
     const piece = pieces.find((p) => p.id === seamModal.pieceId);
     const placement = placementByPiece.get(seamModal.pieceId);
     if (!piece || !placement?.placed || !placement.slabId) return null;
-    const world = planDisplayPoints(piece, pieces);
+    const world = planDisplayPointsForSlabPlacement(piece, pieces);
     const ring = normalizeClosedRing(world);
     const n = ring.length;
     if (n < 2) return null;
@@ -374,7 +371,7 @@ export function PlaceWorkspace({
     (edge: SlabSeamEdgeHit) => {
       const piece = pieces.find((p) => p.id === edge.pieceId);
       if (!piece) return;
-      const world = planDisplayPoints(piece, pieces);
+      const world = planDisplayPointsForSlabPlacement(piece, pieces);
       const geometry = seamGeometryFromAxisAlignedEdge(world, edge.edgeIndex);
       if (!geometry) return;
       onActiveSlab(edge.slabId);
@@ -558,6 +555,71 @@ export function PlaceWorkspace({
     if (el) svgRefs.current.set(slabId, el);
     else svgRefs.current.delete(slabId);
   };
+  const setSlabItemRef = (slabId: string) => (el: HTMLDivElement | null) => {
+    if (el) slabItemRefs.current.set(slabId, el);
+    else slabItemRefs.current.delete(slabId);
+  };
+
+  useEffect(() => {
+    if (!useColumn || slabs.length <= 1 || readOnly) return;
+    const scrollShell = scrollShellRef.current;
+    if (!scrollShell) return;
+    const viewportRegion =
+      (scrollShell.closest(".ls-place-region--slabs.ls-place-region--viewport-scroll") as HTMLDivElement | null) ??
+      null;
+    const viewportEl = viewportRegion ?? scrollShell;
+    const scrollTargets = viewportRegion && viewportRegion !== scrollShell ? [scrollShell, viewportRegion] : [scrollShell];
+
+    let rafId = 0;
+    const updateActiveSlabFromViewport = () => {
+      rafId = 0;
+      const viewportRect = viewportEl.getBoundingClientRect();
+      const viewportTop = viewportRect.top;
+      const viewportBottom = viewportRect.bottom;
+      const viewportCenter = (viewportTop + viewportBottom) / 2;
+      let bestSlabId: string | null = null;
+      let bestScore = -Infinity;
+
+      for (const slab of slabs) {
+        const el = slabItemRefs.current.get(slab.id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        const visibleTop = Math.max(rect.top, viewportTop);
+        const visibleBottom = Math.min(rect.bottom, viewportBottom);
+        const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+        if (visibleHeight <= 0) continue;
+        const itemCenter = (rect.top + rect.bottom) / 2;
+        const distanceFromCenter = Math.abs(itemCenter - viewportCenter);
+        const score = visibleHeight - distanceFromCenter * 0.35;
+        if (score > bestScore) {
+          bestScore = score;
+          bestSlabId = slab.id;
+        }
+      }
+
+      if (bestSlabId && bestSlabId !== activeSlabId) {
+        onActiveSlab(bestSlabId);
+      }
+    };
+
+    const scheduleUpdate = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(updateActiveSlabFromViewport);
+    };
+
+    scheduleUpdate();
+    for (const target of scrollTargets) {
+      target.addEventListener("scroll", scheduleUpdate, { passive: true });
+    }
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      for (const target of scrollTargets) {
+        target.removeEventListener("scroll", scheduleUpdate);
+      }
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [activeSlabId, onActiveSlab, readOnly, slabs, useColumn]);
 
   if (!activeSlab) {
     return (
@@ -620,37 +682,42 @@ export function PlaceWorkspace({
           ? `${slab.widthIn + slabMargins.lm + slabMargins.rm} / ${slab.heightIn + slabMargins.tm + slabMargins.bm}`
           : undefined,
     };
+    const slabImageFrameStyle = {
+      left: `${(lm / (w + lm + rm)) * 100}%`,
+      top: `${(tm / (h + tm + bm)) * 100}%`,
+      width: `${(w / (w + lm + rm)) * 100}%`,
+      height: `${(h / (h + tm + bm)) * 100}%`,
+    };
 
     const slabStage = (
       <div className="ls-place-stage ls-place-stage--slab-aspect" style={aspectStyle}>
-          <svg
-            ref={setSvgRef(slab.id)}
-            data-slab-id={slab.id}
-            className="ls-place-svg"
-            viewBox={viewBox}
-            preserveAspectRatio="xMidYMid meet"
-            onPointerDown={readOnly || !ppiReady ? undefined : handleSvgBackgroundPointerDown(slab.id)}
-            onPointerMove={readOnly || !ppiReady || !seamMode ? undefined : handleSeamPointerMove(slab.id)}
-            onPointerLeave={
-              readOnly || !ppiReady || !seamMode
-                ? undefined
-                : () =>
-                    setHoverSeamEdge((prev) =>
-                      prev?.slabId === slab.id ? null : prev
-                    )
-            }
-            width="100%"
-            height="100%"
-          >
-            <image
-              href={slab.imageUrl}
-              xlinkHref={slab.imageUrl}
-              x={0}
-              y={0}
-              width={slab.widthIn}
-              height={slab.heightIn}
-              preserveAspectRatio="none"
-            />
+        <img
+          className="ls-place-stage-bg-img"
+          src={slab.imageUrl}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          style={slabImageFrameStyle}
+        />
+        <svg
+          ref={setSvgRef(slab.id)}
+          data-slab-id={slab.id}
+          className="ls-place-svg"
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid meet"
+          onPointerDown={readOnly || !ppiReady ? undefined : handleSvgBackgroundPointerDown(slab.id)}
+          onPointerMove={readOnly || !ppiReady || !seamMode ? undefined : handleSeamPointerMove(slab.id)}
+          onPointerLeave={
+            readOnly || !ppiReady || !seamMode
+              ? undefined
+              : () =>
+                  setHoverSeamEdge((prev) =>
+                    prev?.slabId === slab.id ? null : prev
+                  )
+          }
+          width="100%"
+          height="100%"
+        >
             <rect
               x={0}
               y={0}
@@ -723,6 +790,17 @@ export function PlaceWorkspace({
                           interactive={false}
                         />
                       ) : null}
+                      {!isStrip && (piece.outlets?.length ?? 0) > 0 ? (
+                        <PieceOutletCutoutsSvg
+                          piece={piece}
+                          allPieces={pieces}
+                          coordPerInch={1}
+                          slabPlacement={pl}
+                          pixelsPerInchForSlab={piece.sourcePixelsPerInch ?? pixelsPerInch ?? undefined}
+                          appearance="cutout"
+                          interactive={false}
+                        />
+                      ) : null}
                       {showPieceLabels ? (
                         <text
                           transform={`translate(${pl.x},${pl.y}) rotate(${labelRot})`}
@@ -756,19 +834,48 @@ export function PlaceWorkspace({
                     (seamModal?.slabId === edge.slabId &&
                       seamModal.pieceId === edge.pieceId &&
                       seamModal.edgeIndex === edge.edgeIndex);
-                  if (!highlighted) return null;
                   return (
-                    <line
-                      key={`seam-edge-${edge.slabId}-${edge.pieceId}-${edge.edgeIndex}`}
-                      x1={edge.a.x}
-                      y1={edge.a.y}
-                      x2={edge.b.x}
-                      y2={edge.b.y}
-                      stroke="rgba(232, 64, 64, 0.98)"
-                      strokeWidth={0.22}
-                      strokeLinecap="round"
-                      pointerEvents="none"
-                    />
+                    <g key={`seam-edge-${edge.slabId}-${edge.pieceId}-${edge.edgeIndex}`}>
+                      <line
+                        x1={edge.a.x}
+                        y1={edge.a.y}
+                        x2={edge.b.x}
+                        y2={edge.b.y}
+                        stroke="transparent"
+                        strokeWidth={1.35}
+                        strokeLinecap="round"
+                        style={{ cursor: "crosshair" }}
+                        pointerEvents="stroke"
+                        onPointerEnter={() => setHoverSeamEdge(edge)}
+                        onPointerMove={() => setHoverSeamEdge(edge)}
+                        onPointerLeave={() =>
+                          setHoverSeamEdge((prev) =>
+                            prev?.slabId === edge.slabId &&
+                            prev.pieceId === edge.pieceId &&
+                            prev.edgeIndex === edge.edgeIndex
+                              ? null
+                              : prev
+                          )
+                        }
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openSeamModal(edge);
+                        }}
+                      />
+                      {highlighted ? (
+                        <line
+                          x1={edge.a.x}
+                          y1={edge.a.y}
+                          x2={edge.b.x}
+                          y2={edge.b.y}
+                          stroke="rgba(232, 64, 64, 0.98)"
+                          strokeWidth={0.22}
+                          strokeLinecap="round"
+                          pointerEvents="none"
+                        />
+                      ) : null}
+                    </g>
                   );
                 })
               : null}
@@ -889,7 +996,7 @@ export function PlaceWorkspace({
     );
 
     return (
-      <div key={slab.id} className="ls-place-slab-column-item">
+      <div key={slab.id} ref={setSlabItemRef(slab.id)} className="ls-place-slab-column-item">
         {useColumn && slabs.length >= 1 ? (
           <div
             className={`ls-place-slab-column-head${slab.id === activeSlabId ? " ls-place-slab-column-head--active" : ""}`}
@@ -1027,7 +1134,7 @@ export function PlaceWorkspace({
         className={`ls-place-wrap${readOnly ? " ls-place-wrap--readonly" : ""}${drag ? " ls-place-wrap--dragging" : ""}`}
         onPointerMove={!readOnly && ppiReady && drag ? handlePointerMove : undefined}
       >
-        <div className="ls-place-scroll-shell">
+        <div ref={scrollShellRef} className="ls-place-scroll-shell">
           {useTabs ? (
             <div className="ls-place-slab-tabs-row">
               <div className="ls-slab-tabs" role="tablist">

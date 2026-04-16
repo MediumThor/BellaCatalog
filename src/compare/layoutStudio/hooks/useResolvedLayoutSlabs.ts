@@ -6,6 +6,35 @@ import { applyRealisticSlabDimensions, slabsForOption } from "../utils/slabDimen
 
 const MAX_SLABS = 20;
 
+type ResolvedSlabImage = { url: string; w: number; h: number };
+
+function loadImageCandidate(url: string): Promise<ResolvedSlabImage | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        resolve({ url, w: img.naturalWidth, h: img.naturalHeight });
+        return;
+      }
+      resolve(null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+async function resolveFirstRenderableSlabImage(slab: LayoutSlab): Promise<ResolvedSlabImage | null> {
+  const candidates = [slab.imageUrl, ...(slab.imageCandidates ?? [])].filter((value, index, arr) => {
+    const trimmed = value?.trim();
+    return Boolean(trimmed) && arr.findIndex((candidate) => candidate === value) === index;
+  });
+  for (const candidate of candidates) {
+    const loaded = await loadImageCandidate(candidate);
+    if (loaded) return loaded;
+  }
+  return null;
+}
+
 /**
  * Resolves slab width/height for placement: catalog size when parsed, otherwise photo aspect ratio.
  * Optional `slabClones` duplicates the primary slab for multi-slab placement (same image, new ids).
@@ -16,7 +45,7 @@ export function useResolvedLayoutSlabs(
 ): LayoutSlab[] {
   const [overlayVersion, setOverlayVersion] = useState(0);
   const base = useMemo(() => (option ? slabsForOption(option) : []), [option, overlayVersion]);
-  const [imgDims, setImgDims] = useState<Record<string, { w: number; h: number }>>({});
+  const [resolvedImages, setResolvedImages] = useState<Record<string, ResolvedSlabImage>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -26,19 +55,26 @@ export function useResolvedLayoutSlabs(
   }, []);
 
   useEffect(() => {
+    setResolvedImages({});
     if (!base.length) return;
-    const urls = [...new Set(base.map((s) => s.imageUrl).filter(Boolean))];
     let cancelled = false;
-    for (const url of urls) {
-      const img = new Image();
-      img.onload = () => {
+    for (const slab of base) {
+      void resolveFirstRenderableSlabImage(slab).then((resolved) => {
         if (cancelled) return;
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-          setImgDims((prev) => ({ ...prev, [url]: { w: img.naturalWidth, h: img.naturalHeight } }));
-        }
-      };
-      img.onerror = () => {};
-      img.src = url;
+        if (!resolved) return;
+        setResolvedImages((prev) => {
+          const current = prev[slab.id];
+          if (
+            current &&
+            current.url === resolved.url &&
+            current.w === resolved.w &&
+            current.h === resolved.h
+          ) {
+            return prev;
+          }
+          return { ...prev, [slab.id]: resolved };
+        });
+      });
     }
     return () => {
       cancelled = true;
@@ -47,8 +83,10 @@ export function useResolvedLayoutSlabs(
 
   return useMemo(() => {
     const resolved = base.map((slab) => {
-      const nat = slab.imageUrl ? imgDims[slab.imageUrl] : undefined;
-      return applyRealisticSlabDimensions(slab, nat ?? null);
+      const resolvedImage = resolvedImages[slab.id];
+      const slabWithImage = resolvedImage ? { ...slab, imageUrl: resolvedImage.url } : slab;
+      const nat = resolvedImage ? { w: resolvedImage.w, h: resolvedImage.h } : null;
+      return applyRealisticSlabDimensions(slabWithImage, nat);
     });
     if (!resolved.length || !slabClones?.length) return resolved;
     const primary = resolved[0];
@@ -58,5 +96,5 @@ export function useResolvedLayoutSlabs(
       label: c.label,
     }));
     return [...resolved, ...extras];
-  }, [base, imgDims, slabClones]);
+  }, [base, resolvedImages, slabClones]);
 }

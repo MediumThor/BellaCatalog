@@ -8,7 +8,12 @@ const URL_BASE_FALLBACK = "https://app.local/";
 
 function shouldProxyImage(parsed: URL): boolean {
   if (CORS_PROXY_HOSTS.has(parsed.hostname)) return true;
-  if (parsed.hostname === "s3.us-east-2.amazonaws.com" && parsed.pathname.startsWith("/stonexusa-sps-files/")) {
+  const host = parsed.hostname;
+  if (host === "s3.us-east-2.amazonaws.com" && parsed.pathname.startsWith("/stonexusa-sps-files/")) {
+    return true;
+  }
+  /** Adobe Scene7 (e.g. Daltile) — blocks anonymous canvas reads without CORS. */
+  if (host === "digitalassets.daltile.com" || host.endsWith(".scene7.com")) {
     return true;
   }
   return false;

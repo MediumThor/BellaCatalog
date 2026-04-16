@@ -3,6 +3,7 @@ import type {
   LayoutPiece,
   LayoutPoint,
   LayoutSlab,
+  PieceOutletCutout,
   PiecePlacement,
   SavedLayoutCalibration,
   TraceTool,
@@ -12,6 +13,10 @@ import {
   hitTestEdge,
   tryRemoveDraftPolylinePoint,
 } from "../utils/blankPlanGeometry";
+import {
+  TRACE_VIEW_ZOOM_MAX,
+  TRACE_VIEW_ZOOM_MIN,
+} from "../utils/viewZoom";
 import {
   nearPoint,
   orthoPreviewPoint,
@@ -28,6 +33,10 @@ import {
 import { defaultNonSplashPieceName } from "../utils/pieceLabels";
 import { isPlanStripPiece } from "../utils/pieceRoles";
 import {
+  assignOutletsToSplitPieces,
+  clampOutletCenter,
+} from "../utils/pieceOutlets";
+import {
   assignSinksToSplitPieces,
   clampSinkCenter,
 } from "../utils/pieceSinks";
@@ -39,6 +48,7 @@ import {
   verticalSeamPreviewChord,
   type SeamFromEdgeGeometry,
 } from "../utils/blankPlanPolygonOps";
+import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 
 type Props = {
@@ -67,6 +77,7 @@ type Props = {
     kind: "splash" | "miter",
   ) => void;
   onRequestAddSinkForEdge?: (edge: { pieceId: string; edgeIndex: number }) => void;
+  onRequestAddOutletForEdge?: (edge: { pieceId: string; edgeIndex: number }) => void;
   onToggleProfileEdge: (edge: { pieceId: string; edgeIndex: number }) => void;
   onSetSplashBottomEdge?: (edge: { pieceId: string; edgeIndex: number }) => void;
   slabs?: LayoutSlab[];
@@ -76,8 +87,6 @@ type Props = {
   onBoxZoomModeChange: (active: boolean) => void;
 };
 
-export const TRACE_VIEW_ZOOM_MIN = 0.25;
-export const TRACE_VIEW_ZOOM_MAX = 24;
 const TRACE_VIEW_ZOOM_STEP = 0.5;
 const TRACE_DRAFT_STROKE = "rgba(120,195,255,0.92)";
 const TRACE_DRAFT_STROKE_SOFT = "rgba(120,195,255,0.82)";
@@ -86,10 +95,6 @@ const TRACE_CALIBRATION_STROKE = "rgba(232,72,72,0.96)";
 const TRACE_CALIBRATION_FILL = "rgba(244,84,84,0.98)";
 
 type EdgeSel = { pieceId: string; edgeIndex: number };
-
-export function traceViewZoomDisplayPct(viewZoom: number): number {
-  return Math.round(viewZoom * 100);
-}
 
 function clampTraceViewCenter(
   center: LayoutPoint,
@@ -321,6 +326,7 @@ export function TraceWorkspace({
   onPieceDragStart,
   onRequestSplashForEdge,
   onRequestAddSinkForEdge,
+  onRequestAddOutletForEdge,
   onToggleProfileEdge,
   onSetSplashBottomEdge,
   slabs,
@@ -463,6 +469,13 @@ export function TraceWorkspace({
   const [sinkDrag, setSinkDrag] = useState<{
     pieceId: string;
     sinkId: string;
+    start: LayoutPoint;
+    startCx: number;
+    startCy: number;
+  } | null>(null);
+  const [outletDrag, setOutletDrag] = useState<{
+    pieceId: string;
+    outletId: string;
     start: LayoutPoint;
     startCx: number;
     startCy: number;
@@ -677,6 +690,35 @@ export function TraceWorkspace({
     [clientToImage, onPieceDragStart, onSelectEdge, onSelectPiece, tool, traceSinkPieces],
   );
 
+  const startOutletDrag = useCallback(
+    (pieceId: string, outletId: string, e: React.PointerEvent) => {
+      if (tool !== "select") return;
+      const p = clientToImage(e.clientX, e.clientY);
+      if (!p) return;
+      const piece = traceSinkPieces.find((candidate) => candidate.id === pieceId);
+      const outlet = piece?.outlets?.find((candidate) => candidate.id === outletId);
+      if (!piece || !outlet) return;
+      onPieceDragStart?.();
+      onSelectPiece(pieceId);
+      onSelectEdge(null);
+      sinkDragOrthoAxisRef.current = null;
+      setOutletDrag({
+        pieceId,
+        outletId,
+        start: { ...p },
+        startCx: outlet.centerX,
+        startCy: outlet.centerY,
+      });
+      try {
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      } catch {
+        /* noop */
+      }
+      e.preventDefault();
+    },
+    [clientToImage, onPieceDragStart, onSelectEdge, onSelectPiece, tool, traceSinkPieces],
+  );
+
   const seamPreviewLine = useMemo(() => {
     if (!seamModal) return null;
     const piece = pieces.find((p) => p.id === seamModal.pieceId);
@@ -739,6 +781,16 @@ export function TraceWorkspace({
       const splitLegacy = legacyCount > 0;
       const sA = splitLegacy ? Math.floor(legacyCount / 2) : 0;
       const sB = splitLegacy ? legacyCount - sA : 0;
+      const existingOutlets = targetPiece.outlets ?? [];
+      const legacyOutletCount =
+        existingOutlets.length > 0 ? 0 : Math.max(0, Math.floor(targetPiece.outletCount ?? 0));
+      const { outletsA, outletsB } =
+        existingOutlets.length > 0
+          ? assignOutletsToSplitPieces(existingOutlets, ringA, ringB, 0, 0)
+          : { outletsA: [] as PieceOutletCutout[], outletsB: [] as PieceOutletCutout[] };
+      const splitOutletLegacy = legacyOutletCount > 0;
+      const outletCountA = splitOutletLegacy ? Math.floor(legacyOutletCount / 2) : 0;
+      const outletCountB = splitOutletLegacy ? legacyOutletCount - outletCountA : 0;
       const splitNameA = nextPieceName(pieces);
       const splitNameB = nextPieceName(pieces, 1);
       const newA: LayoutPiece = {
@@ -747,6 +799,8 @@ export function TraceWorkspace({
         name: splitNameA,
         points: ringA,
         sinkCount: splitLegacy ? sA : 0,
+        outlets: existingOutlets.length > 0 ? outletsA : undefined,
+        outletCount: splitOutletLegacy ? outletCountA : undefined,
         sinks: existingSinks.length > 0 ? sinksA : undefined,
         manualDimensions: undefined,
         shapeKind: "polygon",
@@ -758,6 +812,8 @@ export function TraceWorkspace({
         name: splitNameB,
         points: ringB,
         sinkCount: splitLegacy ? sB : 0,
+        outlets: existingOutlets.length > 0 ? outletsB : undefined,
+        outletCount: splitOutletLegacy ? outletCountB : undefined,
         sinks: existingSinks.length > 0 ? sinksB : undefined,
         manualDimensions: undefined,
         shapeKind: "polygon",
@@ -1024,6 +1080,55 @@ export function TraceWorkspace({
     if (effectiveTool === "polygon") {
       setPolyCursor(p);
     }
+    if (outletDrag) {
+      let dx = p.x - outletDrag.start.x;
+      let dy = p.y - outletDrag.start.y;
+      if (dx !== 0 || dy !== 0) {
+        if (sinkDragOrthoAxisRef.current == null) {
+          sinkDragOrthoAxisRef.current =
+            Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+        }
+        if (sinkDragOrthoAxisRef.current === "x") dy = 0;
+        else if (sinkDragOrthoAxisRef.current === "y") dx = 0;
+      }
+      const piece = traceSinkPieces.find(
+        (candidate) => candidate.id === outletDrag.pieceId,
+      );
+      if (!piece) return;
+      const outlet = piece.outlets?.find((candidate) => candidate.id === outletDrag.outletId);
+      if (!outlet) return;
+      const coordPerInch =
+        piece.sourcePixelsPerInch ??
+        calibration.pixelsPerInch ??
+        1;
+      const nextCenter = clampOutletCenter(
+        outlet,
+        piece,
+        traceSinkPieces,
+        coordPerInch,
+        outletDrag.startCx + dx,
+        outletDrag.startCy + dy,
+      );
+      const nextPieces = pieces.map((candidate) =>
+        candidate.id === outletDrag.pieceId
+          ? {
+              ...candidate,
+              outlets: candidate.outlets?.map((item) =>
+                item.id === outletDrag.outletId
+                  ? {
+                      ...item,
+                      centerX: nextCenter.centerX,
+                      centerY: nextCenter.centerY,
+                    }
+                  : item,
+              ),
+            }
+          : candidate,
+      );
+      (onPiecesChangeLive ?? onPiecesChange)(nextPieces);
+      setHoverEdge(null);
+      return;
+    }
     if (sinkDrag) {
       let dx = p.x - sinkDrag.start.x;
       let dy = p.y - sinkDrag.start.y;
@@ -1161,6 +1266,10 @@ export function TraceWorkspace({
         onPiecesChange([...pieces, newPiece]);
         onSelectPiece(id);
       }
+    }
+    if (outletDrag) {
+      sinkDragOrthoAxisRef.current = null;
+      setOutletDrag(null);
     }
     if (sinkDrag) {
       sinkDragOrthoAxisRef.current = null;
@@ -1583,6 +1692,23 @@ export function TraceWorkspace({
                 onSinkPointerDown={(sinkId, e) => startSinkDrag(piece.id, sinkId, e)}
                 appearance="trace"
               />
+              {(piece.outlets?.length ?? 0) > 0 ? (
+                <PieceOutletCutoutsSvg
+                  piece={sinkPiece}
+                  allPieces={traceSinkPieces}
+                  coordPerInch={
+                    piece.sourcePixelsPerInch ??
+                    ppi ??
+                    1
+                  }
+                  selectedOutletId={
+                    outletDrag?.pieceId === piece.id ? outletDrag.outletId : null
+                  }
+                  interactive={tool === "select" && selectedPieceId === piece.id}
+                  onOutletPointerDown={(outletId, e) => startOutletDrag(piece.id, outletId, e)}
+                  appearance="trace"
+                />
+              ) : null}
               {ring.map((a, edgeIndex) => {
                 const b = ring[(edgeIndex + 1) % ring.length]!;
                 const isSelected =
@@ -1985,6 +2111,16 @@ export function TraceWorkspace({
                 onClick={() => onRequestAddSinkForEdge(selectedEdge)}
               >
                 Sink
+              </button>
+            ) : null}
+            {onRequestAddOutletForEdge ? (
+              <button
+                type="button"
+                className="ls-edge-popover-btn"
+                title="2.25″ × 4″ outlet cutout"
+                onClick={() => onRequestAddOutletForEdge(selectedEdge)}
+              >
+                Outlet
               </button>
             ) : null}
             {(() => {

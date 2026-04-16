@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { firebaseDb, firebaseStorage } from "../../../firebase";
+import { firebaseAuth, firebaseDb, firebaseStorage } from "../../../firebase";
 import type { LayoutQuoteSharePayloadV1 } from "../types/layoutQuoteShare";
 
 function nowIso(): string {
@@ -20,12 +20,17 @@ async function uploadSharePng(
 }
 
 export async function createLayoutQuoteShare(input: {
-  ownerUserId: string;
   payload: LayoutQuoteSharePayloadV1;
   planBlob?: Blob | null;
   placementBlob?: Blob | null;
 }): Promise<string> {
-  const { ownerUserId, planBlob = null, placementBlob = null } = input;
+  const uid = firebaseAuth.currentUser?.uid;
+  if (!uid) {
+    throw new Error("Sign in required to create a share link.");
+  }
+  // Storage rules match `request.auth.uid` to the path segment; use the signed-in user, not props.
+  const ownerUserId = uid;
+  const { planBlob = null, placementBlob = null } = input;
   const shareRef = doc(collection(firebaseDb, "layoutQuoteShares"));
   const shareId = shareRef.id;
 

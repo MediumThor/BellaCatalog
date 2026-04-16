@@ -11,12 +11,15 @@ import {
   computeCommercialLayoutQuote,
   computeQuoteAnalytics,
   computeSlabMaterialQuoteLines,
-  customerQuoteTotalFromBreakdown,
+  mergeLineItemsIntoBreakdown,
   type CommercialQuoteBreakdown,
   type SlabMaterialQuoteLine,
 } from "../utils/commercialQuote";
+import { materialBilledVsVendorTone } from "../utils/materialBilledCostTone";
+import { formatVendorMaterialOptionLine } from "../utils/layoutQuoteModel";
 import type { LayoutPiece, LayoutSlab, PiecePlacement, SavedLayoutStudioState } from "../types";
 import { LayoutSlabPricingModal } from "./LayoutSlabPricingModal";
+import { QuoteAnalyticsVisuals } from "./QuoteAnalyticsVisuals";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
 
 export type QuoteAllMaterialsSection = {
@@ -53,6 +56,7 @@ type ComputedMaterial = QuoteAllMaterialsSection & {
   placedPieceCount: number;
   slabsUsedCount: number;
   sinkCount: number;
+  outletCount: number;
   unplacedPieceCount: number;
   slabQuoteLines: SlabMaterialQuoteLine[];
   commercial: CommercialQuoteBreakdown | null;
@@ -116,6 +120,7 @@ export function QuotePhaseAllMaterialsView({
           placedPieceCount: placedPieceIds.size,
           slabsUsedCount,
           sinkCount: pieces.reduce((sum, piece) => sum + (piece.sinks?.length ?? piece.sinkCount ?? 0), 0),
+          outletCount: draft.summary.outletCount ?? 0,
           unplacedPieceCount: Math.max(0, pieces.length - placedPieceIds.size),
           slabQuoteLines,
           commercial: computeCommercialLayoutQuote({
@@ -123,6 +128,7 @@ export function QuotePhaseAllMaterialsView({
             jobSquareFootage: quoteAreaSqFt,
             countertopSqFt,
             splashAreaSqFt,
+            miterAreaSqFt: draft.summary.miterAreaSqFt ?? 0,
             sinkCount: draft.summary.sinkCount,
             profileEdgeLf,
             miterEdgeLf,
@@ -132,6 +138,7 @@ export function QuotePhaseAllMaterialsView({
             pixelsPerInch,
             slabs,
             settings: quoteSettings,
+            includeLineItems: false,
           }),
         };
       }),
@@ -146,14 +153,24 @@ export function QuotePhaseAllMaterialsView({
       fabricationTotal: 0,
       installationTotal: 0,
       sinkAddOnTotal: 0,
+      sinkCutoutCount: 0,
+      outletCutoutCount: 0,
+      cutoutEachPrice:
+        Number.isFinite(quoteSettings.sinkCutoutEach) && quoteSettings.sinkCutoutEach >= 0
+          ? quoteSettings.sinkCutoutEach
+          : 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
       miterAddOnTotal: 0,
+      lineItemRows: [],
+      lineItemsTotal: 0,
       grandTotal: 0,
       fabricationPerSqft: 0,
       catalogMaterialPerSqft: null,
       materialAreaSqFt: 0,
       countertopSqFt: 0,
+      splashAreaSqFt: 0,
+      miterAreaSqFt: 0,
       fabricatedSqFt: 0,
       splashLinearFeet: 0,
       materialChargeMode: quoteSettings.materialChargeMode,
@@ -166,17 +183,22 @@ export function QuotePhaseAllMaterialsView({
       total.fabricationTotal += material.commercial.fabricationTotal;
       total.installationTotal += material.commercial.installationTotal;
       total.sinkAddOnTotal += material.commercial.sinkAddOnTotal;
+      total.sinkCutoutCount += material.commercial.sinkCutoutCount;
+      total.outletCutoutCount += material.commercial.outletCutoutCount;
       total.splashAddOnTotal += material.commercial.splashAddOnTotal;
       total.profileAddOnTotal += material.commercial.profileAddOnTotal;
       total.miterAddOnTotal += material.commercial.miterAddOnTotal;
       total.grandTotal += material.commercial.grandTotal;
       total.materialAreaSqFt += material.commercial.materialAreaSqFt;
       total.countertopSqFt += material.commercial.countertopSqFt;
+      total.splashAreaSqFt += material.commercial.splashAreaSqFt;
+      total.miterAreaSqFt += material.commercial.miterAreaSqFt;
       total.fabricatedSqFt += material.commercial.fabricatedSqFt;
       total.splashLinearFeet += material.commercial.splashLinearFeet;
     }
-    return hasCommercial ? total : null;
-  }, [computedMaterials, quoteSettings.materialChargeMode]);
+    if (!hasCommercial) return null;
+    return mergeLineItemsIntoBreakdown(total, quoteSettings, total.countertopSqFt);
+  }, [computedMaterials, quoteSettings]);
 
   const totalAreaSqFt = useMemo(
     () => computedMaterials.reduce((sum, material) => sum + material.quoteAreaSqFt, 0),
@@ -198,6 +220,10 @@ export function QuotePhaseAllMaterialsView({
     () => computedMaterials.reduce((sum, material) => sum + material.sinkCount, 0),
     [computedMaterials],
   );
+  const totalOutletCount = useMemo(
+    () => computedMaterials.reduce((sum, material) => sum + material.outletCount, 0),
+    [computedMaterials],
+  );
   const totalUnplacedPieceCount = useMemo(
     () => computedMaterials.reduce((sum, material) => sum + material.unplacedPieceCount, 0),
     [computedMaterials],
@@ -215,11 +241,25 @@ export function QuotePhaseAllMaterialsView({
     [computedMaterials],
   );
   const materialsMissingPricing = computedMaterials.filter((material) => material.commercial == null).length;
+  /** Full installed estimate; row visibility toggles do not change this total. */
   const customerTotal = useMemo(() => {
     if (!combinedCommercial) return null;
-    return customerQuoteTotalFromBreakdown(combinedCommercial, customerExclusions);
-  }, [combinedCommercial, customerExclusions]);
+    return combinedCommercial.grandTotal;
+  }, [combinedCommercial]);
   const customerPerSqft = customerTotal != null && totalAreaSqFt > 0 ? customerTotal / totalAreaSqFt : null;
+  /** Area-weighted catalog $/sq ft across materials (matches combined material charge). */
+  const blendedVendorCatalogPerSqft = useMemo(() => {
+    let num = 0;
+    let den = 0;
+    for (const material of computedMaterials) {
+      const c = material.commercial;
+      if (!c || c.catalogMaterialPerSqft == null || !Number.isFinite(c.catalogMaterialPerSqft)) continue;
+      if (c.materialAreaSqFt <= 0) continue;
+      num += c.catalogMaterialPerSqft * c.materialAreaSqFt;
+      den += c.materialAreaSqFt;
+    }
+    return den > 0 ? num / den : null;
+  }, [computedMaterials]);
   const analytics = useMemo(
     () =>
       computeQuoteAnalytics({
@@ -230,10 +270,6 @@ export function QuotePhaseAllMaterialsView({
       }),
     [combinedCommercial, computedMaterials, customerTotal, totalAreaSqFt],
   );
-  const materialLines = Array.from(
-    new Set(computedMaterials.map((material) => material.materialLine).filter((line) => line && line !== "—")),
-  );
-
   const materialChargeModeLabel = useMemo(() => {
     const allSlabQuoteLines = computedMaterials.flatMap((material) => material.slabQuoteLines);
     if (allSlabQuoteLines.length === 0) {
@@ -262,8 +298,18 @@ export function QuotePhaseAllMaterialsView({
           </div>
           {customerTotal != null ? (
             <div className="ls-quote-overview-total">
-              <span className="ls-quote-overview-total-label">Installed estimate</span>
-              <strong className="ls-quote-overview-total-value">{formatMoney(customerTotal)}</strong>
+              {customerPerSqft != null ? (
+                <div className="ls-quote-overview-total-block">
+                  <span className="ls-quote-overview-total-label">Per sq ft (layout area)</span>
+                  <span className="ls-quote-overview-total-value ls-quote-overview-total-value--per-sqft">
+                    {`${formatMoney(customerPerSqft)}/sqft`}
+                  </span>
+                </div>
+              ) : null}
+              <div className="ls-quote-overview-total-block ls-quote-overview-total-block--grand">
+                <span className="ls-quote-overview-total-label">Installed estimate</span>
+                <strong className="ls-quote-overview-total-value">{formatMoney(customerTotal)}</strong>
+              </div>
             </div>
           ) : null}
         </div>
@@ -283,6 +329,10 @@ export function QuotePhaseAllMaterialsView({
           <div className="ls-quote-metric">
             <span className="ls-quote-metric-value">{totalSinkCount}</span>
             <span className="ls-quote-metric-label">Sink cutouts</span>
+          </div>
+          <div className="ls-quote-metric">
+            <span className="ls-quote-metric-value">{totalOutletCount}</span>
+            <span className="ls-quote-metric-label">Outlet cutouts</span>
           </div>
         </div>
         {totalUnplacedPieceCount > 0 ? (
@@ -311,10 +361,7 @@ export function QuotePhaseAllMaterialsView({
         <div className="ls-quote-material-rollup-grid">
           {computedMaterials.map((material) => {
             const note = material.option.notes?.trim() || null;
-            const total =
-              material.commercial != null
-                ? customerQuoteTotalFromBreakdown(material.commercial, customerExclusions)
-                : null;
+            const total = material.commercial != null ? material.commercial.grandTotal : null;
             return (
               <article key={material.option.id} className="ls-quote-material-rollup-card">
                 <div className="ls-quote-material-rollup-card-head">
@@ -334,7 +381,12 @@ export function QuotePhaseAllMaterialsView({
                   <span>{material.pieces.length} piece{material.pieces.length === 1 ? "" : "s"}</span>
                   <span>{material.quoteAreaSqFt.toFixed(1)} sq ft</span>
                   <span>{material.slabsUsedCount} slab{material.slabsUsedCount === 1 ? "" : "s"}</span>
-                  <span>{material.sinkCount} sink{material.sinkCount === 1 ? "" : "s"}</span>
+                  <span>
+                    {material.sinkCount} sink{material.sinkCount === 1 ? "" : "s"}
+                    {material.outletCount > 0
+                      ? ` · ${material.outletCount} outlet${material.outletCount === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
                 </div>
                 <div className="ls-quote-material-rollup-preview">
                   <div className="ls-quote-card-head ls-quote-card-head--compact">
@@ -391,16 +443,26 @@ export function QuotePhaseAllMaterialsView({
         </div>
         {analyticsOpen ? (
           <>
-            <p className="ls-muted ls-quote-exclude-legend">
-              Cost to us uses supplier/catalog material cost before markup and does not change with customer slab
-              pricing mode. Fabrication profit currently reflects the charged fabrication amount, and installation is
-              only reflected in gross profit, because labor cost is not modeled separately yet.
-            </p>
+            <details className="ls-quote-analytics-help">
+              <summary>How to read these metrics</summary>
+              <div className="ls-quote-analytics-help-body">
+                <strong>Cost to us</strong> is total supplier slab cost before markup across all materials.{" "}
+                <strong>Vendor catalog / sq ft</strong> is the area-weighted catalog $/sq ft from each material’s vendor
+                price. <strong>Our cost / sq ft (material billed)</strong> is total slab cost divided by combined material
+                charge area. Fabrication profit is the charged fab amount; installation is only in gross profit because
+                labor cost is not modeled separately.
+              </div>
+            </details>
             <div className="ls-quote-analytics-grid" aria-label="All materials cost analytics">
               <AnalyticsCard label="Cost to us" value={analytics.slabCostTotal != null ? formatMoney(analytics.slabCostTotal) : "—"} />
               <AnalyticsCard
-                label="Cost / sq ft"
-                value={analytics.slabCostPerSqft != null ? formatMoney(analytics.slabCostPerSqft) : "—"}
+                label="Vendor catalog / sq ft"
+                value={blendedVendorCatalogPerSqft != null ? `${formatMoney(blendedVendorCatalogPerSqft)}/sqft` : "—"}
+              />
+              <AnalyticsCard
+                label="Our cost / sq ft (material billed)"
+                value={analytics.slabCostPerSqft != null ? `${formatMoney(analytics.slabCostPerSqft)}/sqft` : "—"}
+                tone={materialBilledVsVendorTone(analytics.slabCostPerSqft, blendedVendorCatalogPerSqft)}
               />
               <AnalyticsCard
                 label="Material markup profit"
@@ -431,6 +493,13 @@ export function QuotePhaseAllMaterialsView({
                 value={analytics.utilizationPct != null ? `${analytics.utilizationPct.toFixed(1)}%` : "—"}
               />
             </div>
+            {combinedCommercial ? (
+              <QuoteAnalyticsVisuals
+                commercial={combinedCommercial}
+                grossMarginPct={analytics.grossMarginPct}
+                utilizationPct={analytics.utilizationPct}
+              />
+            ) : null}
           </>
         ) : null}
       </div>
@@ -440,7 +509,8 @@ export function QuotePhaseAllMaterialsView({
           <div className="ls-quote-summary-head-text">
             <p className="ls-card-title">Commercial summary</p>
             <p className="ls-quote-exclude-legend ls-muted">
-              Checked lines are included in the customer-facing quote. Dollar lines adjust the installed estimate.
+              Click a row to include or exclude it from the customer-facing quote PDF/link. Installed estimate always uses
+              the full commercial total; toggles only change what is shown.
             </p>
           </div>
           <button type="button" className="ls-btn ls-btn-secondary ls-quote-settings-btn" onClick={onOpenQuoteSettings}>
@@ -454,7 +524,7 @@ export function QuotePhaseAllMaterialsView({
             <span className="ls-quote-material-mode-value">{materialChargeModeLabel}</span>
             <span className="ls-muted ls-quote-material-mode-hint">
               Controlled from each material’s `Slab pricing` button. Fabrication and installation use total fabricated
-              sq ft (pieces + splash, {(combinedCommercial?.fabricatedSqFt ?? 0).toFixed(1)} est.).
+              sq ft (countertop + splash + miter, {(combinedCommercial?.fabricatedSqFt ?? 0).toFixed(1)} est.).
             </span>
           </div>
         </div>
@@ -462,33 +532,13 @@ export function QuotePhaseAllMaterialsView({
         <dl className="ls-quote-dl ls-quote-dl--with-exclude">
           <QuoteDlRow
             rowId="materialOption"
-            excluded={customerExclusions.materialOption}
-            onExcludeChange={onSetCustomerExclusion}
-            dt="Material / option"
-            dd={
-              <div className="ls-quote-material-summary-list">
-                {computedMaterials.map((material) => (
-                  <span key={material.option.id}>{material.option.productName}</span>
-                ))}
-              </div>
-            }
-          />
-          <QuoteDlRow
-            rowId="vendorManufacturer"
-            excluded={customerExclusions.vendorManufacturer}
-            onExcludeChange={onSetCustomerExclusion}
-            dt="Vendor / manufacturer"
-            dd={
-              materialLines.length > 0 ? (
-                <div className="ls-quote-material-summary-list">
-                  {materialLines.map((line) => (
-                    <span key={line}>{line}</span>
-                  ))}
-                </div>
-              ) : (
-                "—"
-              )
-            }
+            excluded={customerExclusions.materialOption || customerExclusions.vendorManufacturer}
+            onExcludeChange={(_rowId, nextExcluded) => {
+              void onSetCustomerExclusion("materialOption", nextExcluded);
+              void onSetCustomerExclusion("vendorManufacturer", nextExcluded);
+            }}
+            dt="Vendor / material"
+            dd={computedMaterials.map((material) => formatVendorMaterialOptionLine(material.option)).join(" · ")}
           />
           <QuoteDlRow
             rowId="layoutArea"
@@ -578,7 +628,17 @@ export function QuotePhaseAllMaterialsView({
                 rowId="sinkCutouts"
                 excluded={customerExclusions.sinkCutouts}
                 onExcludeChange={onSetCustomerExclusion}
-                dt="Sink cutouts"
+                dt={
+                  <>
+                    Cutouts{" "}
+                    {combinedCommercial.cutoutEachPrice > 0 ? (
+                      <span className="ls-quote-dl-sub">
+                        ({combinedCommercial.sinkCutoutCount} sink + {combinedCommercial.outletCutoutCount} outlet ×{" "}
+                        {formatMoney(combinedCommercial.cutoutEachPrice)})
+                      </span>
+                    ) : null}
+                  </>
+                }
                 dd={formatMoney(combinedCommercial.sinkAddOnTotal)}
               />
               <QuoteDlRow
@@ -587,7 +647,7 @@ export function QuotePhaseAllMaterialsView({
                 onExcludeChange={onSetCustomerExclusion}
                 dt={
                   <>
-                    Splash add-on{" "}
+                    Backsplash polish{" "}
                     <span className="ls-quote-dl-sub">
                       ({combinedCommercial.splashLinearFeet.toFixed(1)} lf × {formatMoney(splashPerLf)})
                     </span>
@@ -609,9 +669,39 @@ export function QuotePhaseAllMaterialsView({
                 dt="Miter add-on"
                 dd={formatMoney(combinedCommercial.miterAddOnTotal)}
               />
+              {combinedCommercial.lineItemRows.map((row) => (
+                <QuoteDlRow
+                  key={row.id}
+                  rowId="customLineItems"
+                  excluded={customerExclusions.customLineItems}
+                  onExcludeChange={onSetCustomerExclusion}
+                  dt={
+                    row.kind === "per_sqft_pieces" ? (
+                      <>
+                        {row.label}{" "}
+                        <span className="ls-quote-dl-sub">
+                          ({combinedCommercial.countertopSqFt.toFixed(1)} sq ft × {formatMoney(row.amount)})
+                        </span>
+                      </>
+                    ) : (
+                      row.label
+                    )
+                  }
+                  dd={formatMoney(row.total)}
+                />
+              ))}
             </>
           ) : null}
 
+          {customerPerSqft != null ? (
+            <QuoteDlRow
+              rowId="perSqFt"
+              excluded={customerExclusions.perSqFt}
+              onExcludeChange={onSetCustomerExclusion}
+              dt="Per sq ft (layout area)"
+              dd={`${formatMoney(customerPerSqft)}/sqft`}
+            />
+          ) : null}
           <QuoteDlRow
             rowId="installedEstimate"
             excluded={customerExclusions.installedEstimate}
@@ -619,23 +709,7 @@ export function QuotePhaseAllMaterialsView({
             dt="Installed estimate"
             dd={customerTotal != null ? formatMoney(customerTotal) : "—"}
           />
-          {customerPerSqft != null ? (
-            <QuoteDlRow
-              rowId="perSqFt"
-              excluded={customerExclusions.perSqFt}
-              onExcludeChange={onSetCustomerExclusion}
-              dt="Per sq ft (layout area)"
-              dd={formatMoney(customerPerSqft)}
-            />
-          ) : null}
 
-          {combinedCommercial && customerTotal != null && customerTotal !== combinedCommercial.grandTotal ? (
-            <div className="ls-quote-dl-row ls-quote-dl-row--internal">
-              <div className="ls-quote-dl-exclude-spacer" aria-hidden />
-              <dt>Internal total (all lines)</dt>
-              <dd>{formatMoney(combinedCommercial.grandTotal)}</dd>
-            </div>
-          ) : null}
         </dl>
 
         {(job.assumptions || computedMaterials.some((material) => material.option.notes?.trim())) ? (
@@ -677,45 +751,36 @@ export function QuotePhaseAllMaterialsView({
   );
 }
 
-function CustomerExcludeCheckbox({
-  rowId,
-  excluded,
-  onChange,
-}: {
-  rowId: LayoutQuoteCustomerRowId;
-  excluded: boolean;
-  onChange: (rowId: LayoutQuoteCustomerRowId, next: boolean) => void | Promise<void>;
-}) {
-  return (
-    <label className="ls-quote-exclude" title="Include in customer quote">
-      <input
-        type="checkbox"
-        className="ls-quote-exclude-input"
-        checked={!excluded}
-        onChange={(e) => void onChange(rowId, !e.target.checked)}
-        aria-label="Include in customer quote"
-      />
-      <span className="ls-quote-exclude-box" aria-hidden />
-    </label>
-  );
-}
-
 function QuoteDlRow({
   rowId,
   excluded,
   onExcludeChange,
   dt,
   dd,
+  className,
 }: {
   rowId: LayoutQuoteCustomerRowId;
   excluded: boolean;
   onExcludeChange: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
   dt: ReactNode;
   dd: ReactNode;
+  className?: string;
 }) {
+  const included = !excluded;
   return (
-    <div className="ls-quote-dl-row">
-      <CustomerExcludeCheckbox rowId={rowId} excluded={excluded} onChange={onExcludeChange} />
+    <div
+      className={`ls-quote-dl-row ls-quote-dl-row--selectable${included ? " is-included" : " is-excluded"}${className ? ` ${className}` : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={included}
+      onClick={() => void onExcludeChange(rowId, !excluded)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void onExcludeChange(rowId, !excluded);
+        }
+      }}
+    >
       <dt>{dt}</dt>
       <dd>{dd}</dd>
     </div>
@@ -729,7 +794,7 @@ function AnalyticsCard({
 }: {
   label: string;
   value: ReactNode;
-  tone?: "positive" | "negative";
+  tone?: "positive" | "negative" | "equal";
 }) {
   return (
     <div className={`ls-quote-analytics-card${tone ? ` is-${tone}` : ""}`}>

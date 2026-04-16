@@ -18,13 +18,12 @@ import {
   type JobRecord,
   type JobStatus,
 } from "../types/compareQuote";
+import {
+  computeCurrentLayoutQuoteForOption,
+  type CurrentLayoutStudioQuote,
+} from "./layoutStudio/utils/currentQuote";
 import { formatMoney } from "../utils/priceHelpers";
 import { exportQuotePackage } from "../utils/exportQuotePackage";
-import {
-  computeQuotedInstallForCompareOption,
-  effectiveQuoteSquareFootage,
-  jobQuoteSquareFootage,
-} from "../utils/quotedPrice";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SlabThumbnailLightbox } from "../components/SlabThumbnailLightbox";
 
@@ -36,38 +35,42 @@ function formatJobStatusLabel(status: string): string {
 }
 
 function CompareOptionQuotedBlock({
-  option: o,
-  job,
+  quote,
   showPrices,
 }: {
-  option: JobComparisonOptionRecord;
-  job: JobRecord;
+  quote: CurrentLayoutStudioQuote | null;
   showPrices: boolean;
 }) {
   if (!showPrices) return null;
-  const q = computeQuotedInstallForCompareOption({
-    jobSquareFootage: effectiveQuoteSquareFootage(job, o),
-    priceUnit: o.priceUnit,
-    catalogLinePrice: o.selectedPriceValue,
-    slabQuantity: o.slabQuantity,
-  });
+  if (quote?.customerTotal == null) {
+    return (
+      <div className="compare-price-basis">
+        <span className="compare-estimate-label">Layout quote:</span>{" "}
+        <span className="product-sub">Complete pricing in Layout Studio quote phase</span>
+      </div>
+    );
+  }
   return (
     <>
-      <div className="compare-price-basis">
-        <span className="compare-estimate-label">Quoted (installed est.):</span>{" "}
-        {q.quotedPerSqft != null ? (
+      {quote.customerPerSqft != null ? (
+        <div className="compare-price-basis">
+          <span className="compare-estimate-label">Installed price:</span>{" "}
           <>
-            <strong>{formatMoney(q.quotedPerSqft)}</strong>
+            <strong>{formatMoney(quote.customerPerSqft)}</strong>
             <span className="product-sub"> / sq ft</span>
           </>
-        ) : (
-          <span className="product-sub">—</span>
-        )}
-      </div>
+        </div>
+      ) : null}
       <div className="compare-price-basis">
-        <span className="compare-estimate-label">Est. quoted total:</span>{" "}
-        <strong>{q.quotedTotal != null ? formatMoney(q.quotedTotal) : "—"}</strong>
+        <span className="compare-estimate-label">Installed estimate:</span>{" "}
+        <strong>{formatMoney(quote.customerTotal)}</strong>
       </div>
+      {quote.displayMetrics.splashLinearFeet > 0 ? (
+        <div className="compare-price-basis">
+          <span className="compare-estimate-label">Backsplash polish:</span>{" "}
+          <span className="product-sub">{quote.displayMetrics.splashLinearFeet.toFixed(1)} lf</span>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -142,16 +145,18 @@ export function JobDetailPage() {
       )
       .map((option) => ({ area, option }))
   );
-  const finalQuoted = finalOption
-    ? computeQuotedInstallForCompareOption({
-        jobSquareFootage: effectiveQuoteSquareFootage(job, finalOption),
-        priceUnit: finalOption.priceUnit,
-        catalogLinePrice: finalOption.selectedPriceValue,
-        slabQuantity: finalOption.slabQuantity,
-      })
-    : null;
-
-  const primaryQuoteSqFt = jobQuoteSquareFootage(job, options);
+  const optionQuotes = useMemo(
+    () =>
+      new Map(
+        options.map((option) => [option.id, computeCurrentLayoutQuoteForOption({ job, option })]),
+      ),
+    [job, options]
+  );
+  const finalQuoted = finalOption ? (optionQuotes.get(finalOption.id) ?? null) : null;
+  const primaryQuoteSqFt =
+    finalQuoted?.quoteAreaSqFt ??
+    Array.from(optionQuotes.values()).find((quote) => quote.quoteAreaSqFt > 0)?.quoteAreaSqFt ??
+    0;
 
   const handleExport = async () => {
     setExporting(true);
@@ -322,71 +327,74 @@ export function JobDetailPage() {
           <p className="product-sub">Add slabs or products from the main catalog.</p>
         ) : (
           <div className="compare-options-grid compare-options-grid--job" role="list">
-            {options.map((o) => (
-              <article key={o.id} className="compare-option-card" role="listitem">
-                <div className="compare-option-card__media">
-                  {o.imageUrl ? (
-                    <SlabThumbnailLightbox src={o.imageUrl} label={o.productName} />
-                  ) : (
-                    <div className="catalog-grid-card__placeholder compare-option-placeholder">
-                      No image
-                    </div>
-                  )}
-                </div>
-                <div className="compare-option-card__body">
-                  <h3 className="compare-option-title">{o.productName}</h3>
-                  <div className="product-sub">
-                    {o.vendor} · {o.manufacturer}
-                  </div>
-                  <dl className="compare-mini-dl">
-                    <div>
-                      <dt>Thickness</dt>
-                      <dd>{o.thickness ?? "—"}</dd>
-                    </div>
-                    <div>
-                      <dt>Size</dt>
-                      <dd>{o.size ?? "—"}</dd>
-                    </div>
-                  </dl>
-                  {showJobPrices ? (
-                    <div className="compare-price-basis">
-                      <span className="compare-estimate-label">Catalog line:</span>{" "}
-                      {o.selectedPriceLabel ?? "—"} ({o.priceUnit ?? "—"})
-                      {o.slabQuantity != null && o.priceUnit === "slab" ? (
-                        <span className="product-sub"> · {o.slabQuantity} slabs</span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <CompareOptionQuotedBlock option={o} job={job} showPrices={showJobPrices} />
-                  {o.notes?.trim() ? <p className="product-sub">{o.notes}</p> : null}
-                  <div className="compare-option-actions">
-                    <Link
-                      className="btn btn-ghost btn-sm"
-                      to={`/compare/jobs/${job.id}/layout?option=${encodeURIComponent(o.id)}`}
-                    >
-                      Studio (this option)
-                    </Link>
-                    {job.finalOptionId === o.id ? (
-                      <span className="compare-final-pill">Final selection</span>
+            {options.map((o) => {
+              const optionQuote = optionQuotes.get(o.id) ?? null;
+              return (
+                <article key={o.id} className="compare-option-card" role="listitem">
+                  <div className="compare-option-card__media">
+                    {o.imageUrl ? (
+                      <SlabThumbnailLightbox src={o.imageUrl} label={o.productName} />
                     ) : (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          void setJobFinalOption(job.id, o.id, "selected");
-                          setJob((j) => (j ? { ...j, finalOptionId: o.id, status: "selected" } : j));
-                        }}
-                      >
-                        Set as final
-                      </button>
+                      <div className="catalog-grid-card__placeholder compare-option-placeholder">
+                        No image
+                      </div>
                     )}
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemoveId(o.id)}>
-                      Remove
-                    </button>
                   </div>
-                </div>
-              </article>
-            ))}
+                  <div className="compare-option-card__body">
+                    <h3 className="compare-option-title">{o.productName}</h3>
+                    <div className="product-sub">
+                      {o.vendor} · {o.manufacturer}
+                    </div>
+                    <dl className="compare-mini-dl">
+                      <div>
+                        <dt>Thickness</dt>
+                        <dd>{o.thickness ?? "—"}</dd>
+                      </div>
+                      <div>
+                        <dt>Size</dt>
+                        <dd>{o.size ?? "—"}</dd>
+                      </div>
+                    </dl>
+                    {showJobPrices ? (
+                      <div className="compare-price-basis">
+                        <span className="compare-estimate-label">Catalog line:</span>{" "}
+                        {o.selectedPriceLabel ?? "—"} ({o.priceUnit ?? "—"})
+                        {o.slabQuantity != null && o.priceUnit === "slab" ? (
+                          <span className="product-sub"> · {o.slabQuantity} slabs</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <CompareOptionQuotedBlock quote={optionQuote} showPrices={showJobPrices} />
+                    {o.notes?.trim() ? <p className="product-sub">{o.notes}</p> : null}
+                    <div className="compare-option-actions">
+                      <Link
+                        className="btn btn-ghost btn-sm"
+                        to={`/compare/jobs/${job.id}/layout?option=${encodeURIComponent(o.id)}`}
+                      >
+                        Studio (this option)
+                      </Link>
+                      {job.finalOptionId === o.id ? (
+                        <span className="compare-final-pill">Final selection</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            void setJobFinalOption(job.id, o.id, "selected");
+                            setJob((j) => (j ? { ...j, finalOptionId: o.id, status: "selected" } : j));
+                          }}
+                        >
+                          Set as final
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRemoveId(o.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -397,9 +405,9 @@ export function JobDetailPage() {
           {showJobPrices ? (
             <>
               {" "}
-              — est. quoted total{" "}
+              — installed estimate{" "}
               <strong>
-                {finalQuoted?.quotedTotal != null ? formatMoney(finalQuoted.quotedTotal) : "—"}
+                {finalQuoted?.customerTotal != null ? formatMoney(finalQuoted.customerTotal) : "—"}
               </strong>
             </>
           ) : null}

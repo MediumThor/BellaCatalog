@@ -3,6 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchAllDaltileSlabResults } from "./fetchDaltileCoveoSlabs.js";
 import {
+  fetchDaltilePdpSlideshowImages,
+  uniqueOrderedDaltileImageUrls,
+} from "./fetchDaltilePdpImages.js";
+import {
   canonicalPdpUrl,
   nowIso,
   normalizeSlabSizeFromNominal,
@@ -40,7 +44,42 @@ function asArray(v) {
   return Array.isArray(v) ? v : [v];
 }
 
-function buildCatalogItem(hit) {
+async function mapPool(items, concurrency, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  const n = Math.min(Math.max(concurrency, 1), items.length);
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return results;
+}
+
+function isOneQuartzSeries(raw) {
+  const text = [
+    raw?.seriesname,
+    raw?.seriescollection,
+    raw?.producttype,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return /\bone quartz\b/i.test(text);
+}
+
+function compactErrorMessage(error) {
+  return String(error instanceof Error ? error.message : error)
+    .trim()
+    .replace(/\s+/g, "_")
+    .slice(0, 120);
+}
+
+async function buildCatalogItem(hit) {
   const raw = hit.raw || {};
   const title = String(hit.title || raw.systitle || "").trim();
   const permanent = String(raw.permanentid ?? "").replace(/\s+/g, "").trim();
@@ -60,8 +99,11 @@ function buildCatalogItem(hit) {
       const rank = (u) => (/swatch/i.test(u) ? 1 : 0);
       return rank(a) - rank(b);
     });
-  const imageUrl = imgList[0] ? upgradeDaltileScene7DisplayUrl(imgList[0]) : "";
-  const galleryUpgraded = imgList.slice(1).map((u) => upgradeDaltileScene7DisplayUrl(u));
+  const coveoImages = uniqueOrderedDaltileImageUrls(
+    imgList.map((u) => upgradeDaltileScene7DisplayUrl(u))
+  );
+  let imageUrl = coveoImages[0] || "";
+  let galleryUpgraded = coveoImages.slice(1);
 
   const finishParts = asArray(raw.finish)
     .map((f) => String(f).trim())
@@ -85,6 +127,32 @@ function buildCatalogItem(hit) {
   const sku = String(raw.sku ?? raw.partial_sku ?? "").trim();
 
   const parseWarnings = [];
+  let primaryImageSource = "coveo";
+  let pdpSlideshowImageCount = 0;
+  let pdpImageSourceUrl = "";
+
+  if (isOneQuartzSeries(raw) && productPageUrl) {
+    try {
+      const pdp = await fetchDaltilePdpSlideshowImages(productPageUrl);
+      pdpSlideshowImageCount = pdp.images.length;
+      pdpImageSourceUrl = pdp.productPageUrl || productPageUrl;
+      if (pdp.images.length) {
+        const preferredIndex = pdp.images[1] ? 1 : 0;
+        const primary = pdp.images[preferredIndex];
+        const remainder = pdp.images.filter((_, index) => index !== preferredIndex);
+
+        // Daltile's first slide is often a zoomed sample; slide two is the fuller slab.
+        imageUrl = primary || imageUrl;
+        galleryUpgraded = remainder;
+        primaryImageSource = preferredIndex === 1 ? "pdp_slideshow_slide_2" : "pdp_slideshow_slide_1";
+      } else {
+        parseWarnings.push("missing_pdp_slideshow_images");
+      }
+    } catch (error) {
+      parseWarnings.push(`pdp_slideshow_fetch:${compactErrorMessage(error)}`);
+    }
+  }
+
   if (!imageUrl) parseWarnings.push("missing_product_image_url");
   if (!productPageUrl) parseWarnings.push("missing_pdp_url");
 
@@ -121,6 +189,10 @@ function buildCatalogItem(hit) {
     rawSourceFields: {
       coveoPermanentId: permanent || null,
       coveoSysUri: raw.sysuri || raw.uri || null,
+      coveoImageCount: coveoImages.length,
+      pdpSlideshowImageCount,
+      pdpImageSourceUrl: pdpImageSourceUrl || null,
+      primaryImageSource,
       parseWarnings,
     },
   };
@@ -129,9 +201,10 @@ function buildCatalogItem(hit) {
 async function run() {
   const startedAt = nowIso();
   const pageSize = toInt(parseArg("pageSize"), 90);
+  const pdpConcurrency = toInt(parseArg("pdpConcurrency"), 8);
 
   const seenUris = new Set();
-  const items = [];
+  const uniqueHits = [];
   const duplicates = [];
 
   const { totalCount, results } = await fetchAllDaltileSlabResults({
@@ -145,14 +218,16 @@ async function run() {
     const raw = hit.raw || {};
     const sysuri = String(raw.sysuri || raw.uri || "").trim().toLowerCase();
     const dedupeKey = sysuri || String(hit.uniqueId || "");
-    const item = buildCatalogItem(hit);
+    const title = String(hit.title || raw.systitle || "").trim();
     if (seenUris.has(dedupeKey)) {
-      duplicates.push({ dedupeKey, title: item.productName, uniqueId: hit.uniqueId });
+      duplicates.push({ dedupeKey, title, uniqueId: hit.uniqueId });
       continue;
     }
     seenUris.add(dedupeKey);
-    items.push(item);
+    uniqueHits.push(hit);
   }
+
+  const items = await mapPool(uniqueHits, pdpConcurrency, async (hit) => buildCatalogItem(hit));
 
   const finishedAt = nowIso();
   const warningsCount = items.reduce((n, it) => {

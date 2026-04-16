@@ -51,15 +51,72 @@ function collectImageCandidatesFromRecord(out: string[], record: UnknownRecord |
   for (const key of IMAGE_ARRAY_KEYS) pushImageCandidates(out, record[key]);
 }
 
+function expandImageCandidateVariants(candidates: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    const normalized = corsSafeImageUrl(trimmed);
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized);
+      out.push(normalized);
+    }
+  }
+  return out;
+}
+
+function stripThicknessVariantId(value: string | null | undefined): string {
+  const trimmed = value?.trim() || "";
+  return trimmed.replace(/\|t:[^|]+$/i, "");
+}
+
+function catalogBaseId(item: CatalogItem | null | undefined): string {
+  if (!item) return "";
+  const fromRaw = item.rawSourceFields?.__thicknessSplitFromId;
+  if (typeof fromRaw === "string" && fromRaw.trim()) return fromRaw.trim();
+  return stripThicknessVariantId(item.id);
+}
+
+function optionCatalogIdCandidates(option: JobComparisonOptionRecord): string[] {
+  const snapshot = asRecord(option.snapshotData);
+  const rawSourceFields = asRecord(snapshot?.["rawSourceFields"]);
+  const out = new Set<string>();
+  const push = (value: unknown) => {
+    if (typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    out.add(trimmed);
+    const baseId = stripThicknessVariantId(trimmed);
+    if (baseId) out.add(baseId);
+  };
+  push(option.catalogItemId);
+  push(snapshot?.["id"]);
+  push(rawSourceFields?.["__thicknessSplitFromId"]);
+  return [...out];
+}
+
 function localCatalogOverrideForOption(option: JobComparisonOptionRecord): CatalogItem | null {
-  const catalogItemId = option.catalogItemId?.trim();
-  if (!catalogItemId || typeof window === "undefined") return null;
+  const candidateIds = optionCatalogIdCandidates(option);
+  if (!candidateIds.length || typeof window === "undefined") return null;
   try {
     const overlay = loadOverlayState();
-    const edited = (overlay.editedItems ?? []).find((item) => item.id === catalogItemId);
-    if (edited) return edited;
+    const importedItems = (overlay.importedSources ?? []).flatMap((source) => source.items);
+    const overlayItems = [...(overlay.editedItems ?? []), ...importedItems];
+    for (const candidateId of candidateIds) {
+      const exact = overlayItems.find((item) => item.id === candidateId);
+      if (exact) return exact;
+    }
+    for (const candidateId of candidateIds) {
+      const base = overlayItems.find((item) => catalogBaseId(item) === candidateId);
+      if (base) return base;
+    }
     for (const source of overlay.importedSources ?? []) {
-      const imported = source.items.find((item) => item.id === catalogItemId);
+      const imported = source.items.find(
+        (item) => candidateIds.includes(item.id) || candidateIds.includes(catalogBaseId(item))
+      );
       if (imported) return imported;
     }
   } catch {
@@ -68,36 +125,30 @@ function localCatalogOverrideForOption(option: JobComparisonOptionRecord): Catal
   return null;
 }
 
-function catalogPrimaryImageCandidate(item: CatalogItem | null): string {
-  if (!item) return "";
-  const candidates = [
+function catalogPrimaryImageCandidates(item: CatalogItem | null): string[] {
+  if (!item) return [];
+  return [
     item.imageUrl,
     item.galleryImages?.find((url) => typeof url === "string" && url.trim()),
     item.liveInventory?.imageUrl ?? undefined,
     item.liveInventory?.galleryImages?.find((url) => typeof url === "string" && url.trim()),
-  ];
-  return candidates.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() || "";
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
-function resolveOptionSlabImageUrl(option: JobComparisonOptionRecord, overrideItem?: CatalogItem | null): string {
+function resolveOptionSlabImageCandidates(option: JobComparisonOptionRecord, overrideItem?: CatalogItem | null): string[] {
   const snapshot = asRecord(option.snapshotData);
   const rawSourceFields = asRecord(snapshot?.["rawSourceFields"]);
   const liveInventory = asRecord(snapshot?.["liveInventory"]);
-  const candidates: string[] = [];
-  pushImageCandidate(candidates, catalogPrimaryImageCandidate(overrideItem ?? null));
-  pushImageCandidate(candidates, option.imageUrl);
-  pushImageCandidate(candidates, option.sourceImageUrl);
-  collectImageCandidatesFromRecord(candidates, snapshot);
-  collectImageCandidatesFromRecord(candidates, liveInventory);
-  collectImageCandidatesFromRecord(candidates, rawSourceFields);
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    const normalized = corsSafeImageUrl(candidate);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    return normalized;
+  const rawCandidates: string[] = [];
+  for (const candidate of catalogPrimaryImageCandidates(overrideItem ?? null)) {
+    pushImageCandidate(rawCandidates, candidate);
   }
-  return "";
+  pushImageCandidate(rawCandidates, option.imageUrl);
+  pushImageCandidate(rawCandidates, option.sourceImageUrl);
+  collectImageCandidatesFromRecord(rawCandidates, snapshot);
+  collectImageCandidatesFromRecord(rawCandidates, liveInventory);
+  collectImageCandidatesFromRecord(rawCandidates, rawSourceFields);
+  return expandImageCandidateVariants(rawCandidates);
 }
 
 function orientLandscape(widthIn: number, heightIn: number): { widthIn: number; heightIn: number } {
@@ -172,7 +223,8 @@ export function applyRealisticSlabDimensions(
 export function slabsForOption(option: JobComparisonOptionRecord): LayoutSlab[] {
   const overrideItem = localCatalogOverrideForOption(option);
   const { widthIn, heightIn, parsed } = parseSizeToInchesPair(overrideItem?.size || option.size);
-  const imageUrl = resolveOptionSlabImageUrl(option, overrideItem);
+  const imageCandidates = resolveOptionSlabImageCandidates(option, overrideItem);
+  const imageUrl = imageCandidates[0] ?? "";
   if (!imageUrl) {
     return [];
   }
@@ -180,6 +232,7 @@ export function slabsForOption(option: JobComparisonOptionRecord): LayoutSlab[] 
     {
       id: `${option.id}-slab-0`,
       imageUrl,
+      imageCandidates,
       label: option.productName || "Slab",
       widthIn,
       heightIn,

@@ -21,6 +21,7 @@ export function createDefaultLayoutState(): SavedLayoutStudioState {
       areaSqFt: 0,
       finishedEdgeLf: 0,
       sinkCount: 0,
+      outletCount: 0,
       profileEdgeLf: 0,
       miterEdgeLf: 0,
       splashPieceCount: 0,

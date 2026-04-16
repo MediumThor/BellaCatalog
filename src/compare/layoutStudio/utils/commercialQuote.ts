@@ -3,6 +3,8 @@ import {
   type JobComparisonOptionRecord,
   type JobRecord,
   type LayoutQuoteCustomerRowId,
+  type LayoutQuoteLineItem,
+  type LayoutQuoteLineItemKind,
   type LayoutQuoteSettings,
   type MaterialChargeMode,
 } from "../../../types/compareQuote";
@@ -16,23 +18,42 @@ import { polygonArea } from "./geometry";
 import { pieceHasArcEdges, polygonAreaWithArcEdges } from "./blankPlanEdgeArc";
 import { piecePixelsPerInch } from "./sourcePages";
 
+export type CommercialQuoteLineItemRow = LayoutQuoteLineItem & {
+  total: number;
+};
+
 export type CommercialQuoteBreakdown = {
   materialTotal: number;
   rawMaterialTotal: number;
   fabricationTotal: number;
   installationTotal: number;
+  /** Sink + outlet cutouts at `cutoutEachPrice` (same as job “Sink cutout (each)” setting). */
   sinkAddOnTotal: number;
+  sinkCutoutCount: number;
+  /** Electrical outlet cutouts summed from `pieces[].outletCount`. */
+  outletCutoutCount: number;
+  /** Effective $/cut from settings (`sinkCutoutEach`). */
+  cutoutEachPrice: number;
   splashAddOnTotal: number;
   profileAddOnTotal: number;
   miterAddOnTotal: number;
+  /** Job-level custom lines (flat or × countertop piece sq ft). */
+  lineItemRows: CommercialQuoteLineItemRow[];
+  lineItemsTotal: number;
   grandTotal: number;
-  /** Effective fabrication $/sq ft (fabricated area: pieces + splash). */
+  /** Effective fabrication $/sq ft (fabricated area: countertop + splash + miter sq ft). */
   fabricationPerSqft: number;
   /** Catalog material $/sq ft used for schedule (when applicable). */
   catalogMaterialPerSqft: number | null;
   /** Sq ft basis for material charge this run. */
   materialAreaSqFt: number;
+  /** Main counter pieces only (total − splash − miter strip areas). */
   countertopSqFt: number;
+  /** Splash strip area (sq ft). */
+  splashAreaSqFt: number;
+  /** Miter strip area (sq ft). */
+  miterAreaSqFt: number;
+  /** Fabrication + installation basis: countertop + splash + miter. */
   fabricatedSqFt: number;
   splashLinearFeet: number;
   materialChargeMode: LayoutQuoteSettings["materialChargeMode"];
@@ -53,6 +74,8 @@ export type SlabMaterialQuoteLine = {
 export type QuoteAnalyticsSummary = {
   slabCostTotal: number | null;
   slabCostPerSqft: number | null;
+  /** Catalog/vendor line $/sq ft before markup (single material; null when not derivable e.g. some slab modes). */
+  vendorCatalogPerSqft: number | null;
   sellPerSqft: number | null;
   materialMarkupProfit: number | null;
   fabricationProfit: number | null;
@@ -79,6 +102,7 @@ const CUSTOMER_ROW_IDS: LayoutQuoteCustomerRowId[] = [
   "splashAddOn",
   "profileAddOn",
   "miterAddOn",
+  "customLineItems",
   "installedEstimate",
   "perSqFt",
 ];
@@ -96,20 +120,61 @@ export function mergeCustomerExclusions(job: JobRecord): Record<LayoutQuoteCusto
   return out;
 }
 
-/** Customer-facing total: sum of monetary lines not excluded. */
-export function customerQuoteTotalFromBreakdown(
-  commercial: CommercialQuoteBreakdown,
-  ex: Record<LayoutQuoteCustomerRowId, boolean>
-): number {
-  let t = 0;
-  if (!ex.materialCost) t += commercial.materialTotal;
-  if (!ex.fabrication) t += commercial.fabricationTotal;
-  if (!ex.installation) t += commercial.installationTotal;
-  if (!ex.sinkCutouts) t += commercial.sinkAddOnTotal;
-  if (!ex.splashAddOn) t += commercial.splashAddOnTotal;
-  if (!ex.profileAddOn) t += commercial.profileAddOnTotal;
-  if (!ex.miterAddOn) t += commercial.miterAddOnTotal;
-  return t;
+export function computeLayoutQuoteLineItems(
+  settings: LayoutQuoteSettings,
+  countertopPieceSqFt: number,
+): { rows: CommercialQuoteLineItemRow[]; lineItemsTotal: number } {
+  const items = settings.customLineItems ?? [];
+  const ctSf = Math.max(0, Number.isFinite(countertopPieceSqFt) ? countertopPieceSqFt : 0);
+  let lineItemsTotal = 0;
+  const rows: CommercialQuoteLineItemRow[] = [];
+  for (const item of items) {
+    const amount = typeof item.amount === "number" && Number.isFinite(item.amount) ? Math.max(0, item.amount) : 0;
+    const total = item.kind === "per_sqft_pieces" ? ctSf * amount : amount;
+    lineItemsTotal += total;
+    rows.push({
+      ...item,
+      total,
+    });
+  }
+  return { rows, lineItemsTotal };
+}
+
+/** Add job-level line items to a combined breakdown (e.g. all materials); `countertopPieceSqFt` should match line-item basis. */
+export function mergeLineItemsIntoBreakdown(
+  base: CommercialQuoteBreakdown,
+  settings: LayoutQuoteSettings,
+  countertopPieceSqFt: number,
+): CommercialQuoteBreakdown {
+  const { rows, lineItemsTotal } = computeLayoutQuoteLineItems(settings, countertopPieceSqFt);
+  return {
+    ...base,
+    lineItemRows: rows,
+    lineItemsTotal,
+    grandTotal: base.grandTotal + lineItemsTotal,
+  };
+}
+
+function parseCustomLineItems(raw: unknown): LayoutQuoteLineItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LayoutQuoteLineItem[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== "object") continue;
+    const o = entry as Record<string, unknown>;
+    const id =
+      typeof o.id === "string" && o.id.trim()
+        ? o.id.trim()
+        : typeof o.id === "number" && Number.isFinite(o.id)
+          ? String(o.id)
+          : `line-${i}`;
+    const label = typeof o.label === "string" ? o.label.trim() : "";
+    const kind: LayoutQuoteLineItemKind =
+      o.kind === "per_sqft_pieces" || o.kind === "flat" ? o.kind : "flat";
+    const amount = typeof o.amount === "number" && Number.isFinite(o.amount) && o.amount >= 0 ? o.amount : 0;
+    out.push({ id, label: label || "Line item", kind, amount });
+  }
+  return out;
 }
 
 function slabAreaSqFt(slabs: LayoutSlab[]): number {
@@ -152,7 +217,7 @@ function pieceAreaSqFt(piece: LayoutPiece, fallbackPixelsPerInch?: number | null
   return areaPx / (ppi * ppi) / 144;
 }
 
-function splashLinearFeetFromPieces(pieces: LayoutPiece[], fallbackPixelsPerInch?: number | null): number {
+export function splashLinearFeetFromPieces(pieces: LayoutPiece[], fallbackPixelsPerInch?: number | null): number {
   return pieces.reduce((sum, piece) => {
     if (piece.pieceRole !== "splash") return sum;
     const rawHeightIn = piece.splashMeta?.heightIn;
@@ -283,6 +348,7 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
           {},
         )
       : {};
+  const customLineItems = parseCustomLineItems(rawRecord.customLineItems);
   return {
     materialMarkup,
     fabricationPerSqftOverride,
@@ -293,18 +359,21 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
     miterPerLf,
     materialChargeMode,
     slabChargeModes,
+    customLineItems,
   };
 }
 
 /**
  * Installed-style commercial breakdown for Layout Studio: material (with optional full-slab billing),
- * fabrication and installation on fabricated sq ft (pieces + splash), plus sink / splash / profile add-ons.
+ * fabrication and installation on fabricated sq ft (countertop pieces + splash + miter strip area), plus add-ons.
  */
 export function computeCommercialLayoutQuote(input: {
   option: JobComparisonOptionRecord;
   jobSquareFootage: number;
   countertopSqFt: number;
   splashAreaSqFt: number;
+  miterAreaSqFt: number;
+  splashLinearFeetOverride?: number | null;
   sinkCount: number;
   profileEdgeLf: number;
   miterEdgeLf: number;
@@ -314,12 +383,16 @@ export function computeCommercialLayoutQuote(input: {
   pixelsPerInch: number | null;
   slabs: LayoutSlab[];
   settings: LayoutQuoteSettings;
+  /** When false, omits job custom line items (use for per-material rows when combining all materials). */
+  includeLineItems?: boolean;
 }): CommercialQuoteBreakdown | null {
   const {
     option,
     jobSquareFootage,
     countertopSqFt,
     splashAreaSqFt,
+    miterAreaSqFt,
+    splashLinearFeetOverride,
     sinkCount,
     profileEdgeLf,
     miterEdgeLf,
@@ -329,6 +402,7 @@ export function computeCommercialLayoutQuote(input: {
     pixelsPerInch,
     slabs,
     settings,
+    includeLineItems = true,
   } = input;
 
   const catalogLinePrice = option.selectedPriceValue;
@@ -342,12 +416,27 @@ export function computeCommercialLayoutQuote(input: {
   const usedSf = Number.isFinite(jobSquareFootage) && jobSquareFootage > 0 ? jobSquareFootage : 0;
   const ctSf = Math.max(0, Number.isFinite(countertopSqFt) ? countertopSqFt : 0);
   const splashSf = Math.max(0, Number.isFinite(splashAreaSqFt) ? splashAreaSqFt : 0);
-  const fabricatedSf = ctSf + splashSf;
-  const splashLf = splashLinearFeetFromPieces(pieces, pixelsPerInch);
+  const miterSf = Math.max(0, Number.isFinite(miterAreaSqFt) ? miterAreaSqFt : 0);
+  const fabricatedSf = ctSf + splashSf + miterSf;
+  const splashLf =
+    typeof splashLinearFeetOverride === "number" &&
+    Number.isFinite(splashLinearFeetOverride) &&
+    splashLinearFeetOverride >= 0
+      ? splashLinearFeetOverride
+      : splashLinearFeetFromPieces(pieces, pixelsPerInch);
   const installationPerSqft =
     Number.isFinite(settings.installationPerSqft) && settings.installationPerSqft >= 0
       ? settings.installationPerSqft
       : 0;
+
+  const outletCutoutCount = pieces.reduce((sum, p) => {
+    const n = p.outlets?.length ?? 0;
+    const leg = n > 0 ? 0 : Math.max(0, Math.floor(p.outletCount ?? 0));
+    return sum + n + leg;
+  }, 0);
+  const sinkCutoutCount = Math.max(0, sinkCount);
+  const cutoutEachPrice =
+    Number.isFinite(settings.sinkCutoutEach) && settings.sinkCutoutEach >= 0 ? settings.sinkCutoutEach : 0;
 
   let catalogMaterialPerSqft: number | null = null;
 
@@ -435,10 +524,13 @@ export function computeCommercialLayoutQuote(input: {
 
   const fabricationTotal = fabricatedSf * fabPerSqft;
   const installationTotal = fabricatedSf * installationPerSqft;
-  const sinkAddOnTotal = Math.max(0, sinkCount) * settings.sinkCutoutEach;
+  const sinkAddOnTotal = (sinkCutoutCount + outletCutoutCount) * cutoutEachPrice;
   const splashAddOnTotal = splashLf * settings.splashPerLf;
   const profileAddOnTotal = Math.max(0, profileEdgeLf) * settings.profilePerLf;
   const miterAddOnTotal = Math.max(0, miterEdgeLf) * settings.miterPerLf;
+
+  const lineItemsBlock =
+    includeLineItems !== false ? computeLayoutQuoteLineItems(settings, ctSf) : { rows: [] as CommercialQuoteLineItemRow[], lineItemsTotal: 0 };
 
   const grandTotal =
     materialTotal +
@@ -447,7 +539,8 @@ export function computeCommercialLayoutQuote(input: {
     sinkAddOnTotal +
     splashAddOnTotal +
     profileAddOnTotal +
-    miterAddOnTotal;
+    miterAddOnTotal +
+    lineItemsBlock.lineItemsTotal;
 
   return {
     materialTotal,
@@ -455,14 +548,21 @@ export function computeCommercialLayoutQuote(input: {
     fabricationTotal,
     installationTotal,
     sinkAddOnTotal,
+    sinkCutoutCount,
+    outletCutoutCount,
+    cutoutEachPrice,
     splashAddOnTotal,
     profileAddOnTotal,
     miterAddOnTotal,
+    lineItemRows: lineItemsBlock.rows,
+    lineItemsTotal: lineItemsBlock.lineItemsTotal,
     grandTotal,
     fabricationPerSqft: fabPerSqft,
     catalogMaterialPerSqft,
     materialAreaSqFt,
     countertopSqFt: ctSf,
+    splashAreaSqFt: splashSf,
+    miterAreaSqFt: miterSf,
     fabricatedSqFt: fabricatedSf,
     splashLinearFeet: splashLf,
     materialChargeMode: settings.materialChargeMode,
@@ -477,8 +577,12 @@ export function computeQuoteAnalytics(input: {
 }): QuoteAnalyticsSummary {
   const { commercial, customerTotal, quoteAreaSqFt, slabQuoteLines } = input;
   const slabCostTotal = commercial?.rawMaterialTotal ?? null;
+  /** Supplier/catalog slab cost per sq ft of material charge basis (not layout area). */
+  const materialBasisSqFt =
+    commercial != null && commercial.materialAreaSqFt > 0 ? commercial.materialAreaSqFt : 0;
   const slabCostPerSqft =
-    slabCostTotal != null && quoteAreaSqFt > 0 ? slabCostTotal / quoteAreaSqFt : null;
+    slabCostTotal != null && materialBasisSqFt > 0 ? slabCostTotal / materialBasisSqFt : null;
+  const vendorCatalogPerSqft = commercial?.catalogMaterialPerSqft ?? null;
   const sellPerSqft =
     customerTotal != null && quoteAreaSqFt > 0 ? customerTotal / quoteAreaSqFt : null;
   const materialMarkupProfit =
@@ -500,6 +604,7 @@ export function computeQuoteAnalytics(input: {
   return {
     slabCostTotal,
     slabCostPerSqft,
+    vendorCatalogPerSqft,
     sellPerSqft,
     materialMarkupProfit,
     fabricationProfit,

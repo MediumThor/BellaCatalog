@@ -1,6 +1,7 @@
 import type { LayoutPiece } from "../types";
 import { planDisplayPoints } from "./blankPlanGeometry";
 import { ensureClosedRing, normalizeClosedRing } from "./geometry";
+import { tracePiecesViewBoxDims } from "./tracePiecesViewBox";
 
 const BLANK_PLAN_WORLD_W_IN = 480;
 const BLANK_PLAN_WORLD_H_IN = 240;
@@ -68,18 +69,11 @@ export async function captureSimplifiedPlanPreview(args: {
     vbW = vb.width;
     vbH = vb.height;
   } else {
-    let maxX = 0;
-    let maxY = 0;
-    for (const pc of pieces) {
-      for (const p of pc.points) {
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-      }
-    }
-    const w = Math.max(tracePlanWidth ?? 0, maxX, 1);
-    const h = Math.max(tracePlanHeight ?? 0, maxY, 1);
-    vbW = w;
-    vbH = h;
+    const vb = tracePiecesViewBoxDims(pieces, tracePlanWidth, tracePlanHeight);
+    minX = vb.minX;
+    minY = vb.minY;
+    vbW = vb.width;
+    vbH = vb.height;
   }
 
   const maxCanvas = 920;
@@ -101,7 +95,7 @@ export async function captureSimplifiedPlanPreview(args: {
 
   ctx.save();
   ctx.scale(cw / vbW, ch / vbH);
-  ctx.translate(workspaceKind === "blank" ? -minX : 0, workspaceKind === "blank" ? -minY : 0);
+  ctx.translate(-minX, -minY);
 
   ctx.lineJoin = "round";
   pieces.forEach((piece, idx) => {

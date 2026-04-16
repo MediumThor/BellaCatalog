@@ -597,7 +597,10 @@ function CatalogAddMaterialModalInner({
       }
 
       if (isEditing && initialItem) {
-        const [normalizedEditedItem] = normalized.items;
+        const normalizedEditedItem =
+          normalized.items.find((item) => item.id === editingItemId) ??
+          normalized.items.find((item) => itemBaseId(item) === editingBaseId) ??
+          normalized.items[0];
         if (!normalizedEditedItem) {
           throw new Error("Could not save the edited listing.");
         }

@@ -10,6 +10,12 @@ import {
 } from "../types/layoutQuoteShare";
 import { layoutQuoteCustomerFromRecord } from "./layoutQuoteCustomer";
 
+/** e.g. `StoneX · StoneX / Black Mist Dual (Leathered+Honed) 3cm` */
+export function formatVendorMaterialOptionLine(option: JobComparisonOptionRecord): string {
+  const vendorLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
+  return `${vendorLine} / ${option.productName}`;
+}
+
 export type LayoutQuoteDisplayRow = LayoutQuoteShareRow;
 export type LayoutQuoteDisplayMaterialSection = LayoutQuoteShareMaterialSection;
 
@@ -75,6 +81,7 @@ export function buildSingleLayoutQuoteDisplayModel(input: {
       miterEdgeLf: miterLf,
       estimatedSlabCount: draft.summary.estimatedSlabCount,
       sinkCount: draft.summary.sinkCount,
+      outletCount: draft.summary.outletCount ?? 0,
       splashAreaSqFt: draft.summary.splashAreaSqFt ?? 0,
     },
     quotedTotal: input.quotedTotal,
@@ -202,11 +209,11 @@ function fallbackCustomerRows(p: LayoutQuoteSharePayloadV1): LayoutQuoteDisplayR
       value: (p.summary.splashAreaSqFt ?? 0) > 0 ? `${(p.summary.splashAreaSqFt ?? 0).toFixed(1)} sq ft` : "—",
     },
   ];
+  if (p.price.quotedPerSqft != null) {
+    rows.push({ label: "Per sq ft (installed)", value: `${formatMoneyValue(p.price.quotedPerSqft)}/sqft` });
+  }
   if (p.price.quotedTotal != null) {
     rows.push({ label: "Installed estimate", value: formatMoneyValue(p.price.quotedTotal) });
-  }
-  if (p.price.quotedPerSqft != null) {
-    rows.push({ label: "Per sq ft (installed)", value: formatMoneyValue(p.price.quotedPerSqft) });
   }
   return rows;
 }

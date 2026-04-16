@@ -12,6 +12,8 @@ export type LayoutQuoteDisplayValue = string | string[];
 export type LayoutQuoteShareRow = {
   label: string;
   value: LayoutQuoteDisplayValue;
+  /** Muted styling on print / share (e.g. internal pre-adjustment total). */
+  tone?: "internal";
 };
 
 export type LayoutQuoteShareMaterialSection = {
@@ -45,6 +47,8 @@ export type LayoutQuoteSharePayloadV1 = {
     miterEdgeLf?: number;
     estimatedSlabCount: number;
     sinkCount: number;
+    /** Electrical outlet cutouts (sum of per-piece counts). */
+    outletCount?: number;
     /** Total area of splash strip pieces (est.), sq ft. */
     splashAreaSqFt?: number;
     /** @deprecated Older shares only (before splash area). */

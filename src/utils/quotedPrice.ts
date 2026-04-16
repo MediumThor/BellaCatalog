@@ -121,17 +121,6 @@ export function computeQuotedPricePerSqft(item: CatalogItem): QuotedPriceBreakdo
   };
 }
 
-/** Shown on compare job / quote UI — customer-facing installed quote, not raw catalog cost. */
-export type CompareOptionQuotedDisplay = {
-  quotedPerSqft: number | null;
-  quotedTotal: number | null;
-};
-
-/**
- * Maps the staff-selected catalog line + job area to the same “quoted installed” model as the main
- * catalog (material × {@link QUOTED_MATERIAL_MARKUP} + fabrication schedule). Uses catalog line
- * price only internally; callers should show {@link CompareOptionQuotedDisplay}, not raw cost.
- */
 /**
  * Sq ft basis for compare quotes: layout estimate on the option when present, otherwise legacy
  * manual `job.squareFootage` (older data).
@@ -163,48 +152,4 @@ export function jobQuoteSquareFootage(
     }
   }
   return effectiveQuoteSquareFootage(job, null);
-}
-
-export function computeQuotedInstallForCompareOption(args: {
-  jobSquareFootage: number;
-  priceUnit: string | null;
-  catalogLinePrice: number | null;
-  slabQuantity: number | null;
-}): CompareOptionQuotedDisplay {
-  const { jobSquareFootage, priceUnit, catalogLinePrice, slabQuantity } = args;
-  if (catalogLinePrice == null || !Number.isFinite(catalogLinePrice)) {
-    return { quotedPerSqft: null, quotedTotal: null };
-  }
-
-  const unit = (priceUnit ?? "").trim();
-
-  if (unit === "sqft") {
-    const materialSqft = catalogLinePrice;
-    const materialMarkup = materialSqft * QUOTED_MATERIAL_MARKUP;
-    const fabrication = fabricationForMaterialSqft(materialSqft);
-    const quotedPerSqft = materialMarkup + fabrication;
-    const quotedTotal =
-      Number.isFinite(jobSquareFootage) && jobSquareFootage > 0
-        ? jobSquareFootage * quotedPerSqft
-        : null;
-    return { quotedPerSqft, quotedTotal };
-  }
-
-  if (unit === "slab") {
-    const slabs = slabQuantity != null && slabQuantity > 0 ? slabQuantity : 1;
-    const jobSf = Number.isFinite(jobSquareFootage) && jobSquareFootage > 0 ? jobSquareFootage : 0;
-    if (jobSf > 0) {
-      const impliedMaterialPerSqft = (catalogLinePrice * slabs) / jobSf;
-      if (Number.isFinite(impliedMaterialPerSqft) && impliedMaterialPerSqft > 0) {
-        const materialMarkup = impliedMaterialPerSqft * QUOTED_MATERIAL_MARKUP;
-        const fabrication = fabricationForMaterialSqft(impliedMaterialPerSqft);
-        const quotedPerSqft = materialMarkup + fabrication;
-        return { quotedPerSqft, quotedTotal: jobSf * quotedPerSqft };
-      }
-    }
-    const quotedTotal = catalogLinePrice * slabs * QUOTED_MATERIAL_MARKUP;
-    return { quotedPerSqft: null, quotedTotal };
-  }
-
-  return { quotedPerSqft: null, quotedTotal: null };
 }

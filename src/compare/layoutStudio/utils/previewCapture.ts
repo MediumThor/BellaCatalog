@@ -1,4 +1,5 @@
 import type { LayoutPiece, LayoutSlab, PiecePlacement } from "../types";
+import { corsSafeImageUrl } from "../../../utils/renderableImageUrl";
 import { mirrorLocalInches, piecePolygonInches, transformedPieceInches } from "./pieceInches";
 import { piecesHaveAnyScale } from "./sourcePages";
 
@@ -10,6 +11,41 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error("Image load failed"));
     img.src = url;
   });
+}
+
+/** URLs to try for canvas capture — same idea as slab `imageCandidates`, but prefer CORS-safe variants first. */
+function orderedSlabCaptureUrls(slab: LayoutSlab): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (u: string) => {
+    const t = u.trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  const raws = [slab.imageUrl, ...(slab.imageCandidates ?? [])].filter((value, index, arr) => {
+    const trimmed = value?.trim();
+    return Boolean(trimmed) && arr.findIndex((candidate) => candidate === value) === index;
+  });
+  for (const raw of raws) {
+    const trimmed = raw.trim();
+    const safe = corsSafeImageUrl(trimmed);
+    if (safe) push(safe);
+    if (trimmed && safe !== trimmed) push(trimmed);
+  }
+  return out;
+}
+
+async function loadImageFirstMatch(urls: string[]): Promise<HTMLImageElement> {
+  let last: unknown;
+  for (const url of urls) {
+    try {
+      return await loadImage(url);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error("Image load failed");
 }
 
 /** Rasterize slab + placed pieces for customer-facing preview (derived output). */
@@ -36,7 +72,7 @@ export async function captureLayoutPreview(input: {
   ctx.fillRect(0, 0, w, h);
 
   try {
-    const img = await loadImage(slab.imageUrl);
+    const img = await loadImageFirstMatch(orderedSlabCaptureUrls(slab));
     ctx.drawImage(img, 0, 0, w, h);
   } catch {
     ctx.fillStyle = "#1a1a1a";

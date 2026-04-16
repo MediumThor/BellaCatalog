@@ -15,6 +15,7 @@ import { createLayoutQuoteShare } from "../services/layoutQuoteShare";
 import {
   buildAllMaterialsLayoutQuoteDisplayModel,
   buildSingleLayoutQuoteDisplayModel,
+  formatVendorMaterialOptionLine,
   sharePayloadFromDisplayModel,
   type LayoutQuoteDisplayMaterialSection,
   type LayoutQuoteDisplayRow,
@@ -22,7 +23,7 @@ import {
 import {
   computeCommercialLayoutQuote,
   computeSlabMaterialQuoteLines,
-  customerQuoteTotalFromBreakdown,
+  mergeLineItemsIntoBreakdown,
   type CommercialQuoteBreakdown,
 } from "../utils/commercialQuote";
 import { captureLayoutPreview } from "../utils/previewCapture";
@@ -44,7 +45,6 @@ type Props = {
   previewWorkspaceKind: "blank" | "source";
   layoutSlabs: LayoutSlab[];
   activeSlabId: string | null;
-  ownerUserId: string;
   showPieceLabels: boolean;
   quoteSettings: LayoutQuoteSettings;
   customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
@@ -62,7 +62,6 @@ type ComputedAllMaterialsSection = {
   slabCount: number;
   sinkCount: number;
   slabModeLabel: string;
-  customerTotal: number | null;
   materialSection: LayoutQuoteDisplayMaterialSection;
 };
 
@@ -77,7 +76,6 @@ export function LayoutQuoteModal({
   previewWorkspaceKind,
   layoutSlabs,
   activeSlabId,
-  ownerUserId,
   showPieceLabels,
   quoteSettings,
   customerExclusions,
@@ -115,6 +113,7 @@ export function LayoutQuoteModal({
         jobSquareFootage: singleQuoteAreaSqFt,
         countertopSqFt: singleCountertopSqFt,
         splashAreaSqFt: draft.summary.splashAreaSqFt ?? 0,
+        miterAreaSqFt: draft.summary.miterAreaSqFt ?? 0,
         sinkCount: draft.summary.sinkCount,
         profileEdgeLf: draft.summary.profileEdgeLf ?? 0,
         miterEdgeLf: draft.summary.miterEdgeLf ?? 0,
@@ -124,6 +123,7 @@ export function LayoutQuoteModal({
         pixelsPerInch: ppi,
         slabs: layoutSlabs,
         settings: quoteSettings,
+        includeLineItems: true,
       }),
     [draft, layoutSlabs, option, ppi, quoteSettings, singleCountertopSqFt, singleQuoteAreaSqFt],
   );
@@ -143,10 +143,11 @@ export function LayoutQuoteModal({
     singleSlabQuoteLines,
     quoteSettings.materialChargeMode,
   );
+  /** Full installed estimate; row visibility toggles do not change this total. */
   const singleCustomerTotal = useMemo(() => {
     if (!singleCommercial) return null;
-    return customerQuoteTotalFromBreakdown(singleCommercial, customerExclusions);
-  }, [customerExclusions, singleCommercial]);
+    return singleCommercial.grandTotal;
+  }, [singleCommercial]);
   const singleCustomerPerSqft =
     singleCustomerTotal != null && singleQuoteAreaSqFt > 0 ? singleCustomerTotal / singleQuoteAreaSqFt : null;
   const singleMaterialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
@@ -166,11 +167,9 @@ export function LayoutQuoteModal({
         materialChargeModeLabel: singleMaterialChargeModeLabel,
         installationPerSqft: quoteSettings.installationPerSqft,
         splashPerLf: quoteSettings.splashPerLf,
-        customerTotal: singleCustomerTotal,
-        customerPerSqft: singleCustomerPerSqft,
+        countertopPieceSqFt: singleCountertopSqFt,
       }),
     [
-      customerExclusions,
       draft.summary.areaSqFt,
       draft.summary.estimatedSlabCount,
       draft.summary.miterEdgeLf,
@@ -178,9 +177,10 @@ export function LayoutQuoteModal({
       draft.summary.sinkCount,
       draft.summary.splashAreaSqFt,
       option.productName,
+      quoteSettings.installationPerSqft,
+      quoteSettings.splashPerLf,
       singleCommercial,
-      singleCustomerPerSqft,
-      singleCustomerTotal,
+      singleCountertopSqFt,
       singleMaterialChargeModeLabel,
       singleMaterialLine,
     ],
@@ -206,6 +206,7 @@ export function LayoutQuoteModal({
           jobSquareFootage: quoteAreaSqFt,
           countertopSqFt,
           splashAreaSqFt,
+          miterAreaSqFt: section.draft.summary.miterAreaSqFt ?? 0,
           sinkCount: section.draft.summary.sinkCount,
           profileEdgeLf,
           miterEdgeLf,
@@ -215,6 +216,7 @@ export function LayoutQuoteModal({
           pixelsPerInch: section.draft.calibration.pixelsPerInch,
           slabs: section.slabs,
           settings: quoteSettings,
+          includeLineItems: false,
         });
         const slabQuoteLines =
           computeSlabMaterialQuoteLines({
@@ -225,8 +227,8 @@ export function LayoutQuoteModal({
             slabs: section.slabs,
             settings: quoteSettings,
           }) ?? [];
-        const customerTotal = commercial ? customerQuoteTotalFromBreakdown(commercial, customerExclusions) : null;
         const subtitle = [materialLine, section.option.thickness].filter(Boolean).join(" • ") || null;
+        const materialGrand = commercial?.grandTotal ?? null;
         return {
           option: section.option,
           materialLine,
@@ -240,18 +242,17 @@ export function LayoutQuoteModal({
           ).size,
           sinkCount: section.pieces.reduce((sum, piece) => sum + (piece.sinks?.length ?? piece.sinkCount ?? 0), 0),
           slabModeLabel: materialChargeModeLabelFromLines(slabQuoteLines, quoteSettings.materialChargeMode),
-          customerTotal,
           materialSection: {
             title: section.option.productName,
             subtitle,
-            estimate: customerTotal != null ? formatMoney(customerTotal) : null,
+            estimate: materialGrand != null ? formatMoney(materialGrand) : null,
             placementImageUrl: section.draft.preview?.imageUrl ?? section.option.layoutPreviewImageUrl ?? null,
             slabThumbs: section.slabs.map((slab) => ({ label: slab.label, imageUrl: slab.imageUrl })),
             note: section.option.notes?.trim() || null,
           },
         };
       }),
-    [allMaterialsSections, customerExclusions, job, quoteSettings],
+    [allMaterialsSections, job, quoteSettings],
   );
 
   const combinedCommercial = useMemo(() => {
@@ -262,14 +263,24 @@ export function LayoutQuoteModal({
       fabricationTotal: 0,
       installationTotal: 0,
       sinkAddOnTotal: 0,
+      sinkCutoutCount: 0,
+      outletCutoutCount: 0,
+      cutoutEachPrice:
+        Number.isFinite(quoteSettings.sinkCutoutEach) && quoteSettings.sinkCutoutEach >= 0
+          ? quoteSettings.sinkCutoutEach
+          : 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
       miterAddOnTotal: 0,
+      lineItemRows: [],
+      lineItemsTotal: 0,
       grandTotal: 0,
       fabricationPerSqft: 0,
       catalogMaterialPerSqft: null,
       materialAreaSqFt: 0,
       countertopSqFt: 0,
+      splashAreaSqFt: 0,
+      miterAreaSqFt: 0,
       fabricatedSqFt: 0,
       splashLinearFeet: 0,
       materialChargeMode: quoteSettings.materialChargeMode,
@@ -282,22 +293,27 @@ export function LayoutQuoteModal({
       total.fabricationTotal += section.commercial.fabricationTotal;
       total.installationTotal += section.commercial.installationTotal;
       total.sinkAddOnTotal += section.commercial.sinkAddOnTotal;
+      total.sinkCutoutCount += section.commercial.sinkCutoutCount;
+      total.outletCutoutCount += section.commercial.outletCutoutCount;
       total.splashAddOnTotal += section.commercial.splashAddOnTotal;
       total.profileAddOnTotal += section.commercial.profileAddOnTotal;
       total.miterAddOnTotal += section.commercial.miterAddOnTotal;
       total.grandTotal += section.commercial.grandTotal;
       total.materialAreaSqFt += section.commercial.materialAreaSqFt;
       total.countertopSqFt += section.commercial.countertopSqFt;
+      total.splashAreaSqFt += section.commercial.splashAreaSqFt;
+      total.miterAreaSqFt += section.commercial.miterAreaSqFt;
       total.fabricatedSqFt += section.commercial.fabricatedSqFt;
       total.splashLinearFeet += section.commercial.splashLinearFeet;
     }
-    return hasCommercial ? total : null;
-  }, [allMaterialsComputed, quoteSettings.materialChargeMode]);
+    if (!hasCommercial) return null;
+    return mergeLineItemsIntoBreakdown(total, quoteSettings, total.countertopSqFt);
+  }, [allMaterialsComputed, quoteSettings]);
 
   const allMaterialsCustomerTotal = useMemo(() => {
     if (!combinedCommercial) return null;
-    return customerQuoteTotalFromBreakdown(combinedCommercial, customerExclusions);
-  }, [combinedCommercial, customerExclusions]);
+    return combinedCommercial.grandTotal;
+  }, [combinedCommercial]);
   const allMaterialsAreaSqFt = useMemo(
     () => allMaterialsComputed.reduce((sum, section) => sum + section.quoteAreaSqFt, 0),
     [allMaterialsComputed],
@@ -322,6 +338,9 @@ export function LayoutQuoteModal({
   const allMaterialsCustomerRows = useMemo(
     () =>
       buildCustomerRows({
+        vendorMaterialCombinedDisplay: allMaterialsComputed
+          .map((section) => formatVendorMaterialOptionLine(section.option))
+          .join(" · "),
         materialOptionValue: allMaterialsComputed.map((section) => section.option.productName),
         vendorManufacturerValue: Array.from(
           new Set(allMaterialsComputed.map((section) => section.materialLine).filter((line) => line && line !== "—")),
@@ -337,17 +356,16 @@ export function LayoutQuoteModal({
         materialChargeModeLabel: allMaterialsModeLabel,
         installationPerSqft: quoteSettings.installationPerSqft,
         splashPerLf: quoteSettings.splashPerLf,
-        customerTotal: allMaterialsCustomerTotal,
-        customerPerSqft: allMaterialsCustomerPerSqft,
+        countertopPieceSqFt: combinedCommercial?.countertopSqFt ?? 0,
       }),
     [
       allMaterialsAreaSqFt,
       allMaterialsComputed,
-      allMaterialsCustomerPerSqft,
-      allMaterialsCustomerTotal,
       allMaterialsModeLabel,
       combinedCommercial,
       customerExclusions,
+      quoteSettings.installationPerSqft,
+      quoteSettings.splashPerLf,
     ],
   );
   const allMaterialsSinkNames = useMemo(
@@ -569,7 +587,6 @@ export function LayoutQuoteModal({
             })
           : null;
       const id = await createLayoutQuoteShare({
-        ownerUserId,
         payload: sharePayloadFromDisplayModel(model),
         planBlob: nextPlanBlob,
         placementBlob: nextPlacementBlob,
@@ -669,6 +686,8 @@ export function LayoutQuoteModal({
 }
 
 function buildCustomerRows(input: {
+  /** When set, replaces separate Material / option + Vendor rows with one line (all-materials quotes). */
+  vendorMaterialCombinedDisplay?: string | null;
   materialOptionValue: string | string[];
   vendorManufacturerValue: string | string[];
   layoutAreaSqFt: number;
@@ -682,10 +701,11 @@ function buildCustomerRows(input: {
   materialChargeModeLabel: string;
   installationPerSqft: number;
   splashPerLf: number;
-  customerTotal: number | null;
-  customerPerSqft: number | null;
+  /** Countertop piece sq ft (main pieces); used for custom line item rate display. */
+  countertopPieceSqFt: number;
 }): LayoutQuoteDisplayRow[] {
   const {
+    vendorMaterialCombinedDisplay,
     materialOptionValue,
     vendorManufacturerValue,
     layoutAreaSqFt,
@@ -699,17 +719,28 @@ function buildCustomerRows(input: {
     materialChargeModeLabel,
     installationPerSqft,
     splashPerLf,
-    customerTotal,
-    customerPerSqft,
+    countertopPieceSqFt,
   } = input;
   const rows: LayoutQuoteDisplayRow[] = [];
   const include = (rowId: LayoutQuoteCustomerRowId) => !customerExclusions[rowId];
   const safeInstallationPerSqft =
     Number.isFinite(installationPerSqft) && installationPerSqft >= 0 ? installationPerSqft : 0;
   const safeSplashPerLf = Number.isFinite(splashPerLf) && splashPerLf >= 0 ? splashPerLf : 0;
+  const safeCtSf =
+    Number.isFinite(countertopPieceSqFt) && countertopPieceSqFt >= 0 ? countertopPieceSqFt : 0;
+  const installedGrandTotal = commercial?.grandTotal ?? null;
+  const perSqftFromGrand =
+    installedGrandTotal != null && layoutAreaSqFt > 0 ? installedGrandTotal / layoutAreaSqFt : null;
 
-  if (include("materialOption")) rows.push({ label: "Material / option", value: materialOptionValue });
-  if (include("vendorManufacturer")) rows.push({ label: "Vendor / manufacturer", value: vendorManufacturerValue });
+  const combinedVendorMaterial = vendorMaterialCombinedDisplay?.trim();
+  if (combinedVendorMaterial) {
+    if (include("materialOption") && include("vendorManufacturer")) {
+      rows.push({ label: "Vendor / material", value: combinedVendorMaterial });
+    }
+  } else {
+    if (include("materialOption")) rows.push({ label: "Material / option", value: materialOptionValue });
+    if (include("vendorManufacturer")) rows.push({ label: "Vendor / manufacturer", value: vendorManufacturerValue });
+  }
   if (include("layoutArea")) rows.push({ label: "Layout area (est.)", value: `${layoutAreaSqFt.toFixed(1)} sq ft` });
   if (include("profileEdge")) rows.push({ label: "Profile edge (est.)", value: profileEdgeLf > 0 ? `${profileEdgeLf.toFixed(1)} lf` : "—" });
   if (include("miterEdge")) rows.push({ label: "Miter edge (est.)", value: miterEdgeLf > 0 ? `${miterEdgeLf.toFixed(1)} lf` : "—" });
@@ -736,22 +767,40 @@ function buildCustomerRows(input: {
         value: formatMoney(commercial.installationTotal),
       });
     }
-    if (include("sinkCutouts")) rows.push({ label: "Sink cutouts", value: formatMoney(commercial.sinkAddOnTotal) });
+    if (include("sinkCutouts")) {
+      const cutSub =
+        commercial.cutoutEachPrice > 0
+          ? ` (${commercial.sinkCutoutCount} sink + ${commercial.outletCutoutCount} outlet × ${formatMoney(commercial.cutoutEachPrice)})`
+          : "";
+      rows.push({ label: `Cutouts${cutSub}`, value: formatMoney(commercial.sinkAddOnTotal) });
+    }
     if (include("splashAddOn")) {
       rows.push({
-        label: `Splash add-on (${commercial.splashLinearFeet.toFixed(1)} lf × ${formatMoney(safeSplashPerLf)})`,
+        label: `Backsplash polish (${commercial.splashLinearFeet.toFixed(1)} lf × ${formatMoney(safeSplashPerLf)})`,
         value: formatMoney(commercial.splashAddOnTotal),
       });
     }
     if (include("profileAddOn")) rows.push({ label: "Profile add-on", value: formatMoney(commercial.profileAddOnTotal) });
     if (include("miterAddOn")) rows.push({ label: "Miter add-on", value: formatMoney(commercial.miterAddOnTotal) });
+    if (include("customLineItems") && commercial.lineItemRows.length > 0) {
+      for (const row of commercial.lineItemRows) {
+        const label =
+          row.kind === "per_sqft_pieces"
+            ? `${row.label} (${safeCtSf.toFixed(1)} sq ft × ${formatMoney(row.amount)})`
+            : row.label;
+        rows.push({ label, value: formatMoney(row.total) });
+      }
+    }
   }
 
-  if (include("installedEstimate")) {
-    rows.push({ label: "Installed estimate", value: customerTotal != null ? formatMoney(customerTotal) : "—" });
+  if (include("perSqFt") && perSqftFromGrand != null) {
+    rows.push({ label: "Per sq ft (layout area)", value: `${formatMoney(perSqftFromGrand)}/sqft` });
   }
-  if (include("perSqFt") && customerPerSqft != null) {
-    rows.push({ label: "Per sq ft (layout area)", value: formatMoney(customerPerSqft) });
+  if (include("installedEstimate")) {
+    rows.push({
+      label: "Installed estimate",
+      value: installedGrandTotal != null ? formatMoney(installedGrandTotal) : "—",
+    });
   }
   return rows;
 }

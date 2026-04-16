@@ -15,6 +15,17 @@ export const CUSTOMER_TYPE_OPTIONS: Array<{ value: CustomerType; label: string }
 /** How material $ is billed in Layout Studio commercial summary (fabrication still uses piece sq ft). */
 export type MaterialChargeMode = "sqft_used" | "full_slab";
 
+/** Custom add-on lines in the commercial summary (job-level). */
+export type LayoutQuoteLineItemKind = "flat" | "per_sqft_pieces";
+
+export interface LayoutQuoteLineItem {
+  id: string;
+  label: string;
+  kind: LayoutQuoteLineItemKind;
+  /** Flat: total dollars. Per piece sq ft: dollars per sq ft of countertop pieces (excludes splash/miter strips). */
+  amount: number;
+}
+
 /** Job-level pricing knobs for Layout Studio quote tab (persisted on `JobRecord`). */
 export interface LayoutQuoteSettings {
   /** Markup multiplier on catalog material cost before fabrication (default matches catalog quote model). */
@@ -23,9 +34,9 @@ export interface LayoutQuoteSettings {
   fabricationPerSqftOverride: number | null;
   /** Additional install $/sq ft on fabricated area (pieces + splash). */
   installationPerSqft: number;
-  /** Add-on $ per sink cutout (layout sink count). */
+  /** Add-on $ per cutout (each sink cutout or each electrical outlet cutout). */
   sinkCutoutEach: number;
-  /** Add-on $ per linear foot of splash strip length. */
+  /** Add-on $ per linear foot of backsplash polish / splash strip length. */
   splashPerLf: number;
   /** Add-on $ per linear foot of profile edge. */
   profilePerLf: number;
@@ -35,6 +46,8 @@ export interface LayoutQuoteSettings {
   materialChargeMode: MaterialChargeMode;
   /** Optional slab-specific billing overrides keyed by `${optionId}:${slabId}`. */
   slabChargeModes?: Record<string, MaterialChargeMode>;
+  /** Extra charges: flat amount or rate × countertop piece sq ft (main pieces only). */
+  customLineItems?: LayoutQuoteLineItem[];
 }
 
 export const DEFAULT_LAYOUT_QUOTE_SETTINGS: LayoutQuoteSettings = {
@@ -47,6 +60,7 @@ export const DEFAULT_LAYOUT_QUOTE_SETTINGS: LayoutQuoteSettings = {
   miterPerLf: 0,
   materialChargeMode: "sqft_used",
   slabChargeModes: {},
+  customLineItems: [],
 };
 
 /** Rows in Layout Studio commercial summary; `true` = exclude from customer-facing quote. */
@@ -66,6 +80,7 @@ export type LayoutQuoteCustomerRowId =
   | "splashAddOn"
   | "profileAddOn"
   | "miterAddOn"
+  | "customLineItems"
   | "installedEstimate"
   | "perSqFt";
 
