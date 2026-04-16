@@ -2,9 +2,31 @@ import { useEffect, useState } from "react";
 import "./layoutStudio/layoutStudio.css";
 import { useParams } from "react-router-dom";
 import { LayoutQuoteSheet } from "./layoutStudio/components/LayoutQuoteSheet";
+import { PlaceLayoutPreview } from "./layoutStudio/components/PlaceLayoutPreview";
 import { getLayoutQuoteShare } from "./layoutStudio/services/layoutQuoteShare";
-import type { LayoutQuoteSharePayloadV1 } from "./layoutStudio/types/layoutQuoteShare";
+import type { LayoutQuoteShareLivePreviewV1, LayoutQuoteSharePayloadV1 } from "./layoutStudio/types/layoutQuoteShare";
 import { displayModelFromSharePayload } from "./layoutStudio/utils/layoutQuoteModel";
+
+function SharePlacePreview({ live, instanceId }: { live: LayoutQuoteShareLivePreviewV1; instanceId: string }) {
+  if (!live.pieces?.length) return null;
+  return (
+    <PlaceLayoutPreview
+      workspaceKind={live.workspaceKind}
+      pieces={live.pieces}
+      placements={live.placements}
+      slabs={live.slabs}
+      pixelsPerInch={live.pixelsPerInch}
+      tracePlanWidth={live.tracePlanWidth ?? undefined}
+      tracePlanHeight={live.tracePlanHeight ?? undefined}
+      showLabels
+      showSinkLabels
+      selectedPieceId={null}
+      previewInstanceId={instanceId}
+      showZoomControls={false}
+      allowViewportInteraction={false}
+    />
+  );
+}
 
 export function PublicLayoutQuotePage() {
   const { shareId } = useParams<{ shareId: string }>();
@@ -52,14 +74,34 @@ export function PublicLayoutQuotePage() {
 
   const model = displayModelFromSharePayload(payload);
 
+  const livePlacement =
+    payload.layoutLivePreview && payload.layoutLivePreview.pieces.length > 0 ? (
+      <SharePlacePreview live={payload.layoutLivePreview} instanceId="public-layout-quote-placement" />
+    ) : undefined;
+
+  const liveMaterialSections = payload.layoutLiveMaterialPreviews?.map((live, idx) =>
+    live && live.pieces.length > 0 ? (
+      <SharePlacePreview key={`live-${idx}`} live={live} instanceId={`public-layout-quote-mat-${idx}`} />
+    ) : null
+  );
+
   return (
-    <div className="compare-page public-layout-quote">
-      <div className="public-layout-quote-toolbar no-print">
-        <button type="button" className="btn btn-primary" onClick={() => window.print()}>
-          Save PDF / print
-        </button>
+    <main className="compare-page public-layout-quote">
+      <div className="ls-modal glass-panel ls-layout-quote-modal">
+        <div className="ls-layout-quote-modal-toolbar">
+          <h2 className="ls-layout-quote-modal-title" id="public-layout-quote-title">
+            Layout quote
+          </h2>
+        </div>
+        <div className="ls-layout-quote-modal-body ls-layout-quote-modal-body--public">
+          <LayoutQuoteSheet
+            sheetId="public-layout-quote-sheet"
+            model={model}
+            livePlacement={livePlacement}
+            liveMaterialSections={liveMaterialSections}
+          />
+        </div>
       </div>
-      <LayoutQuoteSheet sheetId="public-layout-quote-sheet" model={model} />
-    </div>
+    </main>
   );
 }

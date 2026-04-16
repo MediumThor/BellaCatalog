@@ -1,3 +1,5 @@
+import type { LayoutPiece, PiecePlacement, LayoutSlab } from "../types";
+
 /** Customer fields stored on shared layout quotes (read-only links / PDF). */
 export type LayoutQuoteCustomerSnapshot = {
   displayName: string;
@@ -25,6 +27,17 @@ export type LayoutQuoteShareMaterialSection = {
   note: string | null;
 };
 
+/** Enough state to render the live plan preview (PlaceLayoutPreview) on the read-only share page. */
+export type LayoutQuoteShareLivePreviewV1 = {
+  workspaceKind: "blank" | "source";
+  pixelsPerInch: number | null;
+  tracePlanWidth: number | null;
+  tracePlanHeight: number | null;
+  pieces: LayoutPiece[];
+  placements: PiecePlacement[];
+  slabs: LayoutSlab[];
+};
+
 /** Serialized layout quote for read-only share links and PDF snapshots. */
 export type LayoutQuoteSharePayloadV1 = {
   version: 1;
@@ -36,6 +49,10 @@ export type LayoutQuoteSharePayloadV1 = {
   generatedAt: string;
   planImageUrl: string | null;
   placementImageUrl: string | null;
+  /** When present, public page renders live plan geometry (preferred over placementImageUrl). */
+  layoutLivePreview?: LayoutQuoteShareLivePreviewV1 | null;
+  /** All-materials quotes: live preview per material card, same order as `materialSections`. */
+  layoutLiveMaterialPreviews?: Array<LayoutQuoteShareLivePreviewV1 | null> | null;
   slabThumbs: { label: string; imageUrl: string }[];
   activeSlabLabel: string;
   activeSlabLabelTitle?: string;

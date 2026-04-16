@@ -239,6 +239,11 @@ export interface SavedLayoutSource {
 export interface SavedLayoutPreview {
   imageUrl?: string;
   generatedAt?: string;
+  /**
+   * Distinguishes quote-facing preview rasters: `plan` = simplified trace/blank layout (live layout),
+   * `slab` = deprecated slab-placement capture (must not be used for layout quote / share hero).
+   */
+  variant?: "plan" | "slab";
 }
 
 /**

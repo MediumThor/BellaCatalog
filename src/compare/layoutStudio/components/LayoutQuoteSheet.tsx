@@ -160,23 +160,6 @@ export function LayoutQuoteSheet({
               ))}
             </div>
           </section>
-        ) : model.slabThumbs.length > 0 ? (
-          <section className="ls-layout-quote-section">
-            <h2 className="ls-layout-quote-h2">Slab options on this layout</h2>
-            <div className="ls-layout-quote-slab-grid" aria-label="Slab thumbnails">
-              {model.slabThumbs.map((s, idx) => (
-                <button
-                  key={`slab-${idx}`}
-                  type="button"
-                  className="ls-layout-quote-slab-card"
-                  onClick={() => setLightboxUrl(s.imageUrl)}
-                >
-                  <img src={s.imageUrl} alt="" className="ls-layout-quote-slab-card-img" />
-                  <span className="ls-layout-quote-slab-card-lbl">{s.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
         ) : null}
 
         {model.sinkNames.length > 0 ? (

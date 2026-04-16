@@ -128,8 +128,10 @@ function areaSinkSummaries(area: JobAreaRecord): string[] {
   const pieces = area.layoutStudioPlan?.pieces ?? [];
   return pieces.flatMap((piece) =>
     (piece.sinks ?? []).map((sink) => {
-      const holeLabel = `${sink.faucetHoleCount} hole${sink.faucetHoleCount === 1 ? "" : "s"}`;
-      return `${sink.name} · ${holeLabel} · ${sink.spreadIn}" spread`;
+      const holeCount = sink.faucetHoleCount ?? 0;
+      const holeLabel = `${holeCount} hole${holeCount === 1 ? "" : "s"}`;
+      const spread = sink.spreadIn != null ? `${sink.spreadIn}" spread` : "spread —";
+      return `${(sink.name ?? "").trim() || "Sink"} · ${holeLabel} · ${spread}`;
     })
   );
 }

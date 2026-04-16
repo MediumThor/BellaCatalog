@@ -6755,6 +6755,25 @@ select.ls-input optgroup {
   padding-right: 0.25rem;
 }
 
+/* Public share URL: same card as Layout quote modal, full page (not a short scroll region). */
+.public-layout-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 3vh;
+  padding-bottom: 3rem;
+}
+
+.public-layout-quote .ls-layout-quote-modal {
+  margin-inline: auto;
+}
+
+.ls-layout-quote-modal-body--public {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
 .ls-layout-quote-sheet {
   padding: 1rem 1.1rem 1.25rem;
   border-radius: var(--radius-md, 10px);

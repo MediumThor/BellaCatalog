@@ -142,6 +142,8 @@ export interface LayoutAreaOptionState {
   layoutSinkCount?: number | null;
   layoutEstimatedSlabCount?: number | null;
   layoutPreviewImageUrl?: string | null;
+  /** Mirrors `SavedLayoutPreview.variant` for quick reads without hydrating placement. */
+  layoutPreviewVariant?: "plan" | "slab" | null;
   layoutUpdatedAt?: string | null;
   layoutQuoteReadyAt?: string | null;
   layoutProfileLf?: number | null;
@@ -220,6 +222,8 @@ export interface JobComparisonOptionRecord {
   layoutSinkCount?: number | null;
   layoutEstimatedSlabCount?: number | null;
   layoutPreviewImageUrl?: string | null;
+  /** Mirrors `SavedLayoutPreview.variant` on the saved placement preview. */
+  layoutPreviewVariant?: "plan" | "slab" | null;
   layoutUpdatedAt?: string | null;
   /** ISO timestamp when layout outputs were last promoted for quoting (Quote phase transition). */
   layoutQuoteReadyAt?: string | null;

@@ -3845,12 +3845,6 @@ a.compare-customer-contact__item:hover {
   padding-left: 1.25rem;
 }
 
-.public-layout-quote-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 1rem;
-}
-
 @media print {
   .no-print {
     display: none !important;

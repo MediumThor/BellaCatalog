@@ -4,11 +4,13 @@ import {
   LAYOUT_QUOTE_DISCLAIMER,
   type LayoutQuoteCustomerSnapshot,
   type LayoutQuoteDisplayValue,
+  type LayoutQuoteShareLivePreviewV1,
   type LayoutQuoteShareMaterialSection,
   type LayoutQuoteSharePayloadV1,
   type LayoutQuoteShareRow,
 } from "../types/layoutQuoteShare";
 import { layoutQuoteCustomerFromRecord } from "./layoutQuoteCustomer";
+import { piecesHaveAnyScale } from "./sourcePages";
 
 /** e.g. `StoneX · StoneX / Black Mist Dual (Leathered+Honed) 3cm` */
 export function formatVendorMaterialOptionLine(option: JobComparisonOptionRecord): string {
@@ -18,6 +20,45 @@ export function formatVendorMaterialOptionLine(option: JobComparisonOptionRecord
 
 export type LayoutQuoteDisplayRow = LayoutQuoteShareRow;
 export type LayoutQuoteDisplayMaterialSection = LayoutQuoteShareMaterialSection;
+
+/**
+ * Static image for the layout quote / share “LAYOUT VIEW” — only the simplified plan raster (`variant: plan`),
+ * never deprecated slab-placement captures (`variant: slab`). Legacy previews without a variant are omitted until
+ * the layout is saved again so the stored preview is tagged.
+ */
+export function layoutQuotePlacementHeroUrl(
+  draft: SavedLayoutStudioState,
+  option: JobComparisonOptionRecord
+): string | null {
+  const v = draft.preview?.variant ?? option.layoutPreviewVariant;
+  if (v === "slab") return null;
+  if (v === "plan") {
+    return draft.preview?.imageUrl ?? option.layoutPreviewImageUrl ?? null;
+  }
+  return null;
+}
+
+/** Serialized live preview for share links — same inputs as PlaceLayoutPreview in the Layout quote modal. */
+export function layoutQuoteShareLivePreviewFromStudio(input: {
+  workspaceKind: "blank" | "source";
+  pieces: LayoutPiece[];
+  placements: SavedLayoutStudioState["placements"];
+  slabs: LayoutSlab[];
+  pixelsPerInch: number | null;
+  tracePlanWidth: number | null;
+  tracePlanHeight: number | null;
+}): LayoutQuoteShareLivePreviewV1 | null {
+  if (!piecesHaveAnyScale(input.pieces, input.pixelsPerInch)) return null;
+  return {
+    workspaceKind: input.workspaceKind,
+    pixelsPerInch: input.pixelsPerInch,
+    tracePlanWidth: input.tracePlanWidth,
+    tracePlanHeight: input.tracePlanHeight,
+    pieces: input.pieces,
+    placements: input.placements,
+    slabs: input.slabs.map((s) => ({ ...s })),
+  };
+}
 
 export type LayoutQuoteDisplayModel = {
   customer: LayoutQuoteCustomerSnapshot | null;
@@ -61,7 +102,10 @@ export function buildSingleLayoutQuoteDisplayModel(input: {
   const materialLine = [option.manufacturer, option.vendor].filter(Boolean).join(" · ") || "—";
   const profileLf = draft.summary.profileEdgeLf ?? 0;
   const miterLf = draft.summary.miterEdgeLf ?? 0;
-  const previewUrl = input.placementImageUrl ?? draft.preview?.imageUrl ?? option.layoutPreviewImageUrl ?? null;
+  const previewUrl =
+    input.placementImageUrl !== undefined
+      ? input.placementImageUrl
+      : layoutQuotePlacementHeroUrl(draft, option);
 
   return {
     customer: layoutQuoteCustomerFromRecord(customer),
@@ -232,7 +276,7 @@ function sinkNamesFromPieces(pieces: LayoutPiece[]): string[] {
   for (const piece of pieces) {
     const pieceName = piece.name.trim() || "Piece";
     const namedSinks = (piece.sinks ?? [])
-      .map((sink) => sink.name.trim())
+      .map((sink) => (sink.name ?? "").trim())
       .filter((name) => name.length > 0);
     if (namedSinks.length > 0) {
       names.push(...namedSinks);

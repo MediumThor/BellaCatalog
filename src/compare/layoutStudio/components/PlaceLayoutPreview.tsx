@@ -551,6 +551,7 @@ export function PlaceLayoutPreview({
       ) : null}
       <div
         ref={viewportRef}
+        data-place-layout-preview={previewInstanceId}
         className={viewportClass}
         onWheel={allowViewportInteraction ? handleViewportWheel : undefined}
         onPointerDownCapture={allowViewportInteraction && (isFullscreen || inlinePanEnabled) ? handleViewportPointerDownCapture : undefined}

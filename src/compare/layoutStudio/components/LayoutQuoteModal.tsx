@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import type {
   CustomerRecord,
@@ -8,6 +8,7 @@ import type {
   LayoutQuoteSettings,
   MaterialChargeMode,
 } from "../../../types/compareQuote";
+import type { LayoutQuoteShareLivePreviewV1 } from "../types/layoutQuoteShare";
 import { formatMoney } from "../../../utils/priceHelpers";
 import { effectiveQuoteSquareFootage } from "../../../utils/quotedPrice";
 import type { LayoutSlab, SavedLayoutStudioState } from "../types";
@@ -16,6 +17,8 @@ import {
   buildAllMaterialsLayoutQuoteDisplayModel,
   buildSingleLayoutQuoteDisplayModel,
   formatVendorMaterialOptionLine,
+  layoutQuotePlacementHeroUrl,
+  layoutQuoteShareLivePreviewFromStudio,
   sharePayloadFromDisplayModel,
   type LayoutQuoteDisplayMaterialSection,
   type LayoutQuoteDisplayRow,
@@ -26,9 +29,6 @@ import {
   mergeLineItemsIntoBreakdown,
   type CommercialQuoteBreakdown,
 } from "../utils/commercialQuote";
-import { captureLayoutPreview } from "../utils/previewCapture";
-import { captureSimplifiedPlanPreview } from "../utils/planPreviewRaster";
-import { ensurePlacementsForPieces } from "../utils/placements";
 import { piecesHaveAnyScale } from "../utils/sourcePages";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
 import { LayoutQuoteSheet } from "./LayoutQuoteSheet";
@@ -86,8 +86,6 @@ export function LayoutQuoteModal({
   const [createError, setCreateError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [planPreviewBlob, setPlanPreviewBlob] = useState<Blob | null>(null);
-  const [planPreviewUrl, setPlanPreviewUrl] = useState<string | null>(null);
 
   const primarySlab = useMemo(() => {
     if (!layoutSlabs.length) return null;
@@ -246,7 +244,7 @@ export function LayoutQuoteModal({
             title: section.option.productName,
             subtitle,
             estimate: materialGrand != null ? formatMoney(materialGrand) : null,
-            placementImageUrl: section.draft.preview?.imageUrl ?? section.option.layoutPreviewImageUrl ?? null,
+            placementImageUrl: layoutQuotePlacementHeroUrl(section.draft, section.option),
             slabThumbs: section.slabs.map((slab) => ({ label: slab.label, imageUrl: slab.imageUrl })),
             note: section.option.notes?.trim() || null,
           },
@@ -375,7 +373,7 @@ export function LayoutQuoteModal({
           (allMaterialsSections ?? []).flatMap((section) =>
             section.pieces.flatMap((piece) => {
               const namedSinks = (piece.sinks ?? [])
-                .map((sink) => sink.name.trim())
+                .map((sink) => (sink.name ?? "").trim())
                 .filter((name) => name.length > 0);
               if (namedSinks.length > 0) return namedSinks;
               const legacyCount = Math.max(0, Math.floor(piece.sinkCount || 0));
@@ -411,7 +409,7 @@ export function LayoutQuoteModal({
             materialSections: allMaterialsComputed.map((section) => section.materialSection),
             quotedTotal: allMaterialsCustomerTotal,
             quotedPerSqft: allMaterialsCustomerPerSqft,
-            planImageUrl: planPreviewUrl,
+            planImageUrl: null,
           })
         : buildSingleLayoutQuoteDisplayModel({
             customer,
@@ -438,7 +436,6 @@ export function LayoutQuoteModal({
       job,
       layoutSlabs,
       option,
-      planPreviewUrl,
       singleCustomerPerSqft,
       singleCustomerRows,
       singleCustomerTotal,
@@ -497,41 +494,8 @@ export function LayoutQuoteModal({
       setCreateError(null);
       setCopied(false);
       setQrDataUrl(null);
-      setPlanPreviewBlob(null);
-      setPlanPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
     }
   }, [open]);
-
-  useEffect(() => {
-    if (!open || !isAllMaterialsQuote) return;
-    let cancelled = false;
-    void captureSimplifiedPlanPreview({
-      workspaceKind: previewWorkspaceKind,
-      pieces: draft.pieces,
-      tracePlanWidth: draft.source?.sourceWidthPx ?? null,
-      tracePlanHeight: draft.source?.sourceHeightPx ?? null,
-    }).then((blob) => {
-      if (cancelled) return;
-      setPlanPreviewBlob(blob);
-      setPlanPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return blob ? URL.createObjectURL(blob) : null;
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    draft.pieces,
-    draft.source?.sourceHeightPx,
-    draft.source?.sourceWidthPx,
-    isAllMaterialsQuote,
-    open,
-    previewWorkspaceKind,
-  ]);
 
   useEffect(() => {
     if (!shareUrl) {
@@ -563,33 +527,49 @@ export function LayoutQuoteModal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
-
-  const handleCreateLink = async () => {
+  const handleCreateLink = useCallback(async () => {
     setCreating(true);
     setCreateError(null);
     try {
-      const nextPlanBlob =
-        planPreviewBlob ??
-        (await captureSimplifiedPlanPreview({
+      const basePayload = sharePayloadFromDisplayModel(model);
+      let layoutLivePreview: LayoutQuoteShareLivePreviewV1 | null = null;
+      let layoutLiveMaterialPreviews: Array<LayoutQuoteShareLivePreviewV1 | null> | null = null;
+
+      if (isAllMaterialsQuote && allMaterialsSections?.length) {
+        layoutLiveMaterialPreviews = allMaterialsSections.map((section) => {
+          const sectionPpi = section.draft.calibration.pixelsPerInch;
+          if (!piecesHaveAnyScale(section.previewPieces, sectionPpi)) return null;
+          return layoutQuoteShareLivePreviewFromStudio({
+            workspaceKind: section.previewWorkspaceKind,
+            pieces: section.previewPieces,
+            placements: section.placements,
+            slabs: section.slabs,
+            pixelsPerInch: sectionPpi,
+            tracePlanWidth: section.draft.source?.sourceWidthPx ?? null,
+            tracePlanHeight: section.draft.source?.sourceHeightPx ?? null,
+          });
+        });
+        if (!layoutLiveMaterialPreviews.some((x) => x != null)) {
+          layoutLiveMaterialPreviews = null;
+        }
+      } else if (!isAllMaterialsQuote && hasScaledPieces) {
+        layoutLivePreview = layoutQuoteShareLivePreviewFromStudio({
           workspaceKind: previewWorkspaceKind,
-          pieces: draft.pieces,
+          pieces: previewPieces,
+          placements: draft.placements,
+          slabs: layoutSlabs,
+          pixelsPerInch: ppi,
           tracePlanWidth: draft.source?.sourceWidthPx ?? null,
           tracePlanHeight: draft.source?.sourceHeightPx ?? null,
-        }));
-      const nextPlacementBlob =
-        !isAllMaterialsQuote && primarySlab && hasScaledPieces
-          ? await captureLayoutPreview({
-              slab: primarySlab,
-              pieces: draft.pieces,
-              placements: ensurePlacementsForPieces(draft.pieces, draft.placements),
-              pixelsPerInch: ppi,
-            })
-          : null;
+        });
+      }
+
       const id = await createLayoutQuoteShare({
-        payload: sharePayloadFromDisplayModel(model),
-        planBlob: nextPlanBlob,
-        placementBlob: nextPlacementBlob,
+        payload: {
+          ...basePayload,
+          ...(layoutLivePreview ? { layoutLivePreview } : {}),
+          ...(layoutLiveMaterialPreviews ? { layoutLiveMaterialPreviews } : {}),
+        },
       });
       setShareId(id);
     } catch (e) {
@@ -597,9 +577,21 @@ export function LayoutQuoteModal({
     } finally {
       setCreating(false);
     }
-  };
+  }, [
+    allMaterialsSections,
+    draft.placements,
+    draft.source?.sourceHeightPx,
+    draft.source?.sourceWidthPx,
+    hasScaledPieces,
+    isAllMaterialsQuote,
+    layoutSlabs,
+    model,
+    ppi,
+    previewPieces,
+    previewWorkspaceKind,
+  ]);
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -608,7 +600,9 @@ export function LayoutQuoteModal({
     } catch {
       setCreateError("Clipboard unavailable.");
     }
-  };
+  }, [shareUrl]);
+
+  if (!open) return null;
 
   return (
     <div
@@ -667,8 +661,8 @@ export function LayoutQuoteModal({
           </div>
         ) : (
           <p className="ls-layout-quote-hint ls-no-print">
-            Create a read-only link to share with your customer. It includes a snapshot of this layout quote and
-            opens without signing in.
+            Create a read-only link to share with your customer. It saves this layout quote (same fields as
+            above) plus the live plan preview when pieces are scaled, and opens without signing in.
           </p>
         )}
 

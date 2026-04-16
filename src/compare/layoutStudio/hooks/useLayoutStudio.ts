@@ -7,10 +7,7 @@ import {
   recomputeDraftSummary,
 } from "../services/persistLayout";
 import type { SavedLayoutStudioState } from "../types";
-import { captureLayoutPreview } from "../utils/previewCapture";
-import { ensurePlacementsForPieces } from "../utils/placements";
-import { slabsForOption } from "../utils/slabDimensions";
-import { piecesHaveAnyScale } from "../utils/sourcePages";
+import { captureSimplifiedPlanPreview } from "../utils/planPreviewRaster";
 import { useResolvedLayoutSlabs } from "./useResolvedLayoutSlabs";
 
 export type LayoutSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -73,16 +70,16 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
 
   const buildPreviewBlob = useCallback(async (d: SavedLayoutStudioState): Promise<Blob | null> => {
     if (!option) return null;
-    const slabs = layoutSlabs.length > 0 ? layoutSlabs : slabsForOption(option);
-    const ppi = d.calibration.pixelsPerInch;
-    if (!slabs[0] || !piecesHaveAnyScale(d.pieces, ppi)) return null;
-    return captureLayoutPreview({
-      slab: slabs[0],
+    if (d.pieces.length === 0) return null;
+    const workspaceKind: "blank" | "source" =
+      d.workspaceKind === "blank" || d.workspaceKind === "source" ? d.workspaceKind : d.source ? "source" : "blank";
+    return captureSimplifiedPlanPreview({
+      workspaceKind,
       pieces: d.pieces,
-      placements: ensurePlacementsForPieces(d.pieces, d.placements),
-      pixelsPerInch: ppi,
+      tracePlanWidth: d.source?.sourceWidthPx ?? null,
+      tracePlanHeight: d.source?.sourceHeightPx ?? null,
     });
-  }, [layoutSlabs, option]);
+  }, [option]);
 
   /** Pass `draftOverride` when persisting state that is not yet committed to React state (e.g. same-tick tab switch). */
   const save = useCallback(

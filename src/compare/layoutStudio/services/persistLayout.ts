@@ -259,7 +259,7 @@ export async function persistLayoutDraft(
 
   if (opts?.previewBlob) {
     const { downloadUrl } = await uploadLayoutPreviewPng(option.ownerUserId, optionId, opts.previewBlob);
-    preview = { imageUrl: downloadUrl, generatedAt: t };
+    preview = { imageUrl: downloadUrl, generatedAt: t, variant: "plan" };
     previewUrl = downloadUrl;
   }
 
@@ -282,6 +282,7 @@ export async function persistLayoutDraft(
     layoutSinkCount: withPlacements.summary.sinkCount,
     layoutEstimatedSlabCount: withPlacements.summary.estimatedSlabCount,
     layoutPreviewImageUrl: previewUrl,
+    layoutPreviewVariant: preview.variant ?? null,
     layoutUpdatedAt: t,
   };
   if (areaId) {
@@ -292,6 +293,7 @@ export async function persistLayoutDraft(
       layoutSinkCount: withPlacements.summary.sinkCount,
       layoutEstimatedSlabCount: withPlacements.summary.estimatedSlabCount,
       layoutPreviewImageUrl: previewUrl,
+      layoutPreviewVariant: preview.variant ?? null,
       layoutUpdatedAt: t,
     };
     patch.layoutAreaStates = {

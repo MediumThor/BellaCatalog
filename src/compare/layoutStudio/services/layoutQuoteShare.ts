@@ -1,55 +1,69 @@
 import { collection, doc, getDoc, setDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { firebaseAuth, firebaseDb, firebaseStorage } from "../../../firebase";
-import type { LayoutQuoteSharePayloadV1 } from "../types/layoutQuoteShare";
+import { firebaseAuth, firebaseDb } from "../../../firebase";
+import { omitUndefinedDeep } from "../../../utils/compareSnapshot";
+import type { LayoutQuoteShareLivePreviewV1, LayoutQuoteSharePayloadV1 } from "../types/layoutQuoteShare";
 
 function nowIso(): string {
   return new Date().toISOString();
 }
 
-async function uploadSharePng(
-  ownerUserId: string,
-  shareId: string,
-  name: "plan" | "placement",
-  blob: Blob
-): Promise<string> {
-  const storagePath = `layout-quote-shares/${ownerUserId}/${shareId}/${name}.png`;
-  const r = ref(firebaseStorage, storagePath);
-  await uploadBytes(r, blob, { contentType: "image/png" });
-  return getDownloadURL(r);
+/** Blob URLs are session-local; never persist them on share documents. */
+function sanitizeShareImageUrl(u: string | null | undefined): string | null {
+  if (!u || typeof u !== "string") return null;
+  if (u.startsWith("blob:")) return null;
+  return u;
 }
 
-export async function createLayoutQuoteShare(input: {
-  payload: LayoutQuoteSharePayloadV1;
-  planBlob?: Blob | null;
-  placementBlob?: Blob | null;
-}): Promise<string> {
+function sanitizeLayoutLivePreview(
+  v: LayoutQuoteShareLivePreviewV1 | null | undefined
+): LayoutQuoteShareLivePreviewV1 | null | undefined {
+  if (v == null) return v;
+  return {
+    ...v,
+    slabs: v.slabs.map((s) => ({
+      ...s,
+      imageUrl: sanitizeShareImageUrl(s.imageUrl) ?? "",
+      imageCandidates: s.imageCandidates
+        ?.map((u) => sanitizeShareImageUrl(u) ?? "")
+        .filter((x) => x.length > 0),
+    })),
+  };
+}
+
+/**
+ * Persists the layout quote as structured data (same fields as the Layout quote modal).
+ * Optional image URLs must already be HTTPS (e.g. Firebase); no rasterization or PNG upload.
+ */
+export async function createLayoutQuoteShare(input: { payload: LayoutQuoteSharePayloadV1 }): Promise<string> {
   const uid = firebaseAuth.currentUser?.uid;
   if (!uid) {
     throw new Error("Sign in required to create a share link.");
   }
-  // Storage rules match `request.auth.uid` to the path segment; use the signed-in user, not props.
   const ownerUserId = uid;
-  const { planBlob = null, placementBlob = null } = input;
   const shareRef = doc(collection(firebaseDb, "layoutQuoteShares"));
   const shareId = shareRef.id;
 
-  const payload: LayoutQuoteSharePayloadV1 = {
+  const payloadMerged: LayoutQuoteSharePayloadV1 = {
     ...input.payload,
     generatedAt: input.payload.generatedAt || nowIso(),
+    planImageUrl: sanitizeShareImageUrl(input.payload.planImageUrl),
+    placementImageUrl: sanitizeShareImageUrl(input.payload.placementImageUrl),
+    materialSections: input.payload.materialSections?.map((s) => ({
+      ...s,
+      placementImageUrl: sanitizeShareImageUrl(s.placementImageUrl),
+    })),
   };
 
-  let planImageUrl: string | null = null;
-  let placementImageUrl: string | null = null;
+  if (input.payload.layoutLivePreview != null) {
+    payloadMerged.layoutLivePreview = sanitizeLayoutLivePreview(input.payload.layoutLivePreview) ?? null;
+  }
+  if (input.payload.layoutLiveMaterialPreviews != null) {
+    payloadMerged.layoutLiveMaterialPreviews = input.payload.layoutLiveMaterialPreviews.map((m) =>
+      m == null ? null : sanitizeLayoutLivePreview(m) ?? null
+    );
+  }
 
-  if (planBlob) {
-    planImageUrl = await uploadSharePng(ownerUserId, shareId, "plan", planBlob);
-  }
-  if (placementBlob) {
-    placementImageUrl = await uploadSharePng(ownerUserId, shareId, "placement", placementBlob);
-  }
-  if (planImageUrl) payload.planImageUrl = planImageUrl;
-  if (placementImageUrl) payload.placementImageUrl = placementImageUrl;
+  const payload = omitUndefinedDeep(payloadMerged as unknown as Record<string, unknown>) as LayoutQuoteSharePayloadV1;
 
   await setDoc(shareRef, {
     ownerUserId,
