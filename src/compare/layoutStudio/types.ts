@@ -209,6 +209,12 @@ export interface SavedLayoutSourcePage {
   pageNumber: number;
   widthPx: number;
   heightPx: number;
+  /** Source file this page came from when multiple files are imported. */
+  sourceDocumentId?: string;
+  /** Human-friendly source file name shown in the import modal. */
+  sourceDocumentName?: string;
+  /** 1-based page index within the source document. */
+  sourceDocumentPageNumber?: number;
   /** Combined-plan origin so multi-page PDFs share one source coordinate space. */
   originX: number;
   originY: number;
@@ -217,6 +223,16 @@ export interface SavedLayoutSourcePage {
   /** Storage ref for the cached preview so we can recover when download URLs rotate. */
   previewStoragePath?: string;
   calibration?: SavedLayoutCalibration;
+}
+
+export interface SavedLayoutSourceDocument {
+  id: string;
+  name: string;
+  kind: LayoutSourceKind;
+  pageCount: number;
+  uploadedAt?: string;
+  fileUrl?: string;
+  fileStoragePath?: string;
 }
 
 export interface SavedLayoutSource {
@@ -230,6 +246,7 @@ export interface SavedLayoutSource {
   previewStoragePath?: string;
   fileName: string;
   uploadedAt: string;
+  documents?: SavedLayoutSourceDocument[];
   /** Multi-page PDFs: one entry per page with dimensions/origin/calibration. */
   pages?: SavedLayoutSourcePage[];
   sourceWidthPx?: number;

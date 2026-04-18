@@ -12,6 +12,76 @@ const TEXTURE_LOAD_TIMEOUT_MS = 15_000;
 /** Public image proxy — fetches server-side so our origin gets CORS-clean bytes for WebGL. */
 const WSRV_PROXY = "https://wsrv.nl/?url=";
 
+function isFirebaseStorageHttpsUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/i.test(u.protocol)) return false;
+    const h = u.hostname.toLowerCase();
+    return h === "firebasestorage.googleapis.com" || h.endsWith(".firebasestorage.app");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * In Vite dev, route `firebasestorage.googleapis.com` URLs through `vite.config` `server.proxy`
+ * so the browser sees same-origin responses; `fetch` → blob → ImageBitmap is then WebGL-safe.
+ * Production still uses the raw URL (configure Storage CORS on the bucket, or add a hosting proxy).
+ */
+function devSameOriginFirebaseStorageUrl(url: string): string | null {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+  try {
+    const u = new URL(url);
+    if (u.hostname.toLowerCase() !== "firebasestorage.googleapis.com") return null;
+    return `${window.location.origin}/__firebase_storage${u.pathname}${u.search}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Avoid 304 revalidation that can omit CORS headers on cross-origin image loads. */
+function withCacheBustQuery(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("_cb", String(Date.now()));
+    return u.href;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Prefer same-origin `fetch` → blob when the dev proxy is active (see `devSameOriginFirebaseStorageUrl`).
+ * Otherwise Firebase often omits CORS on cross-origin `fetch`; fall back to TextureLoader/Image.
+ */
+async function loadFirebaseStorageHttpsUrl(url: string, maxAnisotropy: number): Promise<THREE.Texture | null> {
+  const primary = devSameOriginFirebaseStorageUrl(url) ?? url;
+
+  const tryPrimaryBlob = async (): Promise<THREE.Texture | null> => {
+    const busted = withCacheBustQuery(primary);
+    const blob = await tryFetchBlob(busted);
+    if (!blob) return null;
+    const t = await textureFromBlob(blob, maxAnisotropy);
+    return t;
+  };
+
+  let tex = await tryPrimaryBlob();
+  if (tex) return tex;
+
+  const busted = withCacheBustQuery(primary);
+  tex = await tryTextureLoader(busted, maxAnisotropy, "anonymous");
+  if (tex) return tex;
+  tex = await tryTextureLoader(busted, maxAnisotropy, null);
+  if (tex) return tex;
+  tex = await tryTextureLoader(primary, maxAnisotropy, "anonymous");
+  if (tex) return tex;
+  tex = await tryTextureLoader(primary, maxAnisotropy, null);
+  if (tex) return tex;
+  tex = await textureFromImageUrl(busted, maxAnisotropy);
+  if (tex) return tex;
+  return textureFromImageUrl(primary, maxAnisotropy);
+}
+
 function finalizeSlabTexture(tex: THREE.Texture, maxAnisotropy: number): THREE.Texture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.ClampToEdgeWrapping;
@@ -27,6 +97,7 @@ function finalizeSlabTexture(tex: THREE.Texture, maxAnisotropy: number): THREE.T
 
 function textureFromImageBitmap(bitmap: ImageBitmap, maxAnisotropy: number): THREE.Texture {
   const tex = new THREE.Texture(bitmap);
+  /** ImageBitmap is top-left origin; Three.js expects `flipY` false for GPU upload from bitmaps. */
   tex.flipY = false;
   tex.userData[SLAB_TEXTURE_IMAGEBITMAP_USERDATA_KEY] = bitmap;
   return finalizeSlabTexture(tex, maxAnisotropy);
@@ -61,10 +132,19 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
+/**
+ * `cache: 'no-store'` avoids 304 revalidation responses that often omit CORS headers on `fetch`,
+ * which breaks `res.blob()` for WebGL (Chrome: "No Access-Control-Allow-Origin" on 304).
+ */
 async function tryFetchBlob(url: string): Promise<Blob | null> {
+  const base: RequestInit = {
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store",
+  };
   const attempts: RequestInit[] = [
-    { mode: "cors", credentials: "omit" },
-    { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" },
+    base,
+    { ...base, referrerPolicy: "no-referrer" },
   ];
   for (const init of attempts) {
     try {
@@ -79,21 +159,15 @@ async function tryFetchBlob(url: string): Promise<Blob | null> {
   return null;
 }
 
-/**
- * Same bytes via wsrv.nl when direct browser fetch fails (CORS / odd headers) but &lt;img&gt; still works.
- * Long Firebase URLs may exceed proxy limits — then this no-ops.
- */
 async function tryFetchBlobViaWsrv(originalHttpsUrl: string): Promise<Blob | null> {
   if (!/^https?:\/\//i.test(originalHttpsUrl)) return null;
+  /** Firebase signed URLs + wsrv double-encoding breaks paths (%252F → 403). Image/TextureLoader is primary for Firebase. */
+  if (isFirebaseStorageHttpsUrl(originalHttpsUrl)) return null;
   const proxied = `${WSRV_PROXY}${encodeURIComponent(originalHttpsUrl)}`;
   if (proxied.length > 7800) return null;
   return tryFetchBlob(proxied);
 }
 
-/**
- * `encodeURI(decodeURI(u))` can differ from the string that successfully loads in &lt;img&gt;
- * (e.g. Firebase token query). Try both trimmed raw and normalized URLs.
- */
 function urlVariantsForLoading(rawUrl: string): string[] {
   const trimmed = rawUrl.trim();
   if (!trimmed) return [];
@@ -143,10 +217,6 @@ async function textureFromBlob(blob: Blob, maxAnisotropy: number): Promise<THREE
   }
 }
 
-/**
- * Mirrors a successful &lt;img&gt; load: decode in an Image, then GPU upload (needs CORS from host
- * or same-origin blob). Tries anonymous first, then no crossOrigin (layout resolution path).
- */
 async function textureFromImageUrl(url: string, maxAnisotropy: number): Promise<THREE.Texture | null> {
   const tryOnce = (crossOrigin: "" | "anonymous") =>
     new Promise<THREE.Texture | null>((resolve) => {
@@ -182,7 +252,15 @@ async function tryTextureLoader(url: string, maxAnisotropy: number, crossOrigin:
   }
 }
 
+/**
+ * 1) `fetch` → blob → ImageBitmap — when CORS allows (not Firebase download URLs in dev).
+ * 2) TextureLoader / Image — matches &lt;img&gt;; required for Firebase (no fetch CORS on many buckets).
+ */
 async function loadHttpsUrlOnce(url: string, maxAnisotropy: number): Promise<THREE.Texture | null> {
+  if (isFirebaseStorageHttpsUrl(url)) {
+    return loadFirebaseStorageHttpsUrl(url, maxAnisotropy);
+  }
+
   let blob = await tryFetchBlob(url);
   if (!blob) {
     const safe = corsSafeImageUrl(url);
@@ -194,8 +272,8 @@ async function loadHttpsUrlOnce(url: string, maxAnisotropy: number): Promise<THR
     blob = await tryFetchBlobViaWsrv(url);
   }
   if (blob) {
-    const tex = await textureFromBlob(blob, maxAnisotropy);
-    if (tex) return tex;
+    const t = await textureFromBlob(blob, maxAnisotropy);
+    if (t) return t;
   }
 
   let tex = await tryTextureLoader(url, maxAnisotropy, "anonymous");
@@ -208,8 +286,7 @@ async function loadHttpsUrlOnce(url: string, maxAnisotropy: number): Promise<THR
 }
 
 /**
- * Loads slab imagery for WebGL. Tries raw URL and normalized variant, fetch→bitmap, TextureLoader,
- * Image decode, and wsrv proxy fallback so Firebase / CDN URLs that paint in 2D still upload to GPU.
+ * Loads slab imagery for WebGL. Tries raw URL and normalized variant; image decode before fetch.
  */
 export async function loadSlabTextureForWebGL(
   rawUrl: string,
@@ -220,15 +297,15 @@ export async function loadSlabTextureForWebGL(
 
   for (const url of variants) {
     if (/^https?:\/\//i.test(url)) {
-      const tex = await loadHttpsUrlOnce(url, maxAnisotropy);
-      if (tex) return tex;
+      const t = await loadHttpsUrlOnce(url, maxAnisotropy);
+      if (t) return t;
     } else {
-      const tex = await tryTextureLoader(url, maxAnisotropy, "anonymous");
-      if (tex) return tex;
-      const tex2 = await tryTextureLoader(url, maxAnisotropy, null);
-      if (tex2) return tex2;
-      const tex3 = await textureFromImageUrl(url, maxAnisotropy);
-      if (tex3) return tex3;
+      let t = await tryTextureLoader(url, maxAnisotropy, "anonymous");
+      if (t) return t;
+      t = await tryTextureLoader(url, maxAnisotropy, null);
+      if (t) return t;
+      t = await textureFromImageUrl(url, maxAnisotropy);
+      if (t) return t;
     }
   }
 

@@ -358,12 +358,14 @@ export function PlaceLayoutPreview3D({
   panDragEnabledRef.current = panDragEnabled;
   const selectedAxisRef = useRef<ViewAxis>("z");
   selectedAxisRef.current = selectedViewAxis;
+  const [slabTexturesLoading, setSlabTexturesLoading] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !piecesHaveAnyScale(pieces, pixelsPerInch)) return;
 
     let cancelled = false;
+    let pendingSlabTextureLoads = 0;
 
     const slabById = new Map(slabs.map((s) => [s.id, s]));
     const placementByPiece = new Map(placements.map((p) => [p.pieceId, p]));
@@ -557,19 +559,17 @@ export function PlaceLayoutPreview3D({
       extrudeDepth: number,
     ): THREE.Mesh => {
       const lidMat = new THREE.MeshStandardMaterial({
-        map: tex ?? undefined,
+        ...(tex ? { map: tex } : {}),
         color: tex ? appearance.texturedLidTint : appearance.fallbackLidColor,
         roughness: tex ? 0.44 : 0.45,
         metalness: 0.02,
       });
-      if (!tex) lidMat.map = null;
       const sideMat = new THREE.MeshStandardMaterial({
-        map: tex ?? undefined,
+        ...(tex ? { map: tex } : {}),
         color: tex ? appearance.edgeTextureTint : appearance.edgeColor,
         roughness: tex ? 0.5 : 0.42,
         metalness: 0.03,
       });
-      if (!tex) sideMat.map = null;
       const mesh = new THREE.Mesh(geom, [lidMat, sideMat]);
       if (isPlanStripPiece(piece)) {
         const q = splashStandQuaternion(piece, pieces);
@@ -684,19 +684,33 @@ export function PlaceLayoutPreview3D({
         const mats = mesh.material as THREE.MeshStandardMaterial[];
         const lidMat = mats[0]!;
         const sideMat = mats[1]!;
-        void loadTextureForSlab(slab).then((tex) => {
-          if (cancelled || !tex) return;
-          lidMat.map = tex;
-          lidMat.color.setHex(appearance.texturedLidTint);
-          lidMat.roughness = 0.44;
-          lidMat.metalness = 0.02;
-          lidMat.needsUpdate = true;
-          sideMat.map = tex;
-          sideMat.color.setHex(appearance.edgeTextureTint);
-          sideMat.roughness = 0.5;
-          sideMat.metalness = 0.03;
-          sideMat.needsUpdate = true;
-        });
+        pendingSlabTextureLoads += 1;
+        if (pendingSlabTextureLoads === 1) {
+          setSlabTexturesLoading(true);
+        }
+        void loadTextureForSlab(slab)
+          .then((tex) => {
+            if (cancelled || !tex) return;
+            tex.needsUpdate = true;
+            lidMat.map = tex;
+            lidMat.color.setHex(appearance.texturedLidTint);
+            lidMat.roughness = 0.44;
+            lidMat.metalness = 0.02;
+            lidMat.map.needsUpdate = true;
+            lidMat.needsUpdate = true;
+            sideMat.map = tex;
+            sideMat.color.setHex(appearance.edgeTextureTint);
+            sideMat.roughness = 0.5;
+            sideMat.metalness = 0.03;
+            sideMat.map.needsUpdate = true;
+            sideMat.needsUpdate = true;
+          })
+          .finally(() => {
+            pendingSlabTextureLoads -= 1;
+            if (!cancelled && pendingSlabTextureLoads <= 0) {
+              setSlabTexturesLoading(false);
+            }
+          });
       }
 
       if (cancelled) return;
@@ -854,6 +868,7 @@ export function PlaceLayoutPreview3D({
 
     return () => {
       cancelled = true;
+      setSlabTexturesLoading(false);
       viewControlsRef.current = null;
       orbitControlsRef.current = null;
       cancelAnimationFrame(rafId);
@@ -903,6 +918,19 @@ export function PlaceLayoutPreview3D({
 
   return (
     <div className="ls-place-layout-preview-3d-wrap">
+      {slabTexturesLoading ? (
+        <div
+          className="ls-place-layout-preview-3d-texture-loading"
+          role="status"
+          aria-live="polite"
+          aria-label="Loading slab textures for 3D preview"
+        >
+          <div className="ls-place-layout-preview-3d-texture-loading-inner">
+            <span className="ls-place-layout-preview-3d-texture-loading-spinner" aria-hidden />
+            <span className="ls-place-layout-preview-3d-texture-loading-label">Loading slab textures…</span>
+          </div>
+        </div>
+      ) : null}
       <div
         ref={containerRef}
         className="ls-place-layout-preview-3d"

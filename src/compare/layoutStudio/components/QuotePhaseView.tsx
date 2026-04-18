@@ -323,8 +323,8 @@ export function QuotePhaseView({
                 pieces={pieces}
                 placements={placements}
                 pixelsPerInch={ppi}
-                selectedPieceId={null}
-                onSelectPiece={() => {}}
+                selectedPieceIds={[]}
+                onSelectPieces={() => {}}
                 onPlacementChange={() => {}}
                 readOnly
                 showSlabTabs={!fullscreen}

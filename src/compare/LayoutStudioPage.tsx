@@ -184,8 +184,8 @@ function SavedAreaLayoutPreview({
         pieces={plan.pieces}
         placements={placement.placements}
         pixelsPerInch={previewPpi}
-        selectedPieceId={null}
-        onSelectPiece={() => {}}
+        selectedPieceIds={[]}
+        onSelectPieces={() => {}}
         onPlacementChange={() => {}}
         readOnly
         showSlabTabs={resolvedSlabs.length > 1}

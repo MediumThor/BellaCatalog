@@ -19,11 +19,19 @@ function shouldProxyImage(parsed: URL): boolean {
   return false;
 }
 
+/** Firebase download URLs encode `/` in object paths as `%2F`; `decodeURI` would break the path. */
+function isFirebaseStorageUrlString(trimmed: string): boolean {
+  return /firebasestorage\.googleapis\.com/i.test(trimmed) || /\.firebasestorage\.app/i.test(trimmed);
+}
+
 export function normalizeRenderableImageUrl(raw: string | null | undefined): string {
   const trimmed = raw?.trim() || "";
   if (!trimmed) return "";
   if (/^(data:|blob:)/i.test(trimmed)) return trimmed;
   try {
+    if (isFirebaseStorageUrlString(trimmed)) {
+      return trimmed;
+    }
     return encodeURI(decodeURI(trimmed));
   } catch {
     try {

@@ -576,6 +576,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     const dimEditInputRef = useRef<HTMLInputElement | null>(null);
     const svgRef = useRef<SVGSVGElement | null>(null);
     const stageRef = useRef<HTMLDivElement | null>(null);
+    /** Wheel zoom target — must use a non-passive `wheel` listener (React `onWheel` is passive). */
+    const blankWheelStageRef = useRef<HTMLDivElement | null>(null);
     const [dragRect, setDragRect] = useState<{
       a: LayoutPoint;
       b: LayoutPoint;
@@ -1051,7 +1053,7 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
     );
 
     const handleWheel = useCallback(
-      (e: React.WheelEvent<HTMLDivElement>) => {
+      (e: WheelEvent) => {
         e.preventDefault();
         const svg = svgRef.current;
         if (!svg) return;
@@ -1080,6 +1082,14 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
       },
       [clientToPlan, viewZoom, viewportWorldWidth],
     );
+
+    useEffect(() => {
+      const el = blankWheelStageRef.current;
+      if (!el) return;
+      const onWheel = (e: WheelEvent) => handleWheel(e);
+      el.addEventListener("wheel", onWheel, { passive: false });
+      return () => el.removeEventListener("wheel", onWheel);
+    }, [handleWheel]);
 
     const updatePopoverPosition = useCallback(() => {
       if (!selectedEdge || !svgRef.current) {
@@ -3002,8 +3012,8 @@ export const BlankPlanWorkspace = forwardRef<BlankPlanWorkspaceHandle, Props>(
           </div>
         ) : null}
         <div
+          ref={blankWheelStageRef}
           className={`ls-blank-stage${spaceDown ? " ls-blank-stage--space" : ""}${canvasPan ? " ls-blank-stage--panning" : ""}${boxZoomMode ? " ls-blank-stage--box-zoom" : ""}`}
-          onWheel={handleWheel}
         >
           <svg
             ref={svgRef}

@@ -36,6 +36,8 @@ import type {
   PieceOutletCutout,
   PiecePlacement,
   PieceSinkCutout,
+  SavedLayoutSourceDocument,
+  SavedLayoutSourcePage,
   SavedOptionLayoutPlacement,
   SavedLayoutStudioState,
   SlabCloneEntry,
@@ -56,6 +58,7 @@ import { applyManualDimensionsToPiece } from "../utils/manualPieces";
 import {
   buildStackedPdfPages,
   normalizedSourcePages,
+  piecePixelsPerInch,
   piecesHaveAnyScale,
   sourcePlanDimensions,
 } from "../utils/sourcePages";
@@ -176,6 +179,214 @@ function formatUploadSize(bytes: number): string {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
+function fileNameBase(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+async function renderImageFileToPngBlob(
+  file: File,
+): Promise<{ width: number; height: number; pngBlob: Blob }> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Could not read image file "${file.name}".`));
+      img.src = objectUrl;
+    });
+    const width = Math.max(1, image.naturalWidth);
+    const height = Math.max(1, image.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not prepare image canvas.");
+    ctx.drawImage(image, 0, 0, width, height);
+    const pngBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error(`Could not render image preview for "${file.name}".`));
+      }, "image/png");
+    });
+    return { width, height, pngBlob };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function sortSourcePagesByIndex(pages: SavedLayoutSourcePage[]): SavedLayoutSourcePage[] {
+  return [...pages].sort((a, b) => a.index - b.index);
+}
+
+/**
+ * Append new source pages to an existing stacked plan: recomputes origins/indices and preserves
+ * calibration + previews for pages that were already in the workspace.
+ */
+function mergeStackedSourcePages(
+  existingPages: SavedLayoutSourcePage[],
+  newPageMeta: Array<{
+    widthPx: number;
+    heightPx: number;
+    sourceDocumentId: string;
+    sourceDocumentName: string;
+    sourceDocumentPageNumber: number;
+    previewImageUrl?: string;
+    previewStoragePath?: string;
+  }>,
+  newDocuments: SavedLayoutSourceDocument[],
+  existingDocuments: SavedLayoutSourceDocument[],
+): {
+  pages: SavedLayoutSourcePage[];
+  totalWidth: number;
+  totalHeight: number;
+  documents: SavedLayoutSourceDocument[];
+} {
+  const sorted = sortSourcePagesByIndex(existingPages);
+  const combinedDims = [
+    ...sorted.map((p) => ({ widthPx: p.widthPx, heightPx: p.heightPx })),
+    ...newPageMeta.map((p) => ({ widthPx: p.widthPx, heightPx: p.heightPx })),
+  ];
+  const stacked = buildStackedPdfPages(
+    combinedDims.map((p, i) => ({
+      pageNumber: i + 1,
+      widthPx: p.widthPx,
+      heightPx: p.heightPx,
+    })),
+  );
+  const mergedPages: SavedLayoutSourcePage[] = stacked.pages.map((sp, idx) => {
+    if (idx < sorted.length) {
+      const ep = sorted[idx]!;
+      return {
+        ...sp,
+        calibration: ep.calibration ?? sp.calibration,
+        previewImageUrl: ep.previewImageUrl,
+        previewStoragePath: ep.previewStoragePath,
+        sourceDocumentId: ep.sourceDocumentId,
+        sourceDocumentName: ep.sourceDocumentName,
+        sourceDocumentPageNumber: ep.sourceDocumentPageNumber,
+      };
+    }
+    const np = newPageMeta[idx - sorted.length]!;
+    return {
+      ...sp,
+      sourceDocumentId: np.sourceDocumentId,
+      sourceDocumentName: np.sourceDocumentName,
+      sourceDocumentPageNumber: np.sourceDocumentPageNumber,
+      previewImageUrl: np.previewImageUrl,
+      previewStoragePath: np.previewStoragePath,
+    };
+  });
+  return {
+    pages: mergedPages,
+    totalWidth: stacked.totalWidth,
+    totalHeight: stacked.totalHeight,
+    documents: [...existingDocuments, ...newDocuments],
+  };
+}
+
+function resolveExistingSourceDocuments(d: SavedLayoutStudioState): SavedLayoutSourceDocument[] {
+  if (!d.source?.pages?.length) return [];
+  const ps = d.source.pages;
+  if (d.source.documents?.length) return d.source.documents;
+  if (ps.some((p) => p.sourceDocumentId)) {
+    return Array.from(
+      ps.reduce((acc, page) => {
+        if (!page.sourceDocumentId) return acc;
+        const cur = acc.get(page.sourceDocumentId);
+        if (cur) {
+          cur.pageCount += 1;
+          return acc;
+        }
+        acc.set(page.sourceDocumentId, {
+          id: page.sourceDocumentId,
+          name: page.sourceDocumentName ?? "Document",
+          kind: d.source!.kind,
+          pageCount: 1,
+        });
+        return acc;
+      }, new Map<string, SavedLayoutSourceDocument>()).values(),
+    );
+  }
+  return [
+    {
+      id: d.source!.uploadedAt,
+      name: d.source!.fileName,
+      kind: d.source!.kind,
+      pageCount: Math.max(1, ps.length),
+      uploadedAt: d.source!.uploadedAt,
+      fileUrl: d.source!.fileUrl,
+      fileStoragePath: d.source!.fileStoragePath,
+    },
+  ];
+}
+
+/**
+ * Document rows for the current source (same rules as removal / import list).
+ * Used to map stacked pages to files when `sourceDocumentId` is missing on some pages.
+ */
+function resolveSourceDocumentsForRemoval(d: SavedLayoutStudioState): SavedLayoutSourceDocument[] {
+  if (!d.source) return [];
+  const pages = normalizedSourcePages(d.source, d.calibration);
+  if (d.source.documents && d.source.documents.length > 0) return d.source.documents;
+  if (pages.some((page) => page.sourceDocumentId)) {
+    return Array.from(
+      pages.reduce((acc, page) => {
+        if (!page.sourceDocumentId) return acc;
+        const existing = acc.get(page.sourceDocumentId);
+        if (existing) {
+          existing.pageCount += 1;
+          return acc;
+        }
+        acc.set(page.sourceDocumentId, {
+          id: page.sourceDocumentId,
+          name: page.sourceDocumentName ?? `Document ${acc.size + 1}`,
+          kind: d.source!.kind,
+          pageCount: 1,
+        });
+        return acc;
+      }, new Map<string, SavedLayoutSourceDocument>()).values(),
+    );
+  }
+  return [
+    {
+      id: d.source.uploadedAt,
+      name: d.source.fileName,
+      kind: d.source.kind,
+      pageCount: Math.max(1, pages.length),
+      uploadedAt: d.source.uploadedAt,
+      fileUrl: d.source.fileUrl,
+      fileStoragePath: d.source.fileStoragePath,
+    },
+  ];
+}
+
+/**
+ * Whether a stacked plan page belongs to the given document (by id).
+ * Prefer `sourceDocumentId` on the page; if missing, use document order + `pageCount` (merge order).
+ */
+function pageBelongsToSourceDocument(
+  page: SavedLayoutSourcePage,
+  d: SavedLayoutStudioState,
+  documentId: string,
+): boolean {
+  const source = d.source;
+  if (!source) return false;
+  if (page.sourceDocumentId) return page.sourceDocumentId === documentId;
+  const docs = resolveSourceDocumentsForRemoval(d);
+  if (docs.length === 0) return source.uploadedAt === documentId;
+  if (docs.length === 1) return docs[0]!.id === documentId;
+  const docIdx = docs.findIndex((doc) => doc.id === documentId);
+  if (docIdx < 0) return false;
+  const ordered = sortSourcePagesByIndex(normalizedSourcePages(source, d.calibration));
+  let start = 0;
+  for (let i = 0; i < docIdx; i++) start += Math.max(1, docs[i]!.pageCount || 1);
+  const count = Math.max(1, docs[docIdx]!.pageCount || 1);
+  const pos = ordered.findIndex((p) => p.index === page.index);
+  if (pos < 0) return false;
+  return pos >= start && pos < start + count;
+}
+
 const TRACE_BUTTON_ZOOM_STEP = 0.5;
 const BACK_NAV_SAVE_MIN_MS = 3000;
 const SOURCE_PLAN_EDITOR_VIEW_ZOOM_MIN = 0.05;
@@ -271,6 +482,128 @@ function resolvedPieceSourcePageIndex(
     parentId = parent.splashMeta?.parentPieceId ?? null;
   }
   return null;
+}
+
+/** Returns next layout state after removing one source document, or `null` if nothing would change. */
+function computeRemoveSourceDocumentResult(
+  d: SavedLayoutStudioState,
+  documentId: string,
+): SavedLayoutStudioState | null {
+  if (!d.source) return null;
+  const pages = normalizedSourcePages(d.source, d.calibration);
+  const fallbackDocs = resolveSourceDocumentsForRemoval(d);
+  if (!fallbackDocs.some((doc) => doc.id === documentId)) return null;
+
+  const removedPageIndexes = new Set<number>();
+  const keptPagesRaw = pages.filter((page) => {
+    const remove = pageBelongsToSourceDocument(page, d, documentId);
+    if (remove) removedPageIndexes.add(page.index);
+    return !remove;
+  });
+  if (keptPagesRaw.length === pages.length) return null;
+
+  if (keptPagesRaw.length === 0) {
+    return {
+      ...d,
+      workspaceKind: "blank",
+      source: null,
+      pieces: [],
+      placements: [],
+      slabClones: [],
+      calibration: {
+        isCalibrated: true,
+        unit: "in",
+        pointA: null,
+        pointB: null,
+        realDistance: null,
+        pixelsPerInch: 1,
+      },
+    };
+  }
+
+  const stacked = buildStackedPdfPages(
+    keptPagesRaw.map((page, idx) => ({
+      pageNumber: idx + 1,
+      widthPx: page.widthPx,
+      heightPx: page.heightPx,
+    })),
+  );
+  const oldIndexToNewIndex = new Map<number, number>();
+  const nextPages = stacked.pages.map((stackedPage, idx) => {
+    const previous = keptPagesRaw[idx]!;
+    oldIndexToNewIndex.set(previous.index, stackedPage.index);
+    return {
+      ...previous,
+      index: stackedPage.index,
+      pageNumber: stackedPage.pageNumber,
+      originX: stackedPage.originX,
+      originY: stackedPage.originY,
+    };
+  });
+  const nextSourceDocuments = fallbackDocs.filter((doc) => doc.id !== documentId);
+  const singleSourcePage = nextPages.length <= 1;
+  const nextPieces = d.pieces
+    .filter((piece) => {
+      const pageIndex = resolvedPieceSourcePageIndex(piece, d.pieces);
+      return pageIndex == null || !removedPageIndexes.has(pageIndex);
+    })
+    .map((piece) => {
+      if (piece.sourcePageIndex == null) return piece;
+      const mapped = oldIndexToNewIndex.get(piece.sourcePageIndex);
+      if (mapped == null) return singleSourcePage ? { ...piece, sourcePageIndex: undefined } : piece;
+      return { ...piece, sourcePageIndex: singleSourcePage ? undefined : mapped };
+    });
+  const keptPieceIds = new Set(nextPieces.map((piece) => piece.id));
+  const nextPlacements = d.placements.filter((placement) => keptPieceIds.has(placement.pieceId));
+  const nextCalibration = nextPages[0]?.calibration ?? d.calibration;
+  const firstDoc = nextSourceDocuments[0] ?? null;
+  return {
+    ...d,
+    source: {
+      ...d.source,
+      kind: nextSourceDocuments.length > 1 ? "image" : firstDoc?.kind ?? d.source.kind,
+      fileUrl: firstDoc?.fileUrl ?? d.source.fileUrl,
+      fileStoragePath: firstDoc?.fileStoragePath ?? d.source.fileStoragePath,
+      fileName:
+        nextSourceDocuments.length > 1
+          ? `${nextSourceDocuments.length} files`
+          : (firstDoc?.name ?? d.source.fileName),
+      previewImageUrl: nextPages[0]?.previewImageUrl,
+      previewStoragePath: nextPages[0]?.previewStoragePath,
+      documents: nextSourceDocuments,
+      pages: nextPages,
+      sourceWidthPx: stacked.totalWidth,
+      sourceHeightPx: stacked.totalHeight,
+    },
+    pieces: nextPieces,
+    placements: nextPlacements,
+    calibration: nextCalibration,
+  };
+}
+
+/** Stacked plan page numbers (matches trace sidebar “Page n”) for display in import modal. */
+function formatPlanPageNumbersLabel(nums: number[]): string | null {
+  if (nums.length === 0) return null;
+  const sorted = [...new Set(nums)].sort((a, b) => a - b);
+  if (sorted.length === 1) return `Page ${sorted[0]}`;
+  return `Pages ${sorted.join(", ")}`;
+}
+
+/** Display string for trace rectangle dimension inputs (avoid forced toFixed while typing). */
+function formatTraceRectDimForInput(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  const r = Math.round(n * 1e6) / 1e6;
+  if (Number.isInteger(r)) return String(r);
+  return String(r);
+}
+
+function parseTraceRectDimInput(raw: string, unit: "in" | "px"): number | null {
+  const t = raw.trim().replace(/,/g, ".");
+  if (t === "" || t === "-" || t === "." || t === "-.") return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  const min = unit === "in" ? 0.5 : 1;
+  return Math.max(min, n);
 }
 
 function pieceBelongsToSourcePage(
@@ -403,23 +736,38 @@ function splitPlacedPieceAtSeam(args: {
   const geometry = seamGeometryFromAxisAlignedEdge(world, edgeIndex);
   if (!geometry) return null;
 
-  const dimA = Number(request.dimA);
-  const dimB = Number(request.dimB);
-  if (!Number.isFinite(dimA) || !Number.isFinite(dimB) || dimA <= 0 || dimB <= 0) {
+  const rawDimA = Number(request.dimA);
+  const rawDimB = Number(request.dimB);
+  if (!Number.isFinite(rawDimA) || !Number.isFinite(rawDimB) || rawDimA <= 0 || rawDimB <= 0) {
     return null;
   }
 
-  const seamHint = edgeMidpoint(world, edgeIndex);
+  const seamUnits = request.seamDimUnits ?? "plan";
+  const ppi = piecePixelsPerInch(targetPiece, pixelsPerInch);
   const minDim = 0.125;
+  let dimA: number;
+  let dimB: number;
+  if (seamUnits === "inches") {
+    if (!ppi || ppi <= 0) return null;
+    if (rawDimA < minDim || rawDimB < minDim) return null;
+    dimA = rawDimA * ppi;
+    dimB = rawDimB * ppi;
+  } else {
+    dimA = rawDimA;
+    dimB = rawDimB;
+    if (dimA < minDim || dimB < minDim) return null;
+  }
+
+  const seamHint = edgeMidpoint(world, edgeIndex);
 
   let split: [LayoutPoint[], LayoutPoint[]] | null = null;
   if (geometry.kind === "vertical") {
     const total = geometry.xMax - geometry.xMin;
-    if (Math.abs(dimA + dimB - total) > 0.08 || dimA < minDim || dimB < minDim) return null;
+    if (Math.abs(dimA + dimB - total) > 0.08) return null;
     split = splitWorldRingAtVerticalSeam(world, geometry.xMin + dimA, seamHint.y);
   } else {
     const total = geometry.yMax - geometry.yMin;
-    if (Math.abs(dimA + dimB - total) > 0.08 || dimA < minDim || dimB < minDim) return null;
+    if (Math.abs(dimA + dimB - total) > 0.08) return null;
     split = splitWorldRingAtHorizontalSeam(world, geometry.yMin + dimA, seamHint.x);
   }
   if (!split) return null;
@@ -594,6 +942,8 @@ export function LayoutStudioScreen({
   });
   const [tool, setTool] = useState<TraceTool>("select");
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null);
+  /** Place phase: slab selection (multi-select + group drag). */
+  const [placeSelectedPieceIds, setPlaceSelectedPieceIds] = useState<string[]>([]);
   const [activeSlabId, setActiveSlabId] = useState<string | null>(null);
 
   const layoutSlabIdsKey = layoutSlabs.map((s) => s.id).join("|");
@@ -617,6 +967,7 @@ export function LayoutStudioScreen({
   const [uploadStage, setUploadStage] = useState<"uploading" | "processing">("uploading");
   const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [sourceImportModalOpen, setSourceImportModalOpen] = useState(false);
   const [lSheetOpen, setLSheetOpen] = useState(false);
   const [showPieceLabels, setShowPieceLabels] = useState(true);
   const [showEdgeDimensions, setShowEdgeDimensions] = useState(false);
@@ -662,6 +1013,7 @@ export function LayoutStudioScreen({
   const [placeSeamMode, setPlaceSeamMode] = useState(false);
   /** Place phase: confirm before removing a duplicate slab instance. */
   const [removeSlabConfirmId, setRemoveSlabConfirmId] = useState<string | null>(null);
+  const [removeSourceDocumentId, setRemoveSourceDocumentId] = useState<string | null>(null);
   /** Auto nest visible pieces across slabs (min gap inches). */
   const [autoNestModalOpen, setAutoNestModalOpen] = useState(false);
   const [autoNestMinGapStr, setAutoNestMinGapStr] = useState("1.5");
@@ -740,7 +1092,7 @@ export function LayoutStudioScreen({
   );
   const placeSplitContainerRef = useRef<HTMLDivElement | null>(null);
   const [placeSplitLeftPct, setPlaceSplitLeftPct] = useState(48);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const importUploadInputRef = useRef<HTMLInputElement | null>(null);
   const entryUploadInputRef = useRef<HTMLInputElement | null>(null);
   const pendingDuplicateFitRef = useRef(false);
 
@@ -786,6 +1138,19 @@ export function LayoutStudioScreen({
     const intervalId = window.setInterval(updateProgress, 50);
     return () => window.clearInterval(intervalId);
   }, [backNavigationPending, backNavigationStartedAt]);
+
+  useEffect(() => {
+    if (!sourceImportModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSourceImportModalOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [sourceImportModalOpen]);
+
+  useEffect(() => {
+    if (mode !== "trace") setSourceImportModalOpen(false);
+  }, [mode]);
 
   const selectMaterialOption = useCallback(
     async (nextId: string) => {
@@ -904,8 +1269,12 @@ export function LayoutStudioScreen({
           : null,
     [activeSourcePage, sourceDims.heightPx, sourceDims.widthPx],
   );
+  const activeSourcePagePreviewUrl =
+    activeSourcePage?.previewImageUrl ??
+    (activeSourcePage?.index === 0 ? draft.source?.previewImageUrl ?? null : null);
   const displayUrl =
-    draft.source?.kind === "pdf" ? activePdfPageImageUrl : draft.source?.fileUrl ?? null;
+    activeSourcePagePreviewUrl ??
+    (draft.source?.kind === "pdf" ? activePdfPageImageUrl : draft.source?.fileUrl ?? null);
   const isPdfSource = false;
   const isBlankWorkspace = workspaceKind === "blank";
   const activeSessionPdfFile =
@@ -931,6 +1300,59 @@ export function LayoutStudioScreen({
     () => buildSourcePlanEditorFrames(sourcePages, draft.calibration.pixelsPerInch),
     [draft.calibration.pixelsPerInch, sourcePages],
   );
+  const sourceDocuments = useMemo(() => {
+    const explicit = draft.source?.documents ?? [];
+    if (explicit.length > 0) {
+      return explicit.map((doc) => ({
+        ...doc,
+        pageCount: Math.max(1, doc.pageCount || 0),
+      }));
+    }
+    const docMap = new Map<string, SavedLayoutSourceDocument>();
+    for (const page of sourcePages) {
+      const docId = page.sourceDocumentId;
+      if (!docId) continue;
+      const existing = docMap.get(docId);
+      if (existing) {
+        existing.pageCount += 1;
+        continue;
+      }
+      docMap.set(docId, {
+        id: docId,
+        name: page.sourceDocumentName ?? `Document ${docMap.size + 1}`,
+        kind: draft.source?.kind ?? "unknown",
+        pageCount: 1,
+      });
+    }
+    if (docMap.size > 0) return [...docMap.values()];
+    if (draft.source) {
+      return [
+        {
+          id: draft.source.uploadedAt,
+          name: draft.source.fileName || "Source",
+          kind: draft.source.kind,
+          pageCount: Math.max(1, sourcePages.length),
+          uploadedAt: draft.source.uploadedAt,
+          fileUrl: draft.source.fileUrl,
+          fileStoragePath: draft.source.fileStoragePath,
+        },
+      ];
+    }
+    return [];
+  }, [draft.source, sourcePages]);
+  const sourceDocumentPlanPageNumbersByDocId = useMemo(() => {
+    const map = new Map<string, number[]>();
+    const docs = resolveSourceDocumentsForRemoval(draft);
+    for (const doc of docs) {
+      const nums = sourcePages
+        .filter((page) => pageBelongsToSourceDocument(page, draft, doc.id))
+        .map((p) => p.pageNumber);
+      if (nums.length) {
+        map.set(doc.id, [...new Set(nums)].sort((a, b) => a - b));
+      }
+    }
+    return map;
+  }, [sourcePages, draft]);
   const sourcePlanEditorDefaultPageIndex = activeSourcePage?.index ?? sourcePages[0]?.index ?? 0;
   const sourcePlanEditorDisplayPieces = useMemo(
     () =>
@@ -1015,8 +1437,25 @@ export function LayoutStudioScreen({
     () => draft.pieces.filter((piece) => activeMaterialPieceIds.has(piece.id)),
     [activeMaterialPieceIds, draft.pieces],
   );
-  const placeSelectedPieceId =
-    selectedPieceId != null && activeMaterialPieceIds.has(selectedPieceId) ? selectedPieceId : null;
+  const placeSelectedIdsResolved = useMemo(() => {
+    if (placeSelectedPieceIds.length > 0) {
+      return placeSelectedPieceIds.filter((id) => activeMaterialPieceIds.has(id));
+    }
+    return selectedPieceId != null && activeMaterialPieceIds.has(selectedPieceId) ? [selectedPieceId] : [];
+  }, [placeSelectedPieceIds, selectedPieceId, activeMaterialPieceIds]);
+
+  const placeSelectedPieceId = placeSelectedIdsResolved[0] ?? null;
+
+  const setPlaceSelection = useCallback((ids: string[]) => {
+    const next = ids.filter((id) => activeMaterialPieceIds.has(id));
+    setPlaceSelectedPieceIds(next);
+    setSelectedPieceId(next[0] ?? null);
+  }, [activeMaterialPieceIds]);
+
+  useEffect(() => {
+    if (mode !== "place") setPlaceSelectedPieceIds([]);
+  }, [mode]);
+
   const layoutPreviewUsesPlanSpace =
     isBlankWorkspace || piecesHaveAnyScale(placeVisiblePieces, draft.calibration.pixelsPerInch);
   const layoutPreviewWorkspaceKind: "blank" | "source" = layoutPreviewUsesPlanSpace ? "blank" : "source";
@@ -1540,6 +1979,32 @@ export function LayoutStudioScreen({
   }, [mode]);
 
   useEffect(() => {
+    if (mode !== "place" || !activeOption) return;
+    const typingTarget = (t: EventTarget | null) =>
+      t instanceof HTMLInputElement ||
+      t instanceof HTMLTextAreaElement ||
+      t instanceof HTMLSelectElement ||
+      (t instanceof HTMLElement && t.isContentEditable);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      if (typingTarget(e.target)) return;
+      if (key === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeOption, mode, redo, undo]);
+
+  useEffect(() => {
     if (!layoutPreviewModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLayoutPreviewModalOpen(false);
@@ -1677,6 +2142,7 @@ export function LayoutStudioScreen({
         pl.slabId === slabId &&
         layoutSlabs.some((s) => s.id === pl.slabId)
       ) {
+        setPlaceSelectedPieceIds([pieceId]);
         setSelectedPieceId(pieceId);
         setActiveSlabId(pl.slabId);
         return;
@@ -1691,6 +2157,7 @@ export function LayoutStudioScreen({
           p.pieceId === pieceId ? { ...p, slabId, x, y, placed: true } : p
         ),
       }));
+      setPlaceSelectedPieceIds([pieceId]);
       setSelectedPieceId(pieceId);
       setActiveSlabId(slabId);
     },
@@ -1982,6 +2449,10 @@ export function LayoutStudioScreen({
     if (!removeSlabConfirmId) return "";
     return layoutSlabs.find((s) => s.id === removeSlabConfirmId)?.label ?? "this slab";
   }, [removeSlabConfirmId, layoutSlabs]);
+  const removeSourceDocumentPendingLabel = useMemo(() => {
+    if (!removeSourceDocumentId) return "";
+    return sourceDocuments.find((doc) => doc.id === removeSourceDocumentId)?.name ?? "this document";
+  }, [removeSourceDocumentId, sourceDocuments]);
 
   const confirmRemoveSlabClone = useCallback(() => {
     if (!removeSlabConfirmId) return;
@@ -1997,6 +2468,15 @@ export function LayoutStudioScreen({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [removeSlabConfirmId]);
+
+  useEffect(() => {
+    if (!removeSourceDocumentId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRemoveSourceDocumentId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [removeSourceDocumentId]);
 
   const canAutoNestPlace = useMemo(() => {
     if (!activeOption || layoutSlabs.length === 0) return false;
@@ -2141,6 +2621,68 @@ export function LayoutStudioScreen({
     : null;
   /** Prefer plan-canvas piece when editing a source plan so inspector fields stay in sync. */
   const traceInspectorPiece = inspectorSelectedPiece ?? selectedPiece;
+  const traceInspectorRectangleEditor = useMemo(() => {
+    if (!traceInspectorPiece || traceInspectorPiece.shapeKind !== "rectangle") return null;
+    if (traceInspectorPiece.manualDimensions?.kind === "rectangle") {
+      return {
+        mode: "manual" as const,
+        width: traceInspectorPiece.manualDimensions.widthIn,
+        depth: traceInspectorPiece.manualDimensions.depthIn,
+        unit: "in" as const,
+      };
+    }
+    const ring = normalizeClosedRing(traceInspectorPiece.points);
+    const bounds = boundsOfPoints(ring);
+    if (!bounds) return null;
+    const widthPx = Math.max(1, bounds.maxX - bounds.minX);
+    const depthPx = Math.max(1, bounds.maxY - bounds.minY);
+    const ppi =
+      traceInspectorPiece.sourcePixelsPerInch ??
+      activeCalibration.pixelsPerInch ??
+      draft.calibration.pixelsPerInch ??
+      null;
+    if (ppi && ppi > 0) {
+      return {
+        mode: "source" as const,
+        width: widthPx / ppi,
+        depth: depthPx / ppi,
+        unit: "in" as const,
+      };
+    }
+    return {
+      mode: "source" as const,
+      width: widthPx,
+      depth: depthPx,
+      unit: "px" as const,
+    };
+  }, [activeCalibration.pixelsPerInch, draft.calibration.pixelsPerInch, traceInspectorPiece]);
+
+  const [traceRectDimDraft, setTraceRectDimDraft] = useState<{
+    pieceId: string;
+    widthStr: string;
+    depthStr: string;
+  } | null>(null);
+  const traceRectDimDraftRef = useRef(traceRectDimDraft);
+  traceRectDimDraftRef.current = traceRectDimDraft;
+
+  useEffect(() => {
+    if (!traceInspectorPiece || !traceInspectorRectangleEditor) {
+      setTraceRectDimDraft(null);
+      return;
+    }
+    setTraceRectDimDraft({
+      pieceId: traceInspectorPiece.id,
+      widthStr: formatTraceRectDimForInput(traceInspectorRectangleEditor.width),
+      depthStr: formatTraceRectDimForInput(traceInspectorRectangleEditor.depth),
+    });
+  }, [
+    traceInspectorPiece?.id,
+    traceInspectorRectangleEditor?.mode,
+    traceInspectorRectangleEditor?.unit,
+    traceInspectorRectangleEditor?.width,
+    traceInspectorRectangleEditor?.depth,
+  ]);
+
   const selectedPieceHasLinkedChildren = useMemo(
     () =>
       inspectorSelectedPiece != null &&
@@ -2292,6 +2834,41 @@ export function LayoutStudioScreen({
       pieces: d.pieces.map((p) => (p.id === selectedPieceId ? { ...p, ...patch } : p)),
     }));
   };
+
+  const resizeSelectedRectangleFromInspector = useCallback(
+    (nextWidthRaw: number, nextDepthRaw: number) => {
+      const targetId = selectedPieceId;
+      if (!targetId) return;
+      const nextWidth = Math.max(1, nextWidthRaw);
+      const nextDepth = Math.max(1, nextDepthRaw);
+      const applyResize = (piece: LayoutPiece): LayoutPiece => {
+        const ring = normalizeClosedRing(piece.points);
+        const bounds = boundsOfPoints(ring);
+        if (!bounds) return piece;
+        const minX = bounds.minX;
+        const minY = bounds.minY;
+        return {
+          ...piece,
+          points: [
+            { x: minX, y: minY },
+            { x: minX + nextWidth, y: minY },
+            { x: minX + nextWidth, y: minY + nextDepth },
+            { x: minX, y: minY + nextDepth },
+          ],
+          shapeKind: "rectangle",
+        };
+      };
+      if (sourcePlanEditorActive) {
+        onPlanCanvasPiecesChange(planCanvasPieces.map((piece) => (piece.id === targetId ? applyResize(piece) : piece)));
+        return;
+      }
+      updateDraftWithUndo((d) => ({
+        ...d,
+        pieces: d.pieces.map((piece) => (piece.id === targetId ? applyResize(piece) : piece)),
+      }));
+    },
+    [onPlanCanvasPiecesChange, planCanvasPieces, selectedPieceId, sourcePlanEditorActive, updateDraftWithUndo],
+  );
 
   const removeOutletFromSelected = (outletId: string) => {
     if (!selectedPieceId) return;
@@ -2568,57 +3145,101 @@ export function LayoutStudioScreen({
 
   const updatePlacementRotationLive = useCallback(
     (deg: number) => {
-      if (!placeSelectedPieceId) return;
+      const ids = placeSelectedIdsResolved;
+      if (ids.length === 0) return;
       updateDraft((d) => ({
         ...d,
         placements: d.placements.map((p) =>
-          p.pieceId === placeSelectedPieceId ? { ...p, rotation: deg } : p
+          ids.includes(p.pieceId) ? { ...p, rotation: deg } : p
         ),
       }));
     },
-    [placeSelectedPieceId, updateDraft]
+    [placeSelectedIdsResolved, updateDraft]
   );
 
   const rotateSelectedPlacementOnSlabBy = useCallback(
     (deltaDeg: number) => {
-      if (!placeSelectedPieceId) return;
+      const ids = placeSelectedIdsResolved;
+      if (ids.length === 0) return;
       updateDraftWithUndo((d) => {
-        const pl = d.placements.find((p) => p.pieceId === placeSelectedPieceId);
-        if (!pl?.placed || !pl.slabId) return d;
-        const r = ((pl.rotation ?? 0) + deltaDeg) % 360;
-        const rotation = r < 0 ? r + 360 : r;
+        const idSet = new Set(ids);
         return {
           ...d,
-          placements: d.placements.map((p) =>
-            p.pieceId === placeSelectedPieceId ? { ...p, rotation } : p
-          ),
+          placements: d.placements.map((p) => {
+            if (!idSet.has(p.pieceId) || !p.placed || !p.slabId) return p;
+            const r = ((p.rotation ?? 0) + deltaDeg) % 360;
+            const rotation = r < 0 ? r + 360 : r;
+            return { ...p, rotation };
+          }),
         };
       });
     },
-    [placeSelectedPieceId, updateDraftWithUndo]
+    [placeSelectedIdsResolved, updateDraftWithUndo]
   );
 
   const removeSelectedPieceFromSlab = useCallback(() => {
-    if (!placeSelectedPieceId) return;
-    updateDraftWithUndo((d) => {
-      const pl = d.placements.find((p) => p.pieceId === placeSelectedPieceId);
-      if (!pl?.placed || !pl.slabId) return d;
-      return {
-        ...d,
-        placements: d.placements.map((p) =>
-          p.pieceId === placeSelectedPieceId ? { ...p, placed: false, slabId: null } : p
-        ),
-      };
-    });
-  }, [placeSelectedPieceId, updateDraftWithUndo]);
+    const ids = placeSelectedIdsResolved;
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    updateDraftWithUndo((d) => ({
+      ...d,
+      placements: d.placements.map((p) =>
+        idSet.has(p.pieceId) && p.placed && p.slabId
+          ? { ...p, placed: false, slabId: null }
+          : p
+      ),
+    }));
+  }, [placeSelectedIdsResolved, updateDraftWithUndo]);
+
+  const clearAllPiecesFromSlab = useCallback(
+    (slabId: string) => {
+      const d = draftRef.current;
+      const shouldClearSelection =
+        placeSelectedPieceIds.some((id) => {
+          const pl = d.placements.find((p) => p.pieceId === id);
+          return pl?.placed && pl.slabId === slabId;
+        }) ||
+        (selectedPieceId != null &&
+          d.placements.find((p) => p.pieceId === selectedPieceId)?.slabId === slabId);
+      updateDraftWithUndo((d) => {
+        if (!d.placements.some((p) => p.placed && p.slabId === slabId)) return d;
+        return {
+          ...d,
+          placements: d.placements.map((p) =>
+            p.placed && p.slabId === slabId ? { ...p, placed: false, slabId: null } : p
+          ),
+        };
+      });
+      if (shouldClearSelection) {
+        setPlaceSelectedPieceIds([]);
+        setSelectedPieceId(null);
+      }
+    },
+    [placeSelectedPieceIds, selectedPieceId, updateDraftWithUndo],
+  );
 
   const placeSeamOnSlab = useCallback(
     (request: PlaceSeamRequest): boolean => {
+      const d = draftRef.current;
+      /**
+       * Live preview uses `sourcePlanEditorDisplayPieces` (plan inches) when source is calibrated, but
+       * `layoutPreviewWorkspaceKind` is forced to `"blank"` for that preview — the modal sends
+       * `seamDimUnits: "plan"` while `draft.pieces` stay in source pixels. Treat those numbers as
+       * inches and convert to pixels here so split matches.
+       */
+      const calibratedSourcePlan =
+        !isBlankWorkspace &&
+        d.workspaceKind === "source" &&
+        piecesHaveAnyScale(placeVisiblePieces, d.calibration.pixelsPerInch);
+      const effectiveRequest =
+        calibratedSourcePlan && (request.seamDimUnits ?? "plan") === "plan"
+          ? { ...request, seamDimUnits: "inches" as const }
+          : request;
       const split = splitPlacedPieceAtSeam({
-        pieces: draftRef.current.pieces,
-        placements: draftRef.current.placements,
-        pixelsPerInch: draftRef.current.calibration.pixelsPerInch,
-        request,
+        pieces: d.pieces,
+        placements: d.placements,
+        pixelsPerInch: d.calibration.pixelsPerInch,
+        request: effectiveRequest,
       });
       if (!split) return false;
       updateDraftWithUndo((d) => ({
@@ -2630,7 +3251,7 @@ export function LayoutStudioScreen({
       setSelectedEdge(null);
       return true;
     },
-    [updateDraftWithUndo]
+    [isBlankWorkspace, placeVisiblePieces, updateDraftWithUndo]
   );
 
   const rotateSelectedPlanPiece = (deltaDeg: number) => {
@@ -2785,6 +3406,8 @@ export function LayoutStudioScreen({
       setUploadError("Use PDF, PNG, JPG, or WebP.");
       return;
     }
+    const isMergeSource =
+      workspaceKind === "source" && (draft.source?.pages?.length ?? 0) > 0;
     if (workspaceKind === "blank" && draft.pieces.length > 0) {
       const ok = window.confirm(
         "Adding a plan replaces the blank layout and clears pieces for this job’s shared plan. Continue?"
@@ -2795,12 +3418,14 @@ export function LayoutStudioScreen({
      * Reset source-canvas UI before swapping workspaces so importing from Blank starts
      * from the same trace-state as a fresh source-backed session.
      */
-    setSourcePlanEditorPieces([]);
-    skipSourcePlanEditorDraftSyncRef.current = false;
+    if (!isMergeSource) {
+      setSourcePlanEditorPieces([]);
+      skipSourcePlanEditorDraftSyncRef.current = false;
+      setTraceViewZoom(1);
+      setTraceResetViewTick((t) => t + 1);
+      setTraceZoomToSelectedTick(0);
+    }
     setSourceCanvasMode("trace");
-    setTraceViewZoom(1);
-    setTraceResetViewTick((t) => t + 1);
-    setTraceZoomToSelectedTick(0);
     setPlanBoxZoomActive(false);
     setSelectedEdge(null);
     setSelectedFilletEdges([]);
@@ -2830,15 +3455,20 @@ export function LayoutStudioScreen({
       setUploadProgress(100);
       setUploadStatusText(kind === "pdf" ? "Reading PDF pages and building frames..." : "Preparing image...");
       const uploadedAt = new Date().toISOString();
-      setUndoStack([]);
-      setRedoStack([]);
+      const sourceDocumentId = crypto.randomUUID();
+      if (!isMergeSource) {
+        setUndoStack([]);
+        setRedoStack([]);
+      }
       setSelectedPieceId(null);
-      setActivePdfPageImageUrl(null);
-      setPdfPageThumbUrls({});
+      if (!isMergeSource) {
+        setActivePdfPageImageUrl(null);
+        setPdfPageThumbUrls({});
+      }
       setSourceCanvasMode("trace");
 
       if (kind === "pdf") {
-        uploadedPdfFileRef.current = { uploadedAt, file };
+        uploadedPdfFileRef.current = isMergeSource ? null : { uploadedAt, file };
         setUploadStatusText("Inspecting PDF pages...");
         const pageManifest = await inspectPdfFilePages(file);
         setUploadStatusText(`Building ${pageManifest.length} page ${pageManifest.length === 1 ? "frame" : "frames"}...`);
@@ -2849,7 +3479,6 @@ export function LayoutStudioScreen({
             heightPx: page.height,
           })),
         );
-        setActiveSourcePageIndex(stacked.pages[0]?.index ?? 0);
         try {
           const renderedPages = await renderPdfFilePagesToDataUrls(
             file,
@@ -2898,85 +3527,81 @@ export function LayoutStudioScreen({
           }
           const persistedPages = stacked.pages.map((page) => ({
             ...page,
+            sourceDocumentId,
+            sourceDocumentName: file.name,
+            sourceDocumentPageNumber: page.pageNumber,
             previewImageUrl: persistedPreviews.get(page.pageNumber)?.downloadUrl,
             previewStoragePath: persistedPreviews.get(page.pageNumber)?.storagePath,
           }));
-          setPdfPageThumbUrls(thumbMap);
-          if (stacked.pages[0]) {
-            setActivePdfPageImageUrl(thumbMap[stacked.pages[0].index] ?? null);
-          }
-          setUploadStatusText("Building plan workspace...");
-          updateDraft((d) => ({
-            ...d,
-            workspaceKind: "source",
-            pieces: [],
-            placements: [],
-            slabClones: [],
-            source: {
+          const dMerge = draftRef.current;
+          const canMergePdf =
+            dMerge.workspaceKind === "source" && (dMerge.source?.pages?.length ?? 0) > 0;
+          if (canMergePdf) {
+            const existingPages = dMerge.source!.pages!;
+            const newDoc: SavedLayoutSourceDocument = {
+              id: sourceDocumentId,
+              name: file.name,
               kind: "pdf",
+              pageCount: persistedPages.length,
+              uploadedAt,
               fileUrl: downloadUrl,
               fileStoragePath: storagePath,
-              previewImageUrl: persistedPages[0]?.previewImageUrl,
-              previewStoragePath: persistedPages[0]?.previewStoragePath,
-              fileName: file.name,
-              uploadedAt,
-              pages: persistedPages,
-              sourceWidthPx: stacked.totalWidth,
-              sourceHeightPx: stacked.totalHeight,
-            },
-            calibration: {
-              ...d.calibration,
-              isCalibrated: false,
-              pointA: null,
-              pointB: null,
-              realDistance: null,
-              unit: null,
-              pixelsPerInch: null,
-            },
-          }));
-        } catch (err) {
-          setActivePdfPageImageUrl(null);
-          setPdfPageThumbUrls({});
-          setUploadError(
-            err instanceof Error
-              ? `PDF uploaded, but the page previews could not be rendered: ${err.message}`
-              : "PDF uploaded, but the page previews could not be rendered.",
-          );
-          updateDraft((d) => ({
-            ...d,
-            workspaceKind: "source",
-            pieces: [],
-            placements: [],
-            slabClones: [],
-            source: {
-              kind: "pdf",
-              fileUrl: downloadUrl,
-              fileStoragePath: storagePath,
-              fileName: file.name,
-              uploadedAt,
-              pages: stacked.pages,
-              sourceWidthPx: stacked.totalWidth,
-              sourceHeightPx: stacked.totalHeight,
-            },
-            calibration: {
-              ...d.calibration,
-              isCalibrated: false,
-              pointA: null,
-              pointB: null,
-              realDistance: null,
-              unit: null,
-              pixelsPerInch: null,
-            },
-          }));
-        }
-      } else {
-        uploadedPdfFileRef.current = null;
-        await new Promise<void>((resolve, reject) => {
-          const img = new Image();
-          const o = URL.createObjectURL(file);
-          img.onload = () => {
-            URL.revokeObjectURL(o);
-            setUploadStatusText("Preparing plan canvas...");
+            };
+            const newPageMeta = persistedPages.map((p) => ({
+              widthPx: p.widthPx,
+              heightPx: p.heightPx,
+              sourceDocumentId,
+              sourceDocumentName: file.name,
+              sourceDocumentPageNumber: p.sourceDocumentPageNumber ?? p.pageNumber,
+              previewImageUrl: p.previewImageUrl,
+              previewStoragePath: p.previewStoragePath,
+            }));
+            const merged = mergeStackedSourcePages(
+              existingPages,
+              newPageMeta,
+              [newDoc],
+              resolveExistingSourceDocuments(dMerge),
+            );
+            const thumbMapMerged = Object.fromEntries(
+              merged.pages
+                .map((page) => (page.previewImageUrl ? [page.index, page.previewImageUrl] : null))
+                .filter((entry): entry is [number, string] => entry != null),
+            );
+            setPdfPageThumbUrls(thumbMapMerged);
+            const firstNewIdx = existingPages.length;
+            const focusPage = merged.pages[firstNewIdx] ?? merged.pages[0]!;
+            setActiveSourcePageIndex(focusPage.index);
+            setActivePdfPageImageUrl(focusPage.previewImageUrl ?? thumbMapMerged[focusPage.index] ?? null);
+            const docCount = merged.documents.length;
+            setUploadStatusText("Building plan workspace...");
+            updateDraft((d) => ({
+              ...d,
+              workspaceKind: "source",
+              pieces: d.pieces,
+              placements: d.placements,
+              slabClones: d.slabClones,
+              source: {
+                ...d.source!,
+                kind: docCount > 1 ? "image" : "pdf",
+                fileUrl: merged.documents[0]?.fileUrl ?? d.source!.fileUrl,
+                fileStoragePath: merged.documents[0]?.fileStoragePath ?? d.source!.fileStoragePath,
+                previewImageUrl: merged.pages[0]?.previewImageUrl,
+                previewStoragePath: merged.pages[0]?.previewStoragePath,
+                fileName: docCount > 1 ? `${docCount} files` : d.source!.fileName,
+                uploadedAt: d.source!.uploadedAt,
+                documents: merged.documents,
+                pages: merged.pages,
+                sourceWidthPx: merged.totalWidth,
+                sourceHeightPx: merged.totalHeight,
+              },
+              calibration: d.calibration,
+            }));
+          } else {
+            setPdfPageThumbUrls(thumbMap);
+            if (stacked.pages[0]) {
+              setActivePdfPageImageUrl(thumbMap[stacked.pages[0].index] ?? null);
+            }
+            setUploadStatusText("Building plan workspace...");
             updateDraft((d) => ({
               ...d,
               workspaceKind: "source",
@@ -2984,32 +3609,27 @@ export function LayoutStudioScreen({
               placements: [],
               slabClones: [],
               source: {
-                kind: "image",
+                kind: "pdf",
                 fileUrl: downloadUrl,
                 fileStoragePath: storagePath,
+                previewImageUrl: persistedPages[0]?.previewImageUrl,
+                previewStoragePath: persistedPages[0]?.previewStoragePath,
                 fileName: file.name,
                 uploadedAt,
-                pages: [
+                documents: [
                   {
-                    index: 0,
-                    pageNumber: 1,
-                    widthPx: img.naturalWidth,
-                    heightPx: img.naturalHeight,
-                    originX: 0,
-                    originY: 0,
-                    calibration: {
-                      ...d.calibration,
-                      isCalibrated: false,
-                      pointA: null,
-                      pointB: null,
-                      realDistance: null,
-                      unit: null,
-                      pixelsPerInch: null,
-                    },
+                    id: sourceDocumentId,
+                    name: file.name,
+                    kind: "pdf",
+                    pageCount: persistedPages.length,
+                    uploadedAt,
+                    fileUrl: downloadUrl,
+                    fileStoragePath: storagePath,
                   },
                 ],
-                sourceWidthPx: img.naturalWidth,
-                sourceHeightPx: img.naturalHeight,
+                pages: persistedPages,
+                sourceWidthPx: stacked.totalWidth,
+                sourceHeightPx: stacked.totalHeight,
               },
               calibration: {
                 ...d.calibration,
@@ -3021,6 +3641,242 @@ export function LayoutStudioScreen({
                 pixelsPerInch: null,
               },
             }));
+          }
+        } catch (err) {
+          const dMerge = draftRef.current;
+          const canMergePdf =
+            dMerge.workspaceKind === "source" && (dMerge.source?.pages?.length ?? 0) > 0;
+          const newDoc: SavedLayoutSourceDocument = {
+            id: sourceDocumentId,
+            name: file.name,
+            kind: "pdf",
+            pageCount: stacked.pages.length,
+            uploadedAt,
+            fileUrl: downloadUrl,
+            fileStoragePath: storagePath,
+          };
+          if (canMergePdf) {
+            const existingPages = dMerge.source!.pages!;
+            const newPageMeta = stacked.pages.map((page) => ({
+              widthPx: page.widthPx,
+              heightPx: page.heightPx,
+              sourceDocumentId,
+              sourceDocumentName: file.name,
+              sourceDocumentPageNumber: page.pageNumber,
+            }));
+            const merged = mergeStackedSourcePages(
+              existingPages,
+              newPageMeta,
+              [newDoc],
+              resolveExistingSourceDocuments(dMerge),
+            );
+            setPdfPageThumbUrls({});
+            const firstNewIdx = existingPages.length;
+            const focusPage = merged.pages[firstNewIdx] ?? merged.pages[0]!;
+            setActiveSourcePageIndex(focusPage.index);
+            setActivePdfPageImageUrl(null);
+            const docCount = merged.documents.length;
+            setUploadError(
+              err instanceof Error
+                ? `PDF uploaded, but the page previews could not be rendered: ${err.message}`
+                : "PDF uploaded, but the page previews could not be rendered.",
+            );
+            updateDraft((d) => ({
+              ...d,
+              workspaceKind: "source",
+              pieces: d.pieces,
+              placements: d.placements,
+              slabClones: d.slabClones,
+              source: {
+                ...d.source!,
+                kind: docCount > 1 ? "image" : "pdf",
+                fileUrl: merged.documents[0]?.fileUrl ?? d.source!.fileUrl,
+                fileStoragePath: merged.documents[0]?.fileStoragePath ?? d.source!.fileStoragePath,
+                previewImageUrl: merged.pages[0]?.previewImageUrl,
+                previewStoragePath: merged.pages[0]?.previewStoragePath,
+                fileName: docCount > 1 ? `${docCount} files` : d.source!.fileName,
+                uploadedAt: d.source!.uploadedAt,
+                documents: merged.documents,
+                pages: merged.pages,
+                sourceWidthPx: merged.totalWidth,
+                sourceHeightPx: merged.totalHeight,
+              },
+              calibration: d.calibration,
+            }));
+          } else {
+            setActivePdfPageImageUrl(null);
+            setPdfPageThumbUrls({});
+            setUploadError(
+              err instanceof Error
+                ? `PDF uploaded, but the page previews could not be rendered: ${err.message}`
+                : "PDF uploaded, but the page previews could not be rendered.",
+            );
+            updateDraft((d) => ({
+              ...d,
+              workspaceKind: "source",
+              pieces: [],
+              placements: [],
+              slabClones: [],
+              source: {
+                kind: "pdf",
+                fileUrl: downloadUrl,
+                fileStoragePath: storagePath,
+                fileName: file.name,
+                uploadedAt,
+                documents: [newDoc],
+                pages: stacked.pages.map((page) => ({
+                  ...page,
+                  sourceDocumentId,
+                  sourceDocumentName: file.name,
+                  sourceDocumentPageNumber: page.pageNumber,
+                })),
+                sourceWidthPx: stacked.totalWidth,
+                sourceHeightPx: stacked.totalHeight,
+              },
+              calibration: {
+                ...d.calibration,
+                isCalibrated: false,
+                pointA: null,
+                pointB: null,
+                realDistance: null,
+                unit: null,
+                pixelsPerInch: null,
+              },
+            }));
+          }
+        }
+      } else {
+        uploadedPdfFileRef.current = null;
+        await new Promise<void>((resolve, reject) => {
+          const img = new Image();
+          const o = URL.createObjectURL(file);
+          img.onload = () => {
+            URL.revokeObjectURL(o);
+            setUploadStatusText("Preparing plan canvas...");
+            const dMerge = draftRef.current;
+            const canMergeImage =
+              dMerge.workspaceKind === "source" && (dMerge.source?.pages?.length ?? 0) > 0;
+            if (canMergeImage) {
+              const existingPages = dMerge.source!.pages!;
+              const newDoc: SavedLayoutSourceDocument = {
+                id: sourceDocumentId,
+                name: file.name,
+                kind: "image",
+                pageCount: 1,
+                uploadedAt,
+                fileUrl: downloadUrl,
+                fileStoragePath: storagePath,
+              };
+              const newPageMeta = [
+                {
+                  widthPx: img.naturalWidth,
+                  heightPx: img.naturalHeight,
+                  sourceDocumentId,
+                  sourceDocumentName: file.name,
+                  sourceDocumentPageNumber: 1,
+                  previewImageUrl: downloadUrl,
+                  previewStoragePath: storagePath,
+                },
+              ];
+              const merged = mergeStackedSourcePages(
+                existingPages,
+                newPageMeta,
+                [newDoc],
+                resolveExistingSourceDocuments(dMerge),
+              );
+              const thumbMapMerged = Object.fromEntries(
+                merged.pages
+                  .map((page) => (page.previewImageUrl ? [page.index, page.previewImageUrl] : null))
+                  .filter((entry): entry is [number, string] => entry != null),
+              );
+              setPdfPageThumbUrls(thumbMapMerged);
+              const firstNewIdx = existingPages.length;
+              const focusPage = merged.pages[firstNewIdx] ?? merged.pages[0]!;
+              setActiveSourcePageIndex(focusPage.index);
+              setActivePdfPageImageUrl(focusPage.previewImageUrl ?? thumbMapMerged[focusPage.index] ?? null);
+              const docCount = merged.documents.length;
+              updateDraft((d) => ({
+                ...d,
+                workspaceKind: "source",
+                pieces: d.pieces,
+                placements: d.placements,
+                slabClones: d.slabClones,
+                source: {
+                  ...d.source!,
+                  kind: docCount > 1 ? "image" : d.source!.kind,
+                  fileUrl: merged.documents[0]?.fileUrl ?? d.source!.fileUrl,
+                  fileStoragePath: merged.documents[0]?.fileStoragePath ?? d.source!.fileStoragePath,
+                  previewImageUrl: merged.pages[0]?.previewImageUrl,
+                  previewStoragePath: merged.pages[0]?.previewStoragePath,
+                  fileName: docCount > 1 ? `${docCount} files` : d.source!.fileName,
+                  uploadedAt: d.source!.uploadedAt,
+                  documents: merged.documents,
+                  pages: merged.pages,
+                  sourceWidthPx: merged.totalWidth,
+                  sourceHeightPx: merged.totalHeight,
+                },
+                calibration: d.calibration,
+              }));
+            } else {
+              updateDraft((d) => ({
+                ...d,
+                workspaceKind: "source",
+                pieces: [],
+                placements: [],
+                slabClones: [],
+                source: {
+                  kind: "image",
+                  fileUrl: downloadUrl,
+                  fileStoragePath: storagePath,
+                  fileName: file.name,
+                  uploadedAt,
+                  pages: [
+                    {
+                      index: 0,
+                      pageNumber: 1,
+                      sourceDocumentId,
+                      sourceDocumentName: file.name,
+                      sourceDocumentPageNumber: 1,
+                      widthPx: img.naturalWidth,
+                      heightPx: img.naturalHeight,
+                      originX: 0,
+                      originY: 0,
+                      calibration: {
+                        ...d.calibration,
+                        isCalibrated: false,
+                        pointA: null,
+                        pointB: null,
+                        realDistance: null,
+                        unit: null,
+                        pixelsPerInch: null,
+                      },
+                    },
+                  ],
+                  documents: [
+                    {
+                      id: sourceDocumentId,
+                      name: file.name,
+                      kind: "image",
+                      pageCount: 1,
+                      uploadedAt,
+                      fileUrl: downloadUrl,
+                      fileStoragePath: storagePath,
+                    },
+                  ],
+                  sourceWidthPx: img.naturalWidth,
+                  sourceHeightPx: img.naturalHeight,
+                },
+                calibration: {
+                  ...d.calibration,
+                  isCalibrated: false,
+                  pointA: null,
+                  pointB: null,
+                  realDistance: null,
+                  unit: null,
+                  pixelsPerInch: null,
+                },
+              }));
+            }
             resolve();
           };
           img.onerror = () => {
@@ -3030,9 +3886,11 @@ export function LayoutStudioScreen({
           img.src = o;
         });
       }
-      setCalibrationPopupOpen(true);
-      setCalibrationMode(true);
-      setCalibrationStep("a");
+      if (!isMergeSource || !draftRef.current.calibration.isCalibrated) {
+        setCalibrationPopupOpen(true);
+        setCalibrationMode(true);
+        setCalibrationStep("a");
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -3042,6 +3900,324 @@ export function LayoutStudioScreen({
       setUploadStatusText(null);
     }
   };
+
+  const handleUploadFiles = async (selectedFiles: File[]) => {
+    const files = selectedFiles.filter((file) => file.size > 0);
+    if (files.length === 0) return;
+    if (files.some((file) => !isAcceptedLayoutSourceFile(file))) {
+      setUploadError("Use PDF, PNG, JPG, or WebP.");
+      return;
+    }
+    setSourceImportModalOpen(false);
+    if (files.length === 1) {
+      await handleUpload(files[0]!);
+      return;
+    }
+    setUploadError(null);
+    if (workspaceKind === "blank" && draft.pieces.length > 0) {
+      const ok = window.confirm(
+        "Importing plan files replaces the blank layout and clears pieces for this job’s shared plan. Continue?"
+      );
+      if (!ok) return;
+    }
+
+    const isMergeBatch =
+      workspaceKind === "source" && (draft.source?.pages?.length ?? 0) > 0;
+    if (!isMergeBatch) {
+      setSourcePlanEditorPieces([]);
+      skipSourcePlanEditorDraftSyncRef.current = false;
+      setSourceCanvasMode("trace");
+      setTraceViewZoom(1);
+      setTraceResetViewTick((t) => t + 1);
+      setTraceZoomToSelectedTick(0);
+      setPlanBoxZoomActive(false);
+      setSelectedEdge(null);
+      setSelectedFilletEdges([]);
+      setTool("select");
+    }
+
+    setUploading(true);
+    setUploadStage("uploading");
+    setUploadProgress(0);
+    setUploadStatusText(`Uploading ${files.length} files...`);
+    setPdfRenderBusy(false);
+    setPdfRenderStatusText(null);
+    setPdfRenderFailedPages({});
+    uploadedPdfFileRef.current = null;
+
+    try {
+      const uploadedAt = new Date().toISOString();
+      const uploads: Array<{ file: File; kind: "pdf" | "image"; downloadUrl: string; storagePath: string }> = [];
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]!;
+        const kind = layoutSourceKindFromFile(file);
+        if (kind !== "pdf" && kind !== "image") continue;
+        setUploadStatusText(`Uploading file ${i + 1} of ${files.length}: ${file.name}`);
+        const { downloadUrl, storagePath } = await uploadJobLayoutSource(ownerUserId, job.id, file, {
+          onProgress: ({ percent }) => {
+            const fileProgress = Math.min(Math.max(percent, 0), 100);
+            setUploadProgress(((i + fileProgress / 100) / files.length) * 100);
+          },
+        });
+        uploads.push({ file, kind, downloadUrl, storagePath });
+      }
+      if (uploads.length === 0) throw new Error("No supported files were selected.");
+
+      setUploadStage("processing");
+      setUploadProgress(0);
+      setUploadStatusText("Building source pages...");
+
+      const renderedPages: Array<{
+        widthPx: number;
+        heightPx: number;
+        pngBlob: Blob;
+        label: string;
+        documentId: string;
+        documentName: string;
+        documentKind: "pdf" | "image";
+        documentPageNumber: number;
+      }> = [];
+      const sourceDocumentsToPersist: SavedLayoutSourceDocument[] = uploads.map((upload) => ({
+        id: crypto.randomUUID(),
+        name: upload.file.name,
+        kind: upload.kind,
+        pageCount: 0,
+        uploadedAt,
+        fileUrl: upload.downloadUrl,
+        fileStoragePath: upload.storagePath,
+      }));
+      for (let i = 0; i < uploads.length; i += 1) {
+        const upload = uploads[i]!;
+        const doc = sourceDocumentsToPersist[i]!;
+        if (upload.kind === "pdf") {
+          setUploadStatusText(`Inspecting ${upload.file.name}...`);
+          const manifest = await inspectPdfFilePages(upload.file);
+          const pageNumbers = manifest.map((page) => page.pageNumber);
+          const rendered = await renderPdfFilePagesToDataUrls(upload.file, pageNumbers, 1.5, ({ renderedCount, totalCount }) => {
+            const progressWithinFile = renderedCount / Math.max(totalCount, 1);
+            setUploadProgress(((i + progressWithinFile) / uploads.length) * 100);
+            setUploadStatusText(`Rendering ${upload.file.name} page ${renderedCount} of ${totalCount}...`);
+          });
+          renderedPages.push(
+            ...rendered.map((page) => ({
+              widthPx: page.width,
+              heightPx: page.height,
+              pngBlob: page.pngBlob,
+              label: `${fileNameBase(upload.file.name)} p${page.pageNumber}`,
+              documentId: doc.id,
+              documentName: doc.name,
+              documentKind: doc.kind as "pdf",
+              documentPageNumber: page.pageNumber,
+            })),
+          );
+          doc.pageCount = rendered.length;
+        } else {
+          setUploadStatusText(`Preparing image ${upload.file.name}...`);
+          const rendered = await renderImageFileToPngBlob(upload.file);
+          setUploadProgress(((i + 1) / uploads.length) * 100);
+          renderedPages.push({
+            widthPx: rendered.width,
+            heightPx: rendered.height,
+            pngBlob: rendered.pngBlob,
+            label: fileNameBase(upload.file.name),
+            documentId: doc.id,
+            documentName: doc.name,
+            documentKind: doc.kind as "image",
+            documentPageNumber: 1,
+          });
+          doc.pageCount = 1;
+        }
+      }
+
+      if (renderedPages.length === 0) throw new Error("Could not build source pages from selected files.");
+      const stacked = buildStackedPdfPages(
+        renderedPages.map((page, idx) => ({
+          pageNumber: idx + 1,
+          widthPx: page.widthPx,
+          heightPx: page.heightPx,
+        })),
+      );
+
+      setUploadProgress(0);
+      setUploadStatusText(`Saving ${renderedPages.length} page previews...`);
+      const persistedPreviewResults = await Promise.all(
+        renderedPages.map(async (page, idx) => {
+          setUploadProgress((idx / renderedPages.length) * 100);
+          const uploadedPreview = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, page.pngBlob, {
+            nameHint: `${page.label}-${idx + 1}`,
+          });
+          return uploadedPreview;
+        }),
+      );
+      const persistedPages = stacked.pages.map((page, idx) => ({
+        ...page,
+        sourceDocumentId: renderedPages[idx]?.documentId,
+        sourceDocumentName: renderedPages[idx]?.documentName,
+        sourceDocumentPageNumber: renderedPages[idx]?.documentPageNumber,
+        previewImageUrl: persistedPreviewResults[idx]?.downloadUrl,
+        previewStoragePath: persistedPreviewResults[idx]?.storagePath,
+      }));
+      const thumbMap = Object.fromEntries(
+        persistedPages
+          .map((page) => (page.previewImageUrl ? [page.index, page.previewImageUrl] : null))
+          .filter((entry): entry is [number, string] => entry != null),
+      );
+      const dMerge = draftRef.current;
+      const mergeIntoExisting =
+        dMerge.workspaceKind === "source" && (dMerge.source?.pages?.length ?? 0) > 0;
+      setSelectedPieceId(null);
+      setSourceCanvasMode("trace");
+      if (mergeIntoExisting) {
+        const existingPages = dMerge.source!.pages!;
+        const newPageMeta = persistedPages.map((p) => ({
+          widthPx: p.widthPx,
+          heightPx: p.heightPx,
+          sourceDocumentId: p.sourceDocumentId!,
+          sourceDocumentName: p.sourceDocumentName!,
+          sourceDocumentPageNumber: p.sourceDocumentPageNumber ?? p.pageNumber,
+          previewImageUrl: p.previewImageUrl,
+          previewStoragePath: p.previewStoragePath,
+        }));
+        const merged = mergeStackedSourcePages(
+          existingPages,
+          newPageMeta,
+          sourceDocumentsToPersist,
+          resolveExistingSourceDocuments(dMerge),
+        );
+        const thumbMapMerged = Object.fromEntries(
+          merged.pages
+            .map((page) => (page.previewImageUrl ? [page.index, page.previewImageUrl] : null))
+            .filter((entry): entry is [number, string] => entry != null),
+        );
+        setPdfPageThumbUrls(thumbMapMerged);
+        const firstNewIdx = existingPages.length;
+        const focusPage = merged.pages[firstNewIdx] ?? merged.pages[0]!;
+        setActiveSourcePageIndex(focusPage.index);
+        setActivePdfPageImageUrl(focusPage.previewImageUrl ?? thumbMapMerged[focusPage.index] ?? null);
+        const docCount = merged.documents.length;
+        setUploadStatusText("Building plan workspace...");
+        updateDraft((d) => ({
+          ...d,
+          workspaceKind: "source",
+          pieces: d.pieces,
+          placements: d.placements,
+          slabClones: d.slabClones,
+          source: {
+            ...d.source!,
+            kind: docCount > 1 ? "image" : d.source!.kind,
+            fileUrl: merged.documents[0]?.fileUrl ?? d.source!.fileUrl,
+            fileStoragePath: merged.documents[0]?.fileStoragePath ?? d.source!.fileStoragePath,
+            previewImageUrl: merged.pages[0]?.previewImageUrl,
+            previewStoragePath: merged.pages[0]?.previewStoragePath,
+            fileName: docCount > 1 ? `${docCount} files` : d.source!.fileName,
+            uploadedAt: d.source!.uploadedAt,
+            documents: merged.documents,
+            pages: merged.pages,
+            sourceWidthPx: merged.totalWidth,
+            sourceHeightPx: merged.totalHeight,
+          },
+          calibration: d.calibration,
+        }));
+      } else {
+        setUndoStack([]);
+        setRedoStack([]);
+        setActiveSourcePageIndex(stacked.pages[0]?.index ?? 0);
+        setPdfPageThumbUrls(thumbMap);
+        setActivePdfPageImageUrl(persistedPages[0]?.previewImageUrl ?? null);
+        setUploadStatusText("Building plan workspace...");
+        updateDraft((d) => ({
+          ...d,
+          workspaceKind: "source",
+          pieces: [],
+          placements: [],
+          slabClones: [],
+          source: {
+            kind: "image",
+            fileUrl: uploads[0]!.downloadUrl,
+            fileStoragePath: uploads[0]!.storagePath,
+            previewImageUrl: persistedPages[0]?.previewImageUrl,
+            previewStoragePath: persistedPages[0]?.previewStoragePath,
+            fileName: `${files.length} files`,
+            uploadedAt,
+            documents: sourceDocumentsToPersist,
+            pages: persistedPages,
+            sourceWidthPx: stacked.totalWidth,
+            sourceHeightPx: stacked.totalHeight,
+          },
+          calibration: {
+            ...d.calibration,
+            isCalibrated: false,
+            pointA: null,
+            pointB: null,
+            realDistance: null,
+            unit: null,
+            pixelsPerInch: null,
+          },
+        }));
+      }
+      if (!mergeIntoExisting || !draftRef.current.calibration.isCalibrated) {
+        setCalibrationPopupOpen(true);
+        setCalibrationMode(true);
+        setCalibrationStep("a");
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+      setUploadStage("uploading");
+      setUploadStatusText(null);
+    }
+  };
+
+  const syncPdfThumbsAfterSourceRemoval = useCallback((next: SavedLayoutStudioState) => {
+    if (!next.source?.pages?.length) {
+      setPdfPageThumbUrls({});
+      setActivePdfPageImageUrl(null);
+      setActiveSourcePageIndex(0);
+      setPdfRenderFailedPages({});
+      uploadedPdfFileRef.current = null;
+      return;
+    }
+    const pages = normalizedSourcePages(next.source, next.calibration);
+    const thumbMap = Object.fromEntries(
+      pages.flatMap((p) => {
+        const url =
+          p.previewImageUrl ?? (p.index === 0 ? next.source?.previewImageUrl ?? null : null);
+        return url ? [[p.index, url] as const] : [];
+      }),
+    );
+    setPdfPageThumbUrls(thumbMap);
+    const first = pages[0]!;
+    setActiveSourcePageIndex(first.index);
+    const activeUrl =
+      first.previewImageUrl ?? (first.index === 0 ? next.source?.previewImageUrl ?? null : null);
+    setActivePdfPageImageUrl(activeUrl ?? null);
+    setPdfRenderFailedPages({});
+    uploadedPdfFileRef.current = null;
+  }, []);
+
+  const applyRemoveSourceDocumentFromWorkspace = useCallback(
+    (documentId: string) => {
+      updateDraftWithUndo((d) => {
+        const next = computeRemoveSourceDocumentResult(d, documentId);
+        if (next) queueMicrotask(() => syncPdfThumbsAfterSourceRemoval(next));
+        return next ?? d;
+      });
+    },
+    [updateDraftWithUndo, syncPdfThumbsAfterSourceRemoval],
+  );
+
+  const confirmRemoveSourceDocumentFromWorkspace = useCallback(() => {
+    if (!removeSourceDocumentId) return;
+    const id = removeSourceDocumentId;
+    setRemoveSourceDocumentId(null);
+    applyRemoveSourceDocumentFromWorkspace(id);
+  }, [removeSourceDocumentId, applyRemoveSourceDocumentFromWorkspace]);
+
+  const requestRemoveSourceDocument = useCallback((documentId: string) => {
+    setRemoveSourceDocumentId(documentId);
+  }, []);
 
   const onCalibrationPoint = (p: { x: number; y: number }) => {
     if (calibrationStep === "a") {
@@ -3210,8 +4386,8 @@ export function LayoutStudioScreen({
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       const viewportPadding = 12;
-      const availableWidth = Math.max(220, window.innerWidth - viewportPadding * 2);
-      const preferredWidth = Math.max(rect.width, 390);
+      const availableWidth = Math.max(165, window.innerWidth - viewportPadding * 2);
+      const preferredWidth = Math.max(rect.width, 293);
       const popoverWidth = Math.min(preferredWidth, availableWidth);
       const left = Math.min(
         Math.max(viewportPadding, rect.left),
@@ -3334,6 +4510,54 @@ export function LayoutStudioScreen({
       ),
     }));
   };
+
+  const commitTraceRectangleDims = useCallback(() => {
+    const piece = traceInspectorPiece;
+    const editor = traceInspectorRectangleEditor;
+    const dimDraft = traceRectDimDraftRef.current;
+    if (!piece || !editor || !dimDraft || dimDraft.pieceId !== piece.id) return;
+    if (!selectedPieceId || selectedPieceId !== piece.id) return;
+    const w = parseTraceRectDimInput(dimDraft.widthStr, editor.unit);
+    const depthVal = parseTraceRectDimInput(dimDraft.depthStr, editor.unit);
+    if (w == null || depthVal == null) {
+      setTraceRectDimDraft({
+        pieceId: piece.id,
+        widthStr: formatTraceRectDimForInput(editor.width),
+        depthStr: formatTraceRectDimForInput(editor.depth),
+      });
+      return;
+    }
+    const eps = 1e-5;
+    if (
+      Math.abs(w - editor.width) < eps &&
+      Math.abs(depthVal - editor.depth) < eps
+    ) {
+      return;
+    }
+    if (editor.mode === "manual") {
+      applyManualDimensions({ kind: "rectangle", widthIn: w, depthIn: depthVal });
+      return;
+    }
+    const scale =
+      editor.unit === "in"
+        ? piece.sourcePixelsPerInch ??
+          activeCalibration.pixelsPerInch ??
+          draft.calibration.pixelsPerInch ??
+          null
+        : null;
+    resizeSelectedRectangleFromInspector(
+      scale && scale > 0 ? w * scale : w,
+      scale && scale > 0 ? depthVal * scale : depthVal,
+    );
+  }, [
+    activeCalibration.pixelsPerInch,
+    applyManualDimensions,
+    draft.calibration.pixelsPerInch,
+    resizeSelectedRectangleFromInspector,
+    selectedPieceId,
+    traceInspectorPiece,
+    traceInspectorRectangleEditor,
+  ]);
 
   useEffect(() => {
     setSelectedEdge(null);
@@ -3659,25 +4883,42 @@ export function LayoutStudioScreen({
             choose <strong>Bottom (3D)</strong> in the edge menu to change it.
           </p>
         ) : null}
-        {selectedPiece.manualDimensions?.kind === "rectangle" ? (
+        {traceInspectorRectangleEditor && traceInspectorPiece ? (
           <div className="ls-manual-dim">
-            <p className="ls-card-title">Dimensions (in)</p>
+            <p className="ls-card-title">Dimensions ({traceInspectorRectangleEditor.unit})</p>
+            <p className="ls-muted ls-piece-size-line">
+              Type values, then press Enter or click away to apply.
+            </p>
             <label className="ls-field">
               Width
               <input
                 className="ls-input"
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={selectedPiece.manualDimensions.widthIn}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={
+                  traceRectDimDraft?.pieceId === traceInspectorPiece.id
+                    ? traceRectDimDraft.widthStr
+                    : formatTraceRectDimForInput(traceInspectorRectangleEditor.width)
+                }
                 onChange={(e) => {
-                  const md = selectedPiece.manualDimensions;
-                  if (md?.kind !== "rectangle") return;
-                  applyManualDimensions({
-                    kind: "rectangle",
-                    widthIn: Math.max(0.5, parseFloat(e.target.value) || 0),
-                    depthIn: md.depthIn,
-                  });
+                  const id = traceInspectorPiece.id;
+                  const next = e.target.value;
+                  setTraceRectDimDraft((prev) => ({
+                    pieceId: id,
+                    widthStr: next,
+                    depthStr:
+                      prev?.pieceId === id
+                        ? prev.depthStr
+                        : formatTraceRectDimForInput(traceInspectorRectangleEditor.depth),
+                  }));
+                }}
+                onBlur={commitTraceRectangleDims}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
                 }}
               />
             </label>
@@ -3685,18 +4926,32 @@ export function LayoutStudioScreen({
               Depth
               <input
                 className="ls-input"
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={selectedPiece.manualDimensions.depthIn}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={
+                  traceRectDimDraft?.pieceId === traceInspectorPiece.id
+                    ? traceRectDimDraft.depthStr
+                    : formatTraceRectDimForInput(traceInspectorRectangleEditor.depth)
+                }
                 onChange={(e) => {
-                  const md = selectedPiece.manualDimensions;
-                  if (md?.kind !== "rectangle") return;
-                  applyManualDimensions({
-                    kind: "rectangle",
-                    widthIn: md.widthIn,
-                    depthIn: Math.max(0.5, parseFloat(e.target.value) || 0),
-                  });
+                  const id = traceInspectorPiece.id;
+                  const next = e.target.value;
+                  setTraceRectDimDraft((prev) => ({
+                    pieceId: id,
+                    depthStr: next,
+                    widthStr:
+                      prev?.pieceId === id
+                        ? prev.widthStr
+                        : formatTraceRectDimForInput(traceInspectorRectangleEditor.width),
+                  }));
+                }}
+                onBlur={commitTraceRectangleDims}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  }
                 }}
               />
             </label>
@@ -4020,27 +5275,27 @@ export function LayoutStudioScreen({
     !showEntryHub && mode === "trace" && planCanvasExpanded
       ? renderLiveSummary("ls-live-summary ls-live-summary--overlay-canvas")
       : null;
-  const placeMaterialMenu =
-    options.length > 0 ? (
-      <div className="ls-material-menu" ref={materialMenuRef}>
-        <button
-          ref={materialMenuTriggerRef}
-          type="button"
-          className={`ls-btn ls-btn-secondary ls-material-menu-trigger${materialMenuOpen ? " is-open" : ""}`}
-          aria-haspopup="dialog"
-          aria-expanded={materialMenuOpen}
-          onClick={() => setMaterialMenuOpen((open) => !open)}
-        >
-          <span className="ls-material-menu-trigger-label">Materials</span>
-          <span className="ls-material-menu-trigger-value">
-            {quoteShowingAllUsedMaterials ? "All used materials" : activeOption?.productName ?? "Select material"}
-          </span>
-          <span className="ls-material-menu-trigger-caret" aria-hidden>
-            {materialMenuOpen ? "▴" : "▾"}
-          </span>
-        </button>
-        {renderMaterialMenuPopover(
-          <>
+  const placeMaterialMenu = (
+    <div className="ls-material-menu" ref={materialMenuRef}>
+      <button
+        ref={materialMenuTriggerRef}
+        type="button"
+        className={`ls-btn ls-btn-secondary ls-material-menu-trigger${materialMenuOpen ? " is-open" : ""}`}
+        aria-haspopup="dialog"
+        aria-expanded={materialMenuOpen}
+        onClick={() => setMaterialMenuOpen((open) => !open)}
+      >
+        <span className="ls-material-menu-trigger-label">Materials</span>
+        <span className="ls-material-menu-trigger-value">
+          {quoteShowingAllUsedMaterials ? "All used materials" : activeOption?.productName ?? "Select material"}
+        </span>
+        <span className="ls-material-menu-trigger-caret" aria-hidden>
+          {materialMenuOpen ? "▴" : "▾"}
+        </span>
+      </button>
+      {renderMaterialMenuPopover(
+        <>
+          {options.length > 0 ? (
             <div className="ls-material-menu-list">
               {mode === "quote" && canQuoteAllUsedMaterials ? (
                 <div
@@ -4113,24 +5368,21 @@ export function LayoutStudioScreen({
                 </div>
               ))}
             </div>
-            {onOpenAddMaterials ? (
-              <button
-                type="button"
-                className="ls-material-menu-add"
-                role="menuitem"
-                onClick={() => void openAddMaterialsSafely()}
-              >
-                + Add material
-              </button>
-            ) : null}
-          </>,
-        )}
-      </div>
-    ) : (
-      <p className="ls-option-strip-hint ls-muted">
-        No slab options on this job yet — add materials from the catalog or “Add product / slab” on the job.
-      </p>
-    );
+          ) : null}
+          {onOpenAddMaterials ? (
+            <button
+              type="button"
+              className="ls-material-menu-add"
+              role="menuitem"
+              onClick={() => void openAddMaterialsSafely()}
+            >
+              + Add material
+            </button>
+          ) : null}
+        </>,
+      )}
+    </div>
+  );
   const quoteToolbar = mode === "quote" ? (
     <div className="ls-plan-toolbar ls-place-toolbar ls-quote-toolbar" role="toolbar" aria-label="Quote toolbar">
       <div className="ls-quote-toolbar-cluster ls-quote-toolbar-cluster--start">
@@ -4252,12 +5504,13 @@ export function LayoutStudioScreen({
         ref={entryUploadInputRef}
         type="file"
         className="sr-only"
+        multiple
         accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
         disabled={uploading}
         onChange={(e) => {
-          const f = e.target.files?.[0];
+          const files = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (f) void handleUpload(f);
+          if (files.length > 0) void handleUploadFiles(files);
         }}
       />
 
@@ -4382,15 +5635,16 @@ export function LayoutStudioScreen({
           {mode === "trace" && !showEntryHub ? (
             <input
               id="ls-main-upload"
-              ref={uploadInputRef}
+              ref={importUploadInputRef}
               type="file"
+              multiple
               accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
               className="sr-only"
               disabled={uploading}
               onChange={(e) => {
-                const f = e.target.files?.[0];
+                const files = Array.from(e.target.files ?? []);
                 e.target.value = "";
-                if (f) void handleUpload(f);
+                if (files.length > 0) void handleUploadFiles(files);
               }}
             />
           ) : null}
@@ -4485,14 +5739,16 @@ export function LayoutStudioScreen({
                         <IconBack />
                       </button>
                     ) : null}
-                    <label
+                    <button
+                      type="button"
                       className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
-                      htmlFor="ls-main-upload"
-                      title="Add a PDF or image (replaces blank layout)"
-                      aria-label="Add a PDF or image plan"
+                      title="Add PDF/image source files"
+                      aria-label="Add PDF or image source files"
+                      disabled={uploading}
+                      onClick={() => setSourceImportModalOpen(true)}
                     >
                       <span>PDF</span>
-                    </label>
+                    </button>
                   </div>
                   <span className="ls-plan-toolbar-divider" aria-hidden />
                   <div className="ls-plan-toolbar-group" role="group" aria-label="Pointer tool">
@@ -4847,14 +6103,16 @@ export function LayoutStudioScreen({
                         <IconBack />
                       </button>
                     ) : null}
-                      <label
+                      <button
+                        type="button"
                         className={`ls-plan-toolbar-btn ls-plan-toolbar-pdf${uploading ? " is-busy" : ""}`}
-                        htmlFor="ls-main-upload"
-                        title="Upload PDF or image plan"
-                        aria-label="Upload PDF or image plan"
+                        title="Add PDF/image source files"
+                        aria-label="Add PDF or image source files"
+                        disabled={uploading}
+                        onClick={() => setSourceImportModalOpen(true)}
                       >
                         <span>PDF</span>
-                      </label>
+                      </button>
                     </div>
                     <span className="ls-plan-toolbar-divider" aria-hidden />
                     <div className="ls-plan-toolbar-group" role="group" aria-label="Pointer tool">
@@ -5184,21 +6442,21 @@ export function LayoutStudioScreen({
                       </button>
                     </div>
                     <span className="ls-plan-toolbar-divider" aria-hidden />
-                    <span className="ls-plan-toolbar-zoom-heading" aria-live="polite">
-                      {activeCalibration.isCalibrated ? "Scale set" : "Scale needed"}
-                    </span>
+                    {!activeCalibration.isCalibrated ? (
+                      <span className="ls-plan-toolbar-zoom-heading" aria-live="polite">
+                        Scale needed
+                      </span>
+                    ) : null}
                     <button type="button" className="ls-btn ls-btn-secondary" onClick={beginCalibration}>
                       Set scale
                     </button>
                   </div>
                   <div
                     className={`ls-trace-stage-shell${
-                      draft.source?.kind === "pdf" && sourcePages.length > 1 && showSourceOnPlanCanvas
-                        ? " ls-trace-stage-shell--with-pages"
-                        : ""
+                      sourcePages.length > 1 && showSourceOnPlanCanvas ? " ls-trace-stage-shell--with-pages" : ""
                     }`}
                   >
-                    {draft.source?.kind === "pdf" && sourcePages.length > 1 && showSourceOnPlanCanvas ? (
+                    {sourcePages.length > 1 && showSourceOnPlanCanvas ? (
                       <aside className="ls-trace-page-strip" aria-label="Plan pages">
                         {sourcePages.map((page) => {
                           const thumbUrl =
@@ -5247,17 +6505,14 @@ export function LayoutStudioScreen({
                       </aside>
                     ) : null}
                     <div className="ls-trace-page-stage">
-                      {draft.source?.kind === "pdf" &&
-                      sourcePages.length > 1 &&
-                      showSourceOnPlanCanvas &&
-                      activeSourcePage ? (
-                        <div className="ls-trace-page-pager" role="group" aria-label="PDF page navigation">
+                      {sourcePages.length > 1 && showSourceOnPlanCanvas && activeSourcePage ? (
+                        <div className="ls-trace-page-pager" role="group" aria-label="Plan page navigation">
                           <button
                             type="button"
                             className="ls-trace-page-pager-btn"
                             onClick={() => goToSourcePage(sourcePages[Math.max(0, activeSourcePagePos - 1)]!.index)}
                             disabled={activeSourcePagePos <= 0}
-                            aria-label="Previous PDF page"
+                            aria-label="Previous page"
                             title="Previous page"
                           >
                             Prev
@@ -5274,7 +6529,7 @@ export function LayoutStudioScreen({
                               )
                             }
                             disabled={activeSourcePagePos < 0 || activeSourcePagePos >= sourcePages.length - 1}
-                            aria-label="Next PDF page"
+                            aria-label="Next page"
                             title="Next page"
                           >
                             Next
@@ -5349,6 +6604,7 @@ export function LayoutStudioScreen({
                           displayUrl={planCanvasDisplayUrl}
                           isPdfSource={isPdfSource}
                           sourceBounds={planCanvasBounds}
+                          showEdgeDimensions={showEdgeDimensions}
                           fitPageToWidth={!planCanvasExpanded}
                           viewZoom={traceViewZoom}
                           boxZoomMode={planBoxZoomActive}
@@ -5442,6 +6698,29 @@ export function LayoutStudioScreen({
                   </button>
                 </div>
                 <span className="ls-plan-toolbar-divider" aria-hidden />
+                <div className="ls-plan-toolbar-group" role="group" aria-label="Undo and redo">
+                  <button
+                    type="button"
+                    className="ls-plan-toolbar-btn"
+                    disabled={undoStack.length === 0}
+                    onClick={() => undo()}
+                    title="Undo"
+                    aria-label="Undo"
+                  >
+                    <IconUndo />
+                  </button>
+                  <button
+                    type="button"
+                    className="ls-plan-toolbar-btn"
+                    disabled={redoStack.length === 0}
+                    onClick={() => redo()}
+                    title="Redo"
+                    aria-label="Redo"
+                  >
+                    <IconRedo />
+                  </button>
+                </div>
+                <span className="ls-plan-toolbar-divider" aria-hidden />
                 <div className="ls-plan-toolbar-group ls-place-toolbar-group-summary">
                   {renderLiveSummary("ls-live-summary ls-live-summary--toolbar")}
                 </div>
@@ -5523,8 +6802,8 @@ export function LayoutStudioScreen({
                     pieces={placeVisiblePieces}
                     placements={activeMaterialPlacements}
                     pixelsPerInch={draft.calibration.pixelsPerInch}
-                    selectedPieceId={placeSelectedPieceId}
-                    onSelectPiece={setSelectedPieceId}
+                    selectedPieceIds={placeSelectedIdsResolved}
+                    onSelectPieces={setPlaceSelection}
                     onPlacementChange={onActiveMaterialPlacementsChange}
                     onPlacementInteractionStart={pushUndoSnapshot}
                     showPieceLabels={showPieceLabels}
@@ -5542,9 +6821,11 @@ export function LayoutStudioScreen({
                     onAddSlab={addSlabClone}
                     addSlabDisabled={layoutSlabs.length >= MAX_LAYOUT_SLABS}
                     addSlabTitle={`Duplicate slab material (${layoutSlabs.length}/${MAX_LAYOUT_SLABS})`}
+                    onClearAllPiecesFromSlab={clearAllPiecesFromSlab}
                     orthoMove={placeOrthoMove}
                     seamMode={placeSeamMode}
                     onPlaceSeamRequest={placeSeamOnSlab}
+                    workspaceKind={layoutPreviewWorkspaceKind}
                   />
                 </div>
                 {placeSplitView ? (
@@ -5608,6 +6889,7 @@ export function LayoutStudioScreen({
                       tracePlanWidth={draft.source?.sourceWidthPx ?? null}
                       tracePlanHeight={draft.source?.sourceHeightPx ?? null}
                       showLabels={showPieceLabels}
+                      selectedPieceIds={placeSelectedIdsResolved}
                       selectedPieceId={placeSelectedPieceId}
                       seamMode={placeSeamMode}
                       onPlaceSeamRequest={placeSeamOnSlab}
@@ -5630,6 +6912,76 @@ export function LayoutStudioScreen({
         </div>
       </div>
       )}
+
+      {sourceImportModalOpen && mode === "trace" ? (
+        <div
+          className="ls-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Import source files"
+          onClick={() => setSourceImportModalOpen(false)}
+        >
+          <div className="ls-modal glass-panel ls-modal--source-import" onClick={(e) => e.stopPropagation()}>
+            <h3>Import plan source</h3>
+            <p className="ls-muted">
+              Choose one or more files. Single PDFs keep existing multi-page behavior. Multiple PDFs and images are
+              imported as separate traceable pages.
+            </p>
+            {sourceDocuments.length > 0 ? (
+              <div className="ls-source-documents">
+                <p className="ls-card-title">Current documents</p>
+                <ul className="ls-source-documents-list">
+                  {sourceDocuments.map((doc) => {
+                    const planPagesLabel = formatPlanPageNumbersLabel(
+                      sourceDocumentPlanPageNumbersByDocId.get(doc.id) ?? [],
+                    );
+                    return (
+                      <li key={doc.id} className="ls-source-documents-item">
+                        <span className="ls-source-documents-copy">
+                          <span className="ls-source-documents-name">{doc.name}</span>
+                          <span className="ls-source-documents-meta">
+                            {doc.kind.toUpperCase()}
+                            {planPagesLabel ? <> · {planPagesLabel}</> : null} · {doc.pageCount}{" "}
+                            {doc.pageCount === 1 ? "page" : "pages"}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="ls-btn ls-btn-ghost ls-source-documents-remove"
+                          onClick={() => requestRemoveSourceDocument(doc.id)}
+                          disabled={uploading}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <p className="ls-muted ls-source-documents-empty">No documents in this workspace yet.</p>
+            )}
+            <div className="ls-modal-actions ls-modal-actions--source-import">
+              <button
+                type="button"
+                className="ls-btn ls-btn-secondary"
+                onClick={() => setSourceImportModalOpen(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                disabled={uploading}
+                onClick={() => importUploadInputRef.current?.click()}
+              >
+                Choose PDF / image files
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ManualLShapeSheet
         open={lSheetOpen}
@@ -5807,6 +7159,48 @@ export function LayoutStudioScreen({
         </div>
       ) : null}
 
+      {removeSourceDocumentId ? (
+        <div
+          className="ls-modal-backdrop ls-modal-backdrop--nested-confirm"
+          role="presentation"
+          onClick={() => setRemoveSourceDocumentId(null)}
+        >
+          <div
+            className="ls-modal glass-panel ls-modal--remove-source-doc"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="ls-remove-source-doc-title"
+            aria-describedby="ls-remove-source-doc-desc"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p id="ls-remove-source-doc-title" className="ls-card-title">
+              Remove document?
+            </p>
+            <p id="ls-remove-source-doc-desc" className="ls-muted">
+              Remove <strong>{removeSourceDocumentPendingLabel}</strong> from this plan workspace? Pages from
+              that file are removed from the trace. Pieces that belong only to those pages are removed; other
+              pieces stay.
+            </p>
+            <div className="ls-modal-actions">
+              <button
+                type="button"
+                className="ls-btn ls-btn-secondary"
+                onClick={() => setRemoveSourceDocumentId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ls-btn ls-btn-primary"
+                onClick={confirmRemoveSourceDocumentFromWorkspace}
+              >
+                Remove document
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {removeSlabConfirmId ? (
         <div
           className="ls-modal-backdrop"
@@ -5889,6 +7283,7 @@ export function LayoutStudioScreen({
           open={layoutQuoteModalOpen}
           onClose={() => setLayoutQuoteModalOpen(false)}
           customer={customer}
+          activeAreaName={activeAreaName}
           job={job}
           option={activeOption}
           draft={quoteShowingAllUsedMaterials ? draft : activeMaterialQuoteDraft}
@@ -6036,6 +7431,7 @@ export function LayoutStudioScreen({
                   tracePlanWidth={draft.source?.sourceWidthPx ?? null}
                   tracePlanHeight={draft.source?.sourceHeightPx ?? null}
                   showLabels={showPieceLabels}
+                  selectedPieceIds={placeSelectedIdsResolved}
                   selectedPieceId={placeSelectedPieceId}
                   previewInstanceId="modal"
                   variant="fullscreen"

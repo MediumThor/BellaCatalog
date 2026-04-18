@@ -215,8 +215,8 @@ export function LayoutSlabPricingModal({
                 pieces={pieces}
                 placements={placements}
                 pixelsPerInch={pixelsPerInch}
-                selectedPieceId={null}
-                onSelectPiece={() => {}}
+                selectedPieceIds={[]}
+                onSelectPieces={() => {}}
                 onPlacementChange={() => {}}
                 readOnly
                 showSlabTabs={false}

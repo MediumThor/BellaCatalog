@@ -18,7 +18,7 @@ import {
   transformedPieceInches,
   worldDisplayToSlabInches,
 } from "../utils/pieceInches";
-import { piecesHaveAnyScale } from "../utils/sourcePages";
+import { piecePixelsPerInch, piecesHaveAnyScale } from "../utils/sourcePages";
 import { PieceOutletCutoutsSvg } from "./PieceOutletCutoutsSvg";
 import { PieceSinkCutoutsSvg } from "./PieceSinkCutoutsSvg";
 import { IconRotateCCW, IconRotateCW } from "./PlanToolbarIcons";
@@ -69,12 +69,45 @@ export type PlaceSeamRequest = {
   edgeIndex: number;
   dimA: number;
   dimB: number;
+  /**
+   * `plan`: dimA/dimB are in plan display units (blank plan inches, or source pixels if ever sent that way).
+   * `inches`: real-world inches — converted to plan pixels using calibration PPI (trace/source).
+   */
+  seamDimUnits?: "plan" | "inches";
 };
 
 function formatDimInches(n: number): string {
   if (!Number.isFinite(n)) return "";
   return String(Math.round(n * 1000) / 1000);
 }
+
+function aabbIntersect(
+  a: { minX: number; minY: number; maxX: number; maxY: number },
+  b: { minX: number; minY: number; maxX: number; maxY: number },
+): boolean {
+  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+}
+
+function piecePlacementSlabAabb(
+  piece: LayoutPiece,
+  pl: PiecePlacement,
+  pixelsPerInch: number,
+  allPieces: LayoutPiece[],
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const local = piecePolygonInches(piece, pixelsPerInch, allPieces);
+  if (local.length < 3) return null;
+  const rotated = transformedPieceInches(mirrorLocalInches(local, pl.mirrored), pl.rotation);
+  const xs = rotated.map((q) => q.x + pl.x);
+  const ys = rotated.map((q) => q.y + pl.y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
+const MARQUEE_DRAG_THRESHOLD_PX = 5;
 
 function computeSlabMargins(slab: LayoutSlab): SlabMargins {
   const w = slab.widthIn;
@@ -98,8 +131,9 @@ type Props = {
   pieces: LayoutPiece[];
   placements: PiecePlacement[];
   pixelsPerInch: number | null;
-  selectedPieceId: string | null;
-  onSelectPiece: (id: string | null) => void;
+  /** Placed pieces selected on the slab (order preserved). */
+  selectedPieceIds: string[];
+  onSelectPieces: (ids: string[]) => void;
   onPlacementChange: (placements: PiecePlacement[]) => void;
   /** Called once when the user begins dragging a piece (for undo snapshot). */
   onPlacementInteractionStart?: () => void;
@@ -135,6 +169,8 @@ type Props = {
   onAddSlab?: () => void;
   addSlabDisabled?: boolean;
   addSlabTitle?: string;
+  /** Place phase: remove every piece from a slab (pieces remain on the plan). */
+  onClearAllPiecesFromSlab?: (slabId: string) => void;
   /**
    * When true, dragging a piece on the slab moves only horizontally or vertically (axis locks after a short drag).
    */
@@ -143,6 +179,8 @@ type Props = {
   seamMode?: boolean;
   /** Commit a seam split on the active piece and keep slab placement in sync. */
   onPlaceSeamRequest?: (request: PlaceSeamRequest) => boolean;
+  /** Matches live layout preview: blank plan uses inch space; source/trace uses pixel plan space + PPI. */
+  workspaceKind?: "blank" | "source";
 };
 
 /** Pixels of pointer travel before ortho mode picks horizontal vs vertical. */
@@ -155,8 +193,8 @@ export function PlaceWorkspace({
   pieces,
   placements,
   pixelsPerInch,
-  selectedPieceId,
-  onSelectPiece,
+  selectedPieceIds,
+  onSelectPieces,
   onPlacementChange,
   onPlacementInteractionStart,
   readOnly = false,
@@ -174,9 +212,11 @@ export function PlaceWorkspace({
   onAddSlab,
   addSlabDisabled = false,
   addSlabTitle,
+  onClearAllPiecesFromSlab,
   orthoMove = false,
   seamMode = false,
   onPlaceSeamRequest,
+  workspaceKind = "blank",
 }: Props) {
   const scrollShellRef = useRef<HTMLDivElement | null>(null);
   const slabItemRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -185,13 +225,33 @@ export function PlaceWorkspace({
   const lastDragSlabRef = useRef<string | null>(null);
   /** Ortho drag: lock pointer to screen X or Y after initial movement (matches sink drag on plan). */
   const placementOrthoAxisRef = useRef<"x" | "y" | null>(null);
-  const [drag, setDrag] = useState<{
-    pieceId: string;
+  const [drag, setDrag] = useState<
+    | {
+        kind: "single";
+        pieceId: string;
+        slabId: string;
+        startClient: { x: number; y: number };
+        startPlacement: PiecePlacement;
+        grabOffset: { x: number; y: number };
+      }
+    | {
+        kind: "group";
+        pieceIds: string[];
+        leadPieceId: string;
+        slabId: string;
+        startClient: { x: number; y: number };
+        startPlacements: Map<string, PiecePlacement>;
+        grabOffset: { x: number; y: number };
+      }
+    | null
+  >(null);
+  /** Drag a rectangle on slab stone to select every piece whose bounds intersect the box. */
+  const [marquee, setMarquee] = useState<{
     slabId: string;
+    pointerId: number;
     startClient: { x: number; y: number };
-    startPlacement: PiecePlacement;
-    /** Pointer position minus piece centroid in slab inch space at pointer-down. */
-    grabOffset: { x: number; y: number };
+    startSlab: { x: number; y: number };
+    currentSlab: { x: number; y: number };
   } | null>(null);
   const [hoverSeamEdge, setHoverSeamEdge] = useState<SlabSeamEdgeHit | null>(null);
   const [seamModal, setSeamModal] = useState<{
@@ -274,8 +334,11 @@ export function PlaceWorkspace({
     const end = ring[(edgeIndex + 1) % n]!;
     const hintY = (start.y + end.y) / 2;
     const hintX = (start.x + end.x) / 2;
-    const dimA = parseFloat(seamModal.valA);
-    if (!Number.isFinite(dimA)) return null;
+    const dimAInput = parseFloat(seamModal.valA);
+    if (!Number.isFinite(dimAInput)) return null;
+    const ppi = piecePixelsPerInch(piece, pixelsPerInch);
+    const dimA =
+      workspaceKind === "source" && ppi && ppi > 0 ? dimAInput * ppi : dimAInput;
     if (seamModal.geometry.kind === "vertical") {
       const x = seamModal.geometry.xMin + dimA;
       const { y0, y1 } = verticalSeamPreviewChord(world, x, hintY);
@@ -292,7 +355,7 @@ export function PlaceWorkspace({
       a: worldDisplayToSlabInches(x0, y, piece, placement, pixelsPerInch, pieces),
       b: worldDisplayToSlabInches(x1, y, piece, placement, pixelsPerInch, pieces),
     };
-  }, [pieces, pixelsPerInch, placementByPiece, seamModal]);
+  }, [pieces, pixelsPerInch, placementByPiece, seamModal, workspaceKind]);
 
   const dragRef = useRef(drag);
   dragRef.current = drag;
@@ -375,17 +438,19 @@ export function PlaceWorkspace({
       const geometry = seamGeometryFromAxisAlignedEdge(world, edge.edgeIndex);
       if (!geometry) return;
       onActiveSlab(edge.slabId);
-      onSelectPiece(piece.id);
+      onSelectPieces([piece.id]);
+      const ppi = piecePixelsPerInch(piece, pixelsPerInch);
+      const traceInches = workspaceKind === "source" && ppi != null && ppi > 0;
       setSeamModal({
         slabId: edge.slabId,
         pieceId: piece.id,
         edgeIndex: edge.edgeIndex,
         geometry,
-        valA: formatDimInches(geometry.dimA),
-        valB: formatDimInches(geometry.dimB),
+        valA: formatDimInches(traceInches ? geometry.dimA / ppi : geometry.dimA),
+        valB: formatDimInches(traceInches ? geometry.dimB / ppi : geometry.dimB),
       });
     },
-    [onActiveSlab, onSelectPiece, pieces]
+    [onActiveSlab, onSelectPieces, pieces, pixelsPerInch, workspaceKind]
   );
 
   const pickSeamEdge = useCallback(
@@ -419,6 +484,10 @@ export function PlaceWorkspace({
   }, [ppiReady, readOnly, seamMode]);
 
   useEffect(() => {
+    if (seamMode || readOnly) setMarquee(null);
+  }, [seamMode, readOnly]);
+
+  useEffect(() => {
     if (!seamModal) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setSeamModal(null);
@@ -426,6 +495,68 @@ export function PlaceWorkspace({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [seamModal]);
+
+  const marqueeRef = useRef(marquee);
+  marqueeRef.current = marquee;
+
+  useEffect(() => {
+    if (!marquee) return;
+    const pointerId = marquee.pointerId;
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const m = marqueeRef.current;
+      if (!m || m.pointerId !== pointerId) return;
+      const p = clientToSlab(m.slabId, ev.clientX, ev.clientY);
+      if (!p) return;
+      setMarquee((prev) =>
+        prev === null || prev.pointerId !== pointerId ? prev : { ...prev, currentSlab: p },
+      );
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const m = marqueeRef.current;
+      if (!m || m.pointerId !== pointerId) return;
+      const p = clientToSlab(m.slabId, ev.clientX, ev.clientY);
+      const dist = Math.hypot(ev.clientX - m.startClient.x, ev.clientY - m.startClient.y);
+      const svg = svgRefs.current.get(m.slabId);
+      if (svg) {
+        try {
+          svg.releasePointerCapture(ev.pointerId);
+        } catch {
+          /* noop */
+        }
+      }
+      setMarquee(null);
+      if (dist < MARQUEE_DRAG_THRESHOLD_PX) {
+        onSelectPieces([]);
+        return;
+      }
+      const end = p ?? m.currentSlab;
+      const minX = Math.min(m.startSlab.x, end.x);
+      const maxX = Math.max(m.startSlab.x, end.x);
+      const minY = Math.min(m.startSlab.y, end.y);
+      const maxY = Math.max(m.startSlab.y, end.y);
+      const rect = { minX, minY, maxX, maxY };
+      const ids: string[] = [];
+      if (!pixelsPerInch) return;
+      for (const piece of pieces) {
+        const pl = placements.find((p) => p.pieceId === piece.id);
+        if (!pl?.placed || pl.slabId !== m.slabId) continue;
+        const aabb = piecePlacementSlabAabb(piece, pl, pixelsPerInch, pieces);
+        if (!aabb) continue;
+        if (aabbIntersect(rect, aabb)) ids.push(piece.id);
+      }
+      onSelectPieces(ids);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [marquee?.pointerId, marquee?.slabId, clientToSlab, pieces, placements, pixelsPerInch, onSelectPieces]);
 
   const handlePointerDownPiece = (pieceId: string, slabId: string, ev: React.PointerEvent) => {
     if (readOnly) return;
@@ -443,22 +574,64 @@ export function PlaceWorkspace({
       if (hovered) {
         openSeamModal(hovered);
       } else {
-        onSelectPiece(pieceId);
+        onSelectPieces([pieceId]);
       }
       return;
     }
     const pointerInSlab = clientToSlab(slabId, ev.clientX, ev.clientY);
     if (!pointerInSlab) return;
-    onSelectPiece(pieceId);
+
+    let nextSelection: string[];
+    if (ev.shiftKey) {
+      const set = new Set(selectedPieceIds);
+      if (set.has(pieceId)) {
+        set.delete(pieceId);
+        nextSelection = [...set];
+        onSelectPieces(nextSelection);
+        return;
+      }
+      set.add(pieceId);
+      nextSelection = [...set];
+    } else {
+      nextSelection = [pieceId];
+    }
+    onSelectPieces(nextSelection);
+
+    const groupOnSlab = nextSelection.filter((id) => {
+      const p = placementByPiece.get(id);
+      return p?.placed && p.slabId === slabId;
+    });
+    const movingIds =
+      groupOnSlab.length > 1 && groupOnSlab.includes(pieceId) ? groupOnSlab : [pieceId];
+
     onPlacementInteractionStart?.();
     placementOrthoAxisRef.current = null;
     (ev.target as Element).setPointerCapture(ev.pointerId);
     lastDragSlabRef.current = slabId;
+
+    if (movingIds.length === 1) {
+      const one = movingIds[0]!;
+      const onePl = placementByPiece.get(one)!;
+      setDrag({
+        kind: "single",
+        pieceId: one,
+        slabId,
+        startClient: { x: ev.clientX, y: ev.clientY },
+        startPlacement: { ...onePl },
+        grabOffset: { x: pointerInSlab.x - onePl.x, y: pointerInSlab.y - onePl.y },
+      });
+      return;
+    }
+    const startPlacements = new Map(
+      movingIds.map((id) => [id, { ...placementByPiece.get(id)! }] as const),
+    );
     setDrag({
-      pieceId,
+      kind: "group",
+      pieceIds: movingIds,
+      leadPieceId: pieceId,
       slabId,
       startClient: { x: ev.clientX, y: ev.clientY },
-      startPlacement: { ...pl },
+      startPlacements,
       grabOffset: { x: pointerInSlab.x - pl.x, y: pointerInSlab.y - pl.y },
     });
   };
@@ -480,6 +653,35 @@ export function PlaceWorkspace({
         if (placementOrthoAxisRef.current === "x") clientY = drag.startClient.y;
         else if (placementOrthoAxisRef.current === "y") clientX = drag.startClient.x;
       }
+
+      if (drag.kind === "group") {
+        const targetSlabId = drag.slabId;
+        const slab = slabs.find((s) => s.id === targetSlabId);
+        if (!slab) return;
+        const p = clientToSlab(targetSlabId, clientX, clientY);
+        if (!p) return;
+        lastDragSlabRef.current = targetSlabId;
+        const leadStart = drag.startPlacements.get(drag.leadPieceId)!;
+        const newLeadX = p.x - drag.grabOffset.x;
+        const newLeadY = p.y - drag.grabOffset.y;
+        const ddx = newLeadX - leadStart.x;
+        const ddy = newLeadY - leadStart.y;
+        onPlacementChange(
+          placements.map((pl) => {
+            if (!drag.pieceIds.includes(pl.pieceId)) return pl;
+            const sp = drag.startPlacements.get(pl.pieceId)!;
+            return {
+              ...pl,
+              x: sp.x + ddx,
+              y: sp.y + ddy,
+              slabId: targetSlabId,
+              placed: true,
+            };
+          }),
+        );
+        return;
+      }
+
       const targetSlabId =
         resolveSlabUnderPointer(clientX, clientY) ??
         lastDragSlabRef.current ??
@@ -497,7 +699,16 @@ export function PlaceWorkspace({
         placed: true,
       });
     },
-    [drag, orthoMove, resolveSlabUnderPointer, slabs, clientToSlab, updatePlacement]
+    [
+      drag,
+      orthoMove,
+      resolveSlabUnderPointer,
+      slabs,
+      clientToSlab,
+      updatePlacement,
+      placements,
+      onPlacementChange,
+    ],
   );
 
   const handleEndDrag = useCallback(() => {
@@ -536,19 +747,33 @@ export function PlaceWorkspace({
       });
     };
 
-  /** Clicking slab stone (not a piece) focuses this slab for “place from Live Layout Preview” and deselects pieces. */
+  /** Clicking slab stone (not a piece): drag a box to multi-select; click clears selection. */
   const handleSvgBackgroundPointerDown =
     (slabId: string) => (ev: React.PointerEvent<SVGSVGElement>) => {
-      if (readOnly) return;
+      if (readOnly || !ppiReady) return;
       const tag = (ev.target as Element | null)?.tagName?.toLowerCase();
       if (tag === "polygon") return;
       onActiveSlab(slabId);
       if (seamMode && ppiReady) {
         if (hoverSeamEdge?.slabId !== slabId) setHoverSeamEdge(null);
-        onSelectPiece(null);
+        onSelectPieces([]);
         return;
       }
-      onSelectPiece(null);
+      const start = clientToSlab(slabId, ev.clientX, ev.clientY);
+      if (!start) return;
+      ev.preventDefault();
+      try {
+        (ev.currentTarget as SVGSVGElement).setPointerCapture(ev.pointerId);
+      } catch {
+        /* noop */
+      }
+      setMarquee({
+        slabId,
+        pointerId: ev.pointerId,
+        startClient: { x: ev.clientX, y: ev.clientY },
+        startSlab: start,
+        currentSlab: start,
+      });
     };
 
   const setSvgRef = (slabId: string) => (el: SVGSVGElement | null) => {
@@ -646,20 +871,23 @@ export function PlaceWorkspace({
     const removable =
       onRemoveSlab && primarySlabId && slab.id !== primarySlabId;
 
+    const selectedOnThisSlab = selectedPieceIds.filter((id) => {
+      const pl = placementByPiece.get(id);
+      return pl?.placed && pl.slabId === slab.id;
+    });
     const selectedPl =
-      selectedPieceId != null ? placementByPiece.get(selectedPieceId) : undefined;
+      selectedOnThisSlab.length > 0 ? placementByPiece.get(selectedOnThisSlab[0]!) : undefined;
     const showRemovePieceFromSlab =
       !readOnly &&
       !!onRemoveSelectedPieceFromSlab &&
       canRemoveSelectedFromSlab &&
-      !!selectedPieceId &&
-      selectedPl?.slabId === slab.id;
+      selectedOnThisSlab.length > 0;
 
     const showPlacementToolbar =
       !readOnly &&
       !!onRotateSelectedPlacementOnSlab &&
       !!onSelectedPlacementRotationLive &&
-      !!selectedPieceId &&
+      selectedOnThisSlab.length > 0 &&
       !!selectedPl?.placed &&
       selectedPl?.slabId === slab.id;
 
@@ -670,8 +898,17 @@ export function PlaceWorkspace({
       primaryId != null &&
       slab.id === primaryId;
 
+    const placedCountOnSlab = placements.filter(
+      (p) => p.placed && p.slabId === slab.id,
+    ).length;
+    const showClearAllHere =
+      !readOnly && onClearAllPiecesFromSlab != null && placedCountOnSlab > 0;
+
     const showSlabBottomToolbar =
-      showAddSlabHere || showPlacementToolbar || showRemovePieceFromSlab;
+      showAddSlabHere ||
+      showPlacementToolbar ||
+      showRemovePieceFromSlab ||
+      showClearAllHere;
 
     /** Placement rotation and/or clear-from-slab control share one glass toolbar strip. */
     const hasMainSlabToolbar = showPlacementToolbar || showRemovePieceFromSlab;
@@ -735,7 +972,7 @@ export function PlaceWorkspace({
                   if (local.length < 3) return null;
                   const rotated = transformedPieceInches(mirrorLocalInches(local, pl.mirrored), pl.rotation);
                   const pts = rotated.map((q) => `${pl.x + q.x},${pl.y + q.y}`).join(" ");
-                  const sel = piece.id === selectedPieceId;
+                  const sel = selectedPieceIds.includes(piece.id);
                   const isStrip = isPlanStripPiece(piece);
                   const labelText = isStrip
                     ? (stripLetterLabelById.get(piece.id) ?? "—")
@@ -750,7 +987,8 @@ export function PlaceWorkspace({
                     ? Math.min(3.4, Math.max(1.05, baseFont * 1.65))
                     : baseFont;
                   const longHoriz = bw >= bh;
-                  const labelRot = longHoriz ? 0 : 90;
+                  /** Base tilt (read along long side) plus slab placement rotation so labels track the piece. */
+                  const labelRot = (longHoriz ? 0 : 90) + pl.rotation;
                   const dimensionText = `${bw.toFixed(1)}" x ${bh.toFixed(1)}"`;
                   const offSlab = rotated.some((q) => {
                     const x = pl.x + q.x;
@@ -775,7 +1013,13 @@ export function PlaceWorkspace({
                       style={{
                         cursor: readOnly ? "default" : seamMode ? "crosshair" : "grab",
                         pointerEvents:
-                          drag?.pieceId === piece.id && !readOnly ? "none" : undefined,
+                          drag &&
+                          !readOnly &&
+                          (drag.kind === "single"
+                            ? drag.pieceId === piece.id
+                            : drag.pieceIds.includes(piece.id))
+                            ? "none"
+                            : undefined,
                       }}
                       onPointerDown={(e) => handlePointerDownPiece(piece.id, slab.id, e)}
                     />
@@ -888,6 +1132,19 @@ export function PlaceWorkspace({
                 stroke="rgba(232,212,139,0.95)"
                 strokeWidth={0.24}
                 strokeDasharray="1.1 0.55"
+                pointerEvents="none"
+              />
+            ) : null}
+            {marquee && marquee.slabId === slab.id ? (
+              <rect
+                className="ls-place-marquee"
+                x={Math.min(marquee.startSlab.x, marquee.currentSlab.x)}
+                y={Math.min(marquee.startSlab.y, marquee.currentSlab.y)}
+                width={Math.abs(marquee.currentSlab.x - marquee.startSlab.x)}
+                height={Math.abs(marquee.currentSlab.y - marquee.startSlab.y)}
+                fill="rgba(0, 100, 255, 0.12)"
+                stroke="rgba(232, 212, 139, 0.82)"
+                strokeWidth={0.08}
                 pointerEvents="none"
               />
             ) : null}
@@ -1105,17 +1362,30 @@ export function PlaceWorkspace({
                   </div>
                 </div>
               ) : null}
-              {showAddSlabHere ? (
+              {showAddSlabHere || showClearAllHere ? (
                 <div className="ls-place-slab-bottom-toolbar__actions">
-                  <button
-                    type="button"
-                    className="ls-btn ls-btn-secondary ls-place-add-slab-below-btn"
-                    onClick={onAddSlab}
-                    disabled={addSlabDisabled}
-                    title={addSlabTitle}
-                  >
-                    Add slab
-                  </button>
+                  {showClearAllHere ? (
+                    <button
+                      type="button"
+                      className="ls-btn ls-btn-secondary ls-place-clear-slab-below-btn"
+                      onClick={() => onClearAllPiecesFromSlab?.(slab.id)}
+                      title="Remove every piece from this slab (pieces stay on the plan)"
+                      aria-label="Clear all pieces from this slab"
+                    >
+                      Clear all
+                    </button>
+                  ) : null}
+                  {showAddSlabHere ? (
+                    <button
+                      type="button"
+                      className="ls-btn ls-btn-secondary ls-place-add-slab-below-btn"
+                      onClick={onAddSlab}
+                      disabled={addSlabDisabled}
+                      title={addSlabTitle}
+                    >
+                      Add slab
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1131,7 +1401,9 @@ export function PlaceWorkspace({
   return (
     <>
       <div
-        className={`ls-place-wrap${readOnly ? " ls-place-wrap--readonly" : ""}${drag ? " ls-place-wrap--dragging" : ""}`}
+        className={`ls-place-wrap${readOnly ? " ls-place-wrap--readonly" : ""}${drag ? " ls-place-wrap--dragging" : ""}${
+          marquee ? " ls-place-wrap--marquee" : ""
+        }`}
         onPointerMove={!readOnly && ppiReady && drag ? handlePointerMove : undefined}
       >
         <div ref={scrollShellRef} className="ls-place-scroll-shell">
@@ -1201,8 +1473,14 @@ export function PlaceWorkspace({
                   onChange={(e) => {
                     const v = e.target.value;
                     const g = seamModal.geometry;
-                    const total =
+                    const totalPx =
                       g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const piece = pieces.find((p) => p.id === seamModal.pieceId);
+                    const ppi = piece ? piecePixelsPerInch(piece, pixelsPerInch) : null;
+                    const total =
+                      workspaceKind === "source" && ppi != null && ppi > 0
+                        ? totalPx / ppi
+                        : totalPx;
                     const n = parseFloat(v);
                     setSeamModal((prev) =>
                       prev
@@ -1227,8 +1505,14 @@ export function PlaceWorkspace({
                   onChange={(e) => {
                     const v = e.target.value;
                     const g = seamModal.geometry;
-                    const total =
+                    const totalPx =
                       g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const piece = pieces.find((p) => p.id === seamModal.pieceId);
+                    const ppi = piece ? piecePixelsPerInch(piece, pixelsPerInch) : null;
+                    const total =
+                      workspaceKind === "source" && ppi != null && ppi > 0
+                        ? totalPx / ppi
+                        : totalPx;
                     const n = parseFloat(v);
                     setSeamModal((prev) =>
                       prev
@@ -1263,6 +1547,7 @@ export function PlaceWorkspace({
                     edgeIndex: seamModal.edgeIndex,
                     dimA,
                     dimB,
+                    seamDimUnits: workspaceKind === "source" ? "inches" : "plan",
                   });
                   if (ok === false) return;
                   setHoverSeamEdge(null);

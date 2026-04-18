@@ -1,9 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  WheelEvent as ReactWheelEvent,
-} from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { LayoutPiece, LayoutPoint, LayoutSlab, PiecePlacement } from "../types";
 import {
   getEffectiveEdgeArcCirclesIn,
@@ -53,6 +49,8 @@ type Props = {
   showLabels: boolean;
   showDimensions?: boolean;
   selectedPieceId: string | null;
+  /** When non-empty, highlights all listed pieces (Place phase multi-select). */
+  selectedPieceIds?: string[];
   /** Distinct prefix when multiple previews mount (e.g. inline + modal) so SVG ids stay unique. */
   previewInstanceId?: string;
   /** `fullscreen` removes inline height caps so the preview can fill a large surface. */
@@ -153,6 +151,7 @@ export function PlaceLayoutPreview({
   showLabels,
   showDimensions = false,
   selectedPieceId,
+  selectedPieceIds,
   previewInstanceId = "inline",
   variant = "inline",
   onPieceActivate,
@@ -437,16 +436,30 @@ export function PlaceLayoutPreview({
     setZoom(nextZoom);
   };
 
-  const handleViewportWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+  const queueZoomToRef = useRef(queueZoomTo);
+  queueZoomToRef.current = queueZoomTo;
+
+  /**
+   * React `onWheel` is always passive — `preventDefault` is ignored and the console warns.
+   * Attach a non-passive listener in capture phase so default scroll is cancelled before React’s
+   * delegated passive handler runs.
+   */
+  useLayoutEffect(() => {
+    if (!allowViewportInteraction) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
-    event.preventDefault();
-    const rect = viewport.getBoundingClientRect();
-    queueZoomTo(zoomRef.current * Math.exp(-event.deltaY * PREVIEW_ZOOM_SENSITIVITY), {
-      viewportX: event.clientX - rect.left,
-      viewportY: event.clientY - rect.top,
-    });
-  };
+    const wheelOpts: AddEventListenerOptions = { passive: false, capture: true };
+    const onWheelCapture = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      queueZoomToRef.current(zoomRef.current * Math.exp(-event.deltaY * PREVIEW_ZOOM_SENSITIVITY), {
+        viewportX: event.clientX - rect.left,
+        viewportY: event.clientY - rect.top,
+      });
+    };
+    viewport.addEventListener("wheel", onWheelCapture, wheelOpts);
+    return () => viewport.removeEventListener("wheel", onWheelCapture, wheelOpts);
+  }, [allowViewportInteraction, workspaceKind, pixelsPerInch, pieces.length]);
 
   const endDragPan = (pointerId?: number) => {
     const viewport = viewportRef.current;
@@ -554,7 +567,6 @@ export function PlaceLayoutPreview({
         ref={viewportRef}
         data-place-layout-preview={previewInstanceId}
         className={viewportClass}
-        onWheel={allowViewportInteraction ? handleViewportWheel : undefined}
         onPointerDownCapture={allowViewportInteraction && (isFullscreen || inlinePanEnabled) ? handleViewportPointerDownCapture : undefined}
         onPointerMove={allowViewportInteraction && (isFullscreen || inlinePanEnabled) ? handleViewportPointerMove : undefined}
         onPointerUp={allowViewportInteraction && (isFullscreen || inlinePanEnabled) ? handleViewportPointerUp : undefined}
@@ -625,7 +637,10 @@ export function PlaceLayoutPreview({
               fill={`url(#${gradId})`}
             />
             {pieces.map((piece) => {
-              const sel = piece.id === selectedPieceId;
+              const sel =
+                selectedPieceIds != null && selectedPieceIds.length > 0
+                  ? selectedPieceIds.includes(piece.id)
+                  : piece.id === selectedPieceId;
               const placement = placementByPiece.get(piece.id);
               const slab =
                 placement?.slabId != null ? slabById.get(placement.slabId) : undefined;
@@ -636,10 +651,7 @@ export function PlaceLayoutPreview({
                   : null;
 
           const d = piecePathD(piece, workspaceKind, pieces);
-          const ringOpen =
-            workspaceKind === "blank"
-              ? normalizeClosedRing(planDisplayPoints(piece, pieces))
-              : normalizeClosedRing(piece.points);
+          const ringOpen = normalizeClosedRing(planDisplayPoints(piece, pieces));
 
           const placedMapped = !!slabTex;
 
@@ -820,12 +832,19 @@ export function PlaceLayoutPreview({
                         event.preventDefault();
                         event.stopPropagation();
                         setHoverSeamEdge({ pieceId: piece.id, edgeIndex: edge.edgeIndex });
+                        const ppi = piecePixelsPerInch(piece, pixelsPerInch);
+                        const traceInches =
+                          workspaceKind === "source" && ppi != null && ppi > 0;
                         setSeamModal({
                           pieceId: piece.id,
                           edgeIndex: edge.edgeIndex,
                           geometry: edge.geometry,
-                          valA: formatDimInches(edge.geometry.dimA),
-                          valB: formatDimInches(edge.geometry.dimB),
+                          valA: formatDimInches(
+                            traceInches ? edge.geometry.dimA / ppi : edge.geometry.dimA
+                          ),
+                          valB: formatDimInches(
+                            traceInches ? edge.geometry.dimB / ppi : edge.geometry.dimB
+                          ),
                         });
                       }}
                     />
@@ -916,7 +935,14 @@ export function PlaceLayoutPreview({
                   onChange={(e) => {
                     const v = e.target.value;
                     const g = seamModal.geometry;
-                    const total = g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const totalPx =
+                      g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const modalPiece = pieces.find((p) => p.id === seamModal.pieceId);
+                    const ppi = modalPiece ? piecePixelsPerInch(modalPiece, pixelsPerInch) : null;
+                    const total =
+                      workspaceKind === "source" && ppi != null && ppi > 0
+                        ? totalPx / ppi
+                        : totalPx;
                     const n = parseFloat(v);
                     setSeamModal((prev) =>
                       prev
@@ -942,7 +968,14 @@ export function PlaceLayoutPreview({
                   onChange={(e) => {
                     const v = e.target.value;
                     const g = seamModal.geometry;
-                    const total = g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const totalPx =
+                      g.kind === "vertical" ? g.xMax - g.xMin : g.yMax - g.yMin;
+                    const modalPiece = pieces.find((p) => p.id === seamModal.pieceId);
+                    const ppi = modalPiece ? piecePixelsPerInch(modalPiece, pixelsPerInch) : null;
+                    const total =
+                      workspaceKind === "source" && ppi != null && ppi > 0
+                        ? totalPx / ppi
+                        : totalPx;
                     const n = parseFloat(v);
                     setSeamModal((prev) =>
                       prev
@@ -973,7 +1006,13 @@ export function PlaceLayoutPreview({
                     setSeamModal((prev) => (prev ? { ...prev, error: "Enter valid seam dimensions greater than 0." } : prev));
                     return;
                   }
-                  const ok = onPlaceSeamRequest?.({ pieceId: seamModal.pieceId, edgeIndex: seamModal.edgeIndex, dimA, dimB });
+                  const ok = onPlaceSeamRequest?.({
+                    pieceId: seamModal.pieceId,
+                    edgeIndex: seamModal.edgeIndex,
+                    dimA,
+                    dimB,
+                    seamDimUnits: workspaceKind === "source" ? "inches" : "plan",
+                  });
                   if (!ok) {
                     setSeamModal((prev) =>
                       prev

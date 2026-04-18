@@ -68,6 +68,7 @@ type Props = {
   pieces: LayoutPiece[];
   selectedPieceId: string | null;
   selectedEdge: { pieceId: string; edgeIndex: number } | null;
+  showEdgeDimensions?: boolean;
   onSelectPiece: (id: string | null) => void;
   onSelectEdge: (edge: { pieceId: string; edgeIndex: number } | null) => void;
   onPiecesChange: (pieces: LayoutPiece[]) => void;
@@ -274,6 +275,14 @@ function formatDraftRectDimension(length: number, pixelsPerInch: number | null):
   return `${Math.round(length)} px`;
 }
 
+function formatTraceEdgeDimension(length: number, pixelsPerInch: number | null): string {
+  if (pixelsPerInch && pixelsPerInch > 0) {
+    const inValue = length / pixelsPerInch;
+    return `${inValue >= 10 ? inValue.toFixed(1) : inValue.toFixed(2)}"`;
+  }
+  return `${Math.round(length)} px`;
+}
+
 function snapTracePointToNearestInch(p: LayoutPoint, pixelsPerInch: number | null): LayoutPoint {
   if (!pixelsPerInch || pixelsPerInch <= 0) return p;
   return {
@@ -320,6 +329,7 @@ export function TraceWorkspace({
   pieces,
   selectedPieceId,
   selectedEdge,
+  showEdgeDimensions = false,
   onSelectPiece,
   onSelectEdge,
   onPiecesChange,
@@ -1285,19 +1295,31 @@ export function TraceWorkspace({
     setVertexDrag(null);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!traceBounds) return;
-    const focus = clientToImage(e.clientX, e.clientY);
-    const rect = stageRef.current?.getBoundingClientRect();
-    if (!focus) return;
-    if (!rect) return;
-    e.preventDefault();
-    const direction = e.deltaY < 0 ? 1 : -1;
-    zoomTo(viewZoom + direction * TRACE_VIEW_ZOOM_STEP, focus, {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-  };
+  const handleWheel = useCallback(
+    (e: WheelEvent) => {
+      if (!traceBounds) return;
+      const focus = clientToImage(e.clientX, e.clientY);
+      const rect = stageRef.current?.getBoundingClientRect();
+      if (!focus) return;
+      if (!rect) return;
+      e.preventDefault();
+      const direction = e.deltaY < 0 ? 1 : -1;
+      zoomTo(viewZoom + direction * TRACE_VIEW_ZOOM_STEP, focus, {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+    },
+    [clientToImage, traceBounds, viewZoom, zoomTo],
+  );
+
+  /** React `onWheel` is passive — attach a non-passive listener so zoom can call `preventDefault`. */
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => handleWheel(e);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [handleWheel]);
 
   const finishPolygon = useCallback(() => {
     setPolyDraft((prev) => {
@@ -1710,6 +1732,44 @@ export function TraceWorkspace({
                   appearance="trace"
                 />
               ) : null}
+              {showEdgeDimensions
+                ? ring.map((a, edgeIndex) => {
+                    const b = ring[(edgeIndex + 1) % ring.length]!;
+                    const length = Math.hypot(b.x - a.x, b.y - a.y);
+                    const edgePpi =
+                      piece.sourcePixelsPerInch ??
+                      ppi ??
+                      null;
+                    const minLength = edgePpi && edgePpi > 0 ? edgePpi * 0.35 : 8;
+                    if (length < minLength) return null;
+                    const midX = (a.x + b.x) / 2;
+                    const midY = (a.y + b.y) / 2;
+                    const dx = b.x - a.x;
+                    const dy = b.y - a.y;
+                    const segmentLengthPx = Math.max(Math.hypot(dx, dy), 1e-6);
+                    const nx = -dy / segmentLengthPx;
+                    const ny = dx / segmentLengthPx;
+                    const offset = Math.min(length * 0.12, edgePpi && edgePpi > 0 ? edgePpi * 0.9 : 18);
+                    const tx = midX + nx * offset;
+                    const ty = midY + ny * offset;
+                    const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+                    const label = formatTraceEdgeDimension(length, edgePpi);
+                    return (
+                      <text
+                        key={`${piece.id}-edge-dim-${edgeIndex}`}
+                        transform={`translate(${tx},${ty}) rotate(${ang})`}
+                        fill="rgba(211, 47, 47, 0.95)"
+                        fontSize={Math.max(10 / Math.max(renderScale, 0.0001), 0.56)}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="ls-blank-dim"
+                        style={{ pointerEvents: "none", userSelect: "none" }}
+                      >
+                        {label}
+                      </text>
+                    );
+                  })
+                : null}
               {ring.map((a, edgeIndex) => {
                 const b = ring[(edgeIndex + 1) % ring.length]!;
                 const isSelected =
@@ -2015,7 +2075,6 @@ export function TraceWorkspace({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onWheel={handleWheel}
         onPointerLeave={() => {
           setDragRect(null);
           setVertexDrag(null);

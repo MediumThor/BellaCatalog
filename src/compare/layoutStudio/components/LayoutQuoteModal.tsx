@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
-import type {
-  CustomerRecord,
-  JobComparisonOptionRecord,
-  JobRecord,
-  LayoutQuoteCustomerRowId,
-  LayoutQuoteSettings,
-  MaterialChargeMode,
+import {
+  customerDisplayName,
+  type CustomerRecord,
+  type JobComparisonOptionRecord,
+  type JobRecord,
+  type LayoutQuoteCustomerRowId,
+  type LayoutQuoteSettings,
+  type MaterialChargeMode,
 } from "../../../types/compareQuote";
 import type { LayoutQuoteShareLivePreviewV1 } from "../types/layoutQuoteShare";
 import { formatMoney } from "../../../utils/priceHelpers";
@@ -38,6 +39,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   customer: CustomerRecord | null;
+  /** Used for suggested PDF filename (Save as PDF / print). */
+  activeAreaName?: string | null;
   job: JobRecord;
   option: JobComparisonOptionRecord;
   draft: SavedLayoutStudioState;
@@ -50,6 +53,45 @@ type Props = {
   customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
   allMaterialsSections?: QuoteAllMaterialsSection[] | null;
 };
+
+const MAX_QUOTE_PDF_TITLE_LENGTH = 200;
+
+function sanitizeQuotePdfFilenamePart(value: string, fallback: string): string {
+  const cleaned = value
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[. ]+$/g, "");
+  return cleaned || fallback;
+}
+
+function buildLayoutQuotePdfSuggestedTitle(input: {
+  customer: CustomerRecord | null;
+  job: JobRecord;
+  option: JobComparisonOptionRecord;
+  activeAreaName: string | null | undefined;
+  isAllMaterialsQuote: boolean;
+  allMaterialsComputed: Array<{ option: JobComparisonOptionRecord }>;
+}): string {
+  const customerRaw = input.customer
+    ? customerDisplayName(input.customer)
+    : input.job.contactName?.trim() || input.job.name.trim() || "Customer";
+  const areaRaw = input.activeAreaName?.trim() || "Area";
+  let materialRaw: string;
+  if (input.isAllMaterialsQuote && input.allMaterialsComputed.length > 0) {
+    materialRaw = input.allMaterialsComputed.map((s) => formatVendorMaterialOptionLine(s.option)).join(" · ");
+  } else {
+    materialRaw = formatVendorMaterialOptionLine(input.option);
+  }
+  const a = sanitizeQuotePdfFilenamePart(customerRaw, "Customer");
+  const b = sanitizeQuotePdfFilenamePart(areaRaw, "Area");
+  const c = sanitizeQuotePdfFilenamePart(materialRaw, "Material");
+  let title = `${a} ${b} ${c}`;
+  if (title.length > MAX_QUOTE_PDF_TITLE_LENGTH) {
+    title = `${title.slice(0, MAX_QUOTE_PDF_TITLE_LENGTH - 1).trimEnd()}…`;
+  }
+  return title;
+}
 
 type ComputedAllMaterialsSection = {
   option: JobComparisonOptionRecord;
@@ -69,6 +111,7 @@ export function LayoutQuoteModal({
   open,
   onClose,
   customer,
+  activeAreaName = null,
   job,
   option,
   draft,
@@ -252,6 +295,34 @@ export function LayoutQuoteModal({
       }),
     [allMaterialsSections, job, quoteSettings],
   );
+
+  const quotePdfSuggestedTitle = useMemo(
+    () =>
+      buildLayoutQuotePdfSuggestedTitle({
+        customer,
+        job,
+        option,
+        activeAreaName,
+        isAllMaterialsQuote,
+        allMaterialsComputed,
+      }),
+    [activeAreaName, allMaterialsComputed, customer, isAllMaterialsQuote, job, option],
+  );
+
+  const handlePrintPdf = useCallback(() => {
+    const prevTitle = document.title;
+    document.title = quotePdfSuggestedTitle;
+    let done = false;
+    const restore = () => {
+      if (done) return;
+      done = true;
+      document.title = prevTitle;
+      window.removeEventListener("afterprint", restore);
+    };
+    window.addEventListener("afterprint", restore);
+    window.print();
+    window.setTimeout(restore, 2000);
+  }, [quotePdfSuggestedTitle]);
 
   const combinedCommercial = useMemo(() => {
     let hasCommercial = false;
@@ -618,7 +689,7 @@ export function LayoutQuoteModal({
             Layout quote
           </h2>
           <div className="ls-layout-quote-modal-actions">
-            <button type="button" className="ls-btn ls-btn-secondary" onClick={() => window.print()}>
+            <button type="button" className="ls-btn ls-btn-secondary" onClick={handlePrintPdf}>
               Save PDF / print
             </button>
             <button
