@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { createCompanyWithOwner } from "../company/companyFirestore";
 import { acceptInvite } from "../company/teamApi";
 import { useCompany } from "../company/useCompany";
+import { US_STATES } from "../utils/usStates";
 
 type TabId = "signin" | "create" | "join";
 
@@ -272,12 +273,16 @@ export function LoginScreen() {
               </div>
             </header>
 
-            <div className="hero-auth__tabs" role="tablist" aria-label="Authentication mode">
+            <div
+              className="tab-bar tab-bar--full hero-auth__tab-bar"
+              role="tablist"
+              aria-label="Authentication mode"
+            >
               <button
                 type="button"
                 role="tab"
                 aria-selected={tab === "signin"}
-                className={`hero-auth__tab${tab === "signin" ? " hero-auth__tab--active" : ""}`}
+                className={`tab-bar__btn${tab === "signin" ? " is-active" : ""}`}
                 onClick={() => switchTab("signin")}
               >
                 Sign in
@@ -286,7 +291,7 @@ export function LoginScreen() {
                 type="button"
                 role="tab"
                 aria-selected={tab === "create"}
-                className={`hero-auth__tab${tab === "create" ? " hero-auth__tab--active" : ""}`}
+                className={`tab-bar__btn${tab === "create" ? " is-active" : ""}`}
                 onClick={() => switchTab("create")}
               >
                 Create company
@@ -295,7 +300,7 @@ export function LoginScreen() {
                 type="button"
                 role="tab"
                 aria-selected={tab === "join"}
-                className={`hero-auth__tab${tab === "join" ? " hero-auth__tab--active" : ""}`}
+                className={`tab-bar__btn${tab === "join" ? " is-active" : ""}`}
                 onClick={() => switchTab("join")}
               >
                 Join with code
@@ -410,14 +415,21 @@ export function LoginScreen() {
                   />
                 </label>
                 <label className="auth-field">
-                  <span className="auth-field__label">Primary state (optional)</span>
-                  <input
+                  <span className="auth-field__label">
+                    Primary state (optional)
+                  </span>
+                  <select
                     className="auth-field__input"
-                    type="text"
                     value={createState}
                     onChange={(e) => setCreateState(e.target.value)}
-                    maxLength={2}
-                  />
+                  >
+                    <option value="">Select a state…</option>
+                    {US_STATES.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <button
                   type="submit"

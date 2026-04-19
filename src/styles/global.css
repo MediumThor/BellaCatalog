@@ -933,15 +933,15 @@ select.auth-field__input option {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Base: deep dimensional gradient */
+  /* Dark polished-stone feel — CSS only, no bitmap */
   background:
     radial-gradient(1100px 620px at 18% 8%, rgba(201, 162, 39, 0.18), transparent 62%),
-    radial-gradient(900px 500px at 88% 18%, rgba(196, 30, 58, 0.10), transparent 65%),
+    radial-gradient(900px 500px at 88% 18%, rgba(196, 30, 58, 0.1), transparent 65%),
     radial-gradient(1400px 900px at 50% 120%, rgba(232, 212, 139, 0.08), transparent 60%),
     linear-gradient(180deg, #0b0b0d 0%, #070708 50%, #0a0a0c 100%);
 }
 
-/* Soft marble "veining" rendered entirely in CSS */
+/* Soft marble-style veining */
 .hero-auth__bg-veins {
   position: absolute;
   inset: -10%;
@@ -954,7 +954,7 @@ select.auth-field__input option {
       rgba(201, 162, 39, 0.07),
       rgba(255, 255, 255, 0.02) 25%,
       rgba(201, 162, 39, 0.05) 50%,
-      rgba(255, 255, 255, 0.0) 80%,
+      rgba(255, 255, 255, 0) 80%,
       rgba(201, 162, 39, 0.06) 100%
     );
   filter: blur(40px);
@@ -962,7 +962,7 @@ select.auth-field__input option {
   mix-blend-mode: screen;
 }
 
-/* Subtle grain to evoke polished stone */
+/* Subtle grain */
 .hero-auth__bg-grain {
   position: absolute;
   inset: 0;
@@ -1066,7 +1066,7 @@ select.auth-field__input option {
 .hero-auth__card {
   position: relative;
   width: 100%;
-  max-width: 460px;
+  max-width: 540px;
   margin-left: auto;
   padding: 1.4rem 1.4rem 1.3rem;
   border-radius: 18px;
@@ -1141,15 +1141,35 @@ select.auth-field__input option {
   text-transform: uppercase;
 }
 
-.hero-auth__tabs {
+/* Strict 3 equal columns so "Create company" doesn't crowd neighbors */
+.hero-auth__tab-bar.tab-bar {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 4px;
-  border-radius: 12px;
-  background: rgba(10, 10, 11, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  width: 100%;
+  box-sizing: border-box;
   margin-bottom: 1rem;
+}
+
+.hero-auth__tab-bar .tab-bar__btn {
+  flex: unset;
+  min-width: 0;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.58rem 0.5rem;
+  line-height: 1.2;
+}
+
+@media (max-width: 400px) {
+  .hero-auth__tab-bar .tab-bar__btn {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+    font-size: 0.8rem;
+  }
 }
 
 .hero-auth__code {
@@ -1164,36 +1184,6 @@ select.auth-field__input option {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-weight: 600;
-}
-
-.hero-auth__tab {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: rgba(244, 241, 234, 0.65);
-  padding: 0.6rem 0.8rem;
-  font-family: inherit;
-  font-weight: 600;
-  font-size: 0.88rem;
-  letter-spacing: 0.03em;
-  border-radius: 9px;
-  cursor: pointer;
-  transition:
-    background-color var(--bella-motion-base) var(--bella-ease-out),
-    color var(--bella-motion-base) var(--bella-ease-out),
-    box-shadow var(--bella-motion-base) var(--bella-ease-out);
-}
-
-.hero-auth__tab:hover {
-  color: var(--bella-white);
-}
-
-.hero-auth__tab--active {
-  color: var(--bella-black);
-  background: linear-gradient(180deg, #efd27a 0%, #c9a227 100%);
-  box-shadow:
-    0 2px 10px rgba(201, 162, 39, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .hero-auth__walkthrough {
@@ -1228,7 +1218,7 @@ select.auth-field__input option {
 }
 
 .hero-auth__legal {
-  max-width: 460px;
+  max-width: 540px;
   margin-left: auto;
   color: rgba(168, 162, 154, 0.7);
   font-size: 0.74rem;
