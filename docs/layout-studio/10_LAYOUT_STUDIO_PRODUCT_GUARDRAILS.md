@@ -9,6 +9,17 @@ Every implementation choice should be evaluated against this rule:
 
 If not, it is likely out of scope.
 
+**Cut phase:** Only the **Cut** phase may touch **real-inventory scanned slabs** (external library) and **external fabrication handoff** (e.g. Alphacam). Plan, Layout, and Quote remain **quote-only** and customer-facing.
+
+---
+
+## DXF fidelity (Cut phase)
+
+In Cut, an imported **DXF** is a **fabrication handoff artifact**, not the core quoting domain object.
+
+- The uploaded DXF file **must never be modified** (no geometry edits, no re-save that changes bytes). Position, rotation, and optional mirror are stored as **metadata** next to the stored original file.
+- Any implementation that mutates DXF contents for “convenience” is **out of scope** for Cut.
+
 ---
 
 ## What Layout Studio must do

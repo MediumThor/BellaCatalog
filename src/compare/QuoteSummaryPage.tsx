@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
+import { QuoteBrandingHeader } from "../company/QuoteBranding";
 import {
+  findJobById,
   getCustomer,
-  getJob,
+  subscribeJob,
   subscribeOptionsForJob,
-  updateJob,
 } from "../services/compareQuoteFirestore";
 import {
   customerDisplayName,
   jobAreasForJob,
+  JOB_STATUS_COLOR,
+  JOB_STATUS_LABELS,
+  normalizeJobStatus,
   primaryAreaForJob,
   type JobComparisonOptionRecord,
   type JobRecord,
@@ -22,42 +27,67 @@ export function QuoteSummaryPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const [searchParams] = useSearchParams();
   const { user, profileDisplayName } = useAuth();
+  const { activeCompany, activeCompanyId } = useCompany();
+  const companyName = activeCompany?.name?.trim() || "Bella Stone";
   const [job, setJob] = useState<JobRecord | null>(null);
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [customer, setCustomer] = useState<Awaited<ReturnType<typeof getCustomer>>>(null);
   const [options, setOptions] = useState<JobComparisonOptionRecord[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  // Pricing + deposit are now set upstream in the Layout Studio quote
+  // tab (Layout Quote Modal → "Pricing & deposit") so the rep can see
+  // and override company defaults at the moment of generating the quote.
+  // This page only displays the persisted values on the printable sheet.
+
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId || !activeCompanyId) return;
     let cancelled = false;
     (async () => {
-      const j = await getJob(jobId);
-      if (cancelled || !j) return;
-      setJob(j);
-      const c = await getCustomer(j.customerId);
+      const found = await findJobById(activeCompanyId, jobId);
+      if (cancelled || !found) return;
+      setCustomerId(found.customerId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCompanyId, jobId]);
+
+  useEffect(() => {
+    if (!activeCompanyId || !customerId || !jobId) return;
+    return subscribeJob(activeCompanyId, customerId, jobId, setJob);
+  }, [activeCompanyId, customerId, jobId]);
+
+  useEffect(() => {
+    if (!activeCompanyId || !customerId) return;
+    let cancelled = false;
+    (async () => {
+      const c = await getCustomer(activeCompanyId, customerId);
       if (!cancelled) setCustomer(c);
     })();
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [activeCompanyId, customerId]);
+
+  // Lifecycle changes happen exclusively via the status stepper on the
+  // job detail page (see `JobPaymentsPanel`). Viewing the quote no longer
+  // silently advances status — the user owns that transition.
 
   useEffect(() => {
-    if (!job?.finalOptionId) return;
-    if (job.status === "closed" || job.status === "quoted") return;
-    void updateJob(job.id, { status: "quoted" });
-    setJob((j) => (j ? { ...j, status: "quoted" } : j));
-  }, [job?.id, job?.finalOptionId, job?.status]);
-
-  useEffect(() => {
-    if (!jobId || !user?.uid) return;
-    return subscribeOptionsForJob(jobId, user.uid, setOptions);
-  }, [jobId, user?.uid]);
+    if (!activeCompanyId || !customerId || !jobId) return;
+    return subscribeOptionsForJob(
+      activeCompanyId,
+      customerId,
+      jobId,
+      setOptions
+    );
+  }, [activeCompanyId, customerId, jobId]);
 
   const repDisplayName =
-    profileDisplayName?.trim() || user?.displayName?.trim() || user?.email || "Bella Stone";
+    profileDisplayName?.trim() || user?.displayName?.trim() || user?.email || companyName;
 
   const areaId = searchParams.get("area");
   const optionIdFromQuery = searchParams.get("option");
@@ -76,10 +106,9 @@ export function QuoteSummaryPage() {
     optionIdFromQuery && areaOptions.some((option) => option.id === optionIdFromQuery) ? optionIdFromQuery : null;
 
   if (!jobId) return <p className="compare-warning">Missing job.</p>;
+  if (!activeCompanyId)
+    return <p className="compare-warning">No active company selected.</p>;
   if (!job) return <p className="product-sub">Loading…</p>;
-  if (user?.uid !== job.ownerUserId) {
-    return <p className="compare-warning">You do not have access to this job.</p>;
-  }
 
   const finalOptionId = explicitOptionId ?? selectedArea?.selectedOptionId ?? areaOptions[0]?.id ?? job.finalOptionId;
   const finalOpt = areaOptions.find((o) => o.id === finalOptionId) ?? null;
@@ -104,6 +133,27 @@ export function QuoteSummaryPage() {
     0;
   const printed = new Date().toLocaleString();
 
+  const computedTotal = finalQuoted?.customerTotal ?? null;
+  const persistedTotal = job.quotedTotal ?? null;
+  // Effective customer-facing total used everywhere on the printable
+  // sheet: persisted value wins, falling back to the live Layout Studio
+  // estimate when the user hasn't saved one yet.
+  const effectiveTotal = persistedTotal ?? computedTotal;
+  const persistedDepositPct = job.requiredDepositPercent ?? null;
+  const persistedDepositAmt = job.requiredDepositAmount ?? null;
+  // Best-effort display: prefer the explicit % when set, otherwise
+  // derive a % from the explicit $ amount + effective total.
+  const displayDepositPct =
+    persistedDepositPct ??
+    (persistedDepositAmt != null && effectiveTotal && effectiveTotal > 0
+      ? Math.round((persistedDepositAmt / effectiveTotal) * 1000) / 10
+      : null);
+  const displayDepositAmt =
+    persistedDepositAmt ??
+    (persistedDepositPct != null && effectiveTotal != null
+      ? Math.round((persistedDepositPct / 100) * effectiveTotal * 100) / 100
+      : null);
+
   const handleExport = async () => {
     setExporting(true);
     setExportMessage(null);
@@ -120,6 +170,9 @@ export function QuoteSummaryPage() {
         areaId: selectedArea?.id ?? null,
         areaName: selectedArea?.name ?? null,
         areaSelectedOptionId: finalOpt?.id ?? selectedArea?.selectedOptionId ?? null,
+        companyName,
+        companyBranding: activeCompany?.branding ?? null,
+        companyAddress: activeCompany?.address ?? null,
       });
 
       if (!result) {
@@ -168,7 +221,21 @@ export function QuoteSummaryPage() {
         </p>
       ) : null}
 
+      <p className="quote-pricing-hint no-print">
+        Need to change the quoted total or deposit %? Open the job&rsquo;s
+        Layout Studio quote tab → &ldquo;Export quote&rdquo; → use the
+        <strong> Pricing &amp; deposit</strong> block at the top of the
+        modal. Company-wide defaults live in <em>Settings → Pricing
+        defaults</em>.
+      </p>
+
       <article className="quote-summary-sheet">
+        <QuoteBrandingHeader
+          companyName={companyName}
+          logoUrl={activeCompany?.branding.logoUrl ?? null}
+          address={activeCompany?.address ?? null}
+          headerMessage={activeCompany?.branding.quoteHeaderText ?? null}
+        />
         <header className="quote-summary-header">
           <h1 className="quote-summary-title">Material quote summary</h1>
           <p className="quote-summary-date">Generated {printed}</p>
@@ -210,7 +277,18 @@ export function QuoteSummaryPage() {
               <span className="product-sub">— (from layout when saved)</span>
             )}
           </p>
-          <p>Status: {job.status}</p>
+          <p>
+            Status:{" "}
+            <span
+              className="pill"
+              style={{
+                borderColor: JOB_STATUS_COLOR[normalizeJobStatus(job.status)],
+                color: JOB_STATUS_COLOR[normalizeJobStatus(job.status)],
+              }}
+            >
+              {JOB_STATUS_LABELS[normalizeJobStatus(job.status)]}
+            </span>
+          </p>
           {job.notes?.trim() ? (
             <p>
               <span className="quote-inline-label">Job notes:</span> {job.notes}
@@ -218,11 +296,60 @@ export function QuoteSummaryPage() {
           ) : null}
         </section>
 
+        <section className="quote-block quote-block--pricing">
+          <h2 className="quote-block-title">Pricing & deposit</h2>
+          <dl className="quote-dl quote-dl--pricing">
+            <div>
+              <dt>Quoted total</dt>
+              <dd>
+                <strong>
+                  {effectiveTotal != null ? formatMoney(effectiveTotal) : "—"}
+                </strong>
+                {persistedTotal == null && computedTotal != null ? (
+                  <span className="product-sub"> · estimated</span>
+                ) : null}
+              </dd>
+            </div>
+            <div>
+              <dt>Required deposit</dt>
+              <dd>
+                {displayDepositAmt != null || displayDepositPct != null ? (
+                  <>
+                    <strong>
+                      {displayDepositAmt != null
+                        ? formatMoney(displayDepositAmt)
+                        : "—"}
+                    </strong>
+                    {displayDepositPct != null ? (
+                      <span className="product-sub">
+                        {" "}
+                        · {displayDepositPct}% of total
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="product-sub">No minimum</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Balance after deposit</dt>
+              <dd>
+                {effectiveTotal != null && displayDepositAmt != null
+                  ? formatMoney(Math.max(0, effectiveTotal - displayDepositAmt))
+                  : effectiveTotal != null
+                    ? formatMoney(effectiveTotal)
+                    : "—"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
         <section className="quote-block">
           <h2 className="quote-block-title">Assumptions</h2>
           <p className="quote-assumptions">
             {job.assumptions?.trim() ||
-              "Estimated installed material pricing per Bella Stone quote schedule (material markup + fabrication). Subject to final template verification."}
+              `Estimated installed material pricing per ${companyName} quote schedule (material markup + fabrication). Subject to final template verification.`}
           </p>
         </section>
 
@@ -338,6 +465,12 @@ export function QuoteSummaryPage() {
             <p className="compare-warning">No final selection recorded for this job yet.</p>
           </section>
         )}
+
+        {activeCompany?.branding.quoteFooterText?.trim() ? (
+          <footer className="quote-branding-footer">
+            {activeCompany.branding.quoteFooterText}
+          </footer>
+        ) : null}
 
         {areaOptions.length > 1 && !explicitOptionId ? (
           <section className="quote-block no-print">

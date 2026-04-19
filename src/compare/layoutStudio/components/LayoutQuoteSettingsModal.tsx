@@ -3,11 +3,30 @@ import type { LayoutQuoteLineItem, LayoutQuoteSettings } from "../../../types/co
 import { formatMoney } from "../../../utils/priceHelpers";
 import { LayoutQuoteLineItemModal } from "./LayoutQuoteLineItemModal";
 
+export type JobPricingDraft = {
+  /** `null` means "use the live estimate"; numeric overrides the customer-facing total. */
+  quotedTotal: number | null;
+  /** `null` falls back to the company default (or 0 if neither is set). */
+  requiredDepositPercent: number | null;
+  /** `null` derives the dollar amount from `requiredDepositPercent × resolved total`. */
+  requiredDepositAmount: number | null;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   initial: LayoutQuoteSettings;
   onSave: (next: LayoutQuoteSettings) => void | Promise<void>;
+  /** Job-level pricing & deposit (persisted on the job, not on quote settings). */
+  jobPricing: JobPricingDraft;
+  /** Live estimated total used as the placeholder for the quoted total override. */
+  computedTotal: number | null;
+  /** Company-wide default deposit %, used as placeholder when the job has no override. */
+  companyDefaultDepositPercent: number | null;
+  /** Persists the job pricing block. Resolves once Firestore has accepted the write. */
+  onSaveJobPricing: (next: JobPricingDraft) => void | Promise<void>;
+  /** When false the deposit/total fields render disabled with a permission hint. */
+  canEditJobPricing?: boolean;
 };
 
 type LineEditorState =
@@ -51,7 +70,32 @@ function kindShortLabel(kind: LayoutQuoteLineItem["kind"]): string {
   return kind === "flat" ? "Flat" : "Per piece sq ft";
 }
 
-export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Props) {
+function formatPercentDisplay(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : String(rounded);
+}
+
+export function LayoutQuoteSettingsModal({
+  open,
+  onClose,
+  initial,
+  onSave,
+  jobPricing,
+  computedTotal,
+  companyDefaultDepositPercent,
+  onSaveJobPricing,
+  canEditJobPricing = true,
+}: Props) {
+  const [quotedTotalDraft, setQuotedTotalDraft] = useState(
+    jobPricing.quotedTotal != null ? String(jobPricing.quotedTotal) : "",
+  );
+  const [depositPctDraft, setDepositPctDraft] = useState(
+    jobPricing.requiredDepositPercent != null ? String(jobPricing.requiredDepositPercent) : "",
+  );
+  const [depositAmtDraft, setDepositAmtDraft] = useState(
+    jobPricing.requiredDepositAmount != null ? String(jobPricing.requiredDepositAmount) : "",
+  );
+  const [jobPricingError, setJobPricingError] = useState<string | null>(null);
   const [materialMarkup, setMaterialMarkup] = useState(String(initial.materialMarkup));
   const [fabOverride, setFabOverride] = useState(
     initial.fabricationPerSqftOverride == null ? "" : String(initial.fabricationPerSqftOverride),
@@ -77,7 +121,15 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
     setLineItems(normalizeLineItems(initial.customLineItems));
     setLineEditor(null);
     setSaving(false);
-  }, [open, initial]);
+    setQuotedTotalDraft(jobPricing.quotedTotal != null ? String(jobPricing.quotedTotal) : "");
+    setDepositPctDraft(
+      jobPricing.requiredDepositPercent != null ? String(jobPricing.requiredDepositPercent) : "",
+    );
+    setDepositAmtDraft(
+      jobPricing.requiredDepositAmount != null ? String(jobPricing.requiredDepositAmount) : "",
+    );
+    setJobPricingError(null);
+  }, [open, initial, jobPricing]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,10 +171,52 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
       miterPerLf: numOr(miterLf, 0, 0),
       customLineItems: normalizeLineItems(lineItems),
     };
+
+    // Validate + parse the job-pricing block so a bad deposit value blocks the
+    // entire save (otherwise the user could silently lose their entry).
+    const totalRaw = quotedTotalDraft.trim();
+    let totalParsed: number | null = null;
+    if (totalRaw !== "") {
+      const n = parseFloat(totalRaw.replace(/,/g, ""));
+      if (!Number.isFinite(n) || n < 0) {
+        setJobPricingError("Quoted total must be 0 or higher (or empty to use the live estimate).");
+        return;
+      }
+      totalParsed = Math.round(n * 100) / 100;
+    }
+    const pctRaw = depositPctDraft.trim();
+    let pctParsed: number | null = null;
+    if (pctRaw !== "") {
+      const n = parseFloat(pctRaw.replace(/,/g, ""));
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        setJobPricingError("Deposit % must be between 0 and 100.");
+        return;
+      }
+      pctParsed = n;
+    }
+    const amtRaw = depositAmtDraft.trim();
+    let amtParsed: number | null = null;
+    if (amtRaw !== "") {
+      const n = parseFloat(amtRaw.replace(/,/g, ""));
+      if (!Number.isFinite(n) || n < 0) {
+        setJobPricingError("Deposit $ must be 0 or higher.");
+        return;
+      }
+      amtParsed = Math.round(n * 100) / 100;
+    }
+    setJobPricingError(null);
+
     setSaving(true);
     try {
       await onSave(next);
+      await onSaveJobPricing({
+        quotedTotal: totalParsed,
+        requiredDepositPercent: pctParsed,
+        requiredDepositAmount: amtParsed,
+      });
       onClose();
+    } catch (err) {
+      setJobPricingError(err instanceof Error ? err.message : "Failed to save pricing.");
     } finally {
       setSaving(false);
     }
@@ -169,6 +263,88 @@ export function LayoutQuoteSettingsModal({ open, onClose, initial, onSave }: Pro
           </p>
 
           <div className="ls-quote-settings-fields">
+            <div className="ls-quote-settings-section ls-quote-settings-section--deposit">
+              <div className="ls-quote-settings-section-head">
+                <span className="ls-quote-settings-section-title">Job pricing &amp; deposit</span>
+                <span className="ls-quote-settings-section-sub">
+                  Saved on the job and printed on the customer&rsquo;s quote. Live estimate is{" "}
+                  <strong>{computedTotal != null ? formatMoney(computedTotal) : "—"}</strong>.
+                  {companyDefaultDepositPercent != null
+                    ? ` Company default deposit ${formatPercentDisplay(companyDefaultDepositPercent)}%.`
+                    : ""}
+                </span>
+              </div>
+
+              <label className="ls-quote-settings-field">
+                <span className="ls-quote-settings-label">Quoted total ($) — override</span>
+                <input
+                  type="number"
+                  className="ls-input"
+                  inputMode="decimal"
+                  min={0}
+                  step={1}
+                  placeholder={
+                    computedTotal != null
+                      ? formatMoney(computedTotal).replace(/[^0-9.]/g, "")
+                      : "Use live estimate"
+                  }
+                  value={quotedTotalDraft}
+                  onChange={(e) => setQuotedTotalDraft(e.target.value)}
+                  disabled={!canEditJobPricing || saving}
+                />
+                <span className="ls-quote-settings-hint">
+                  Leave empty to keep using the live estimate.
+                </span>
+              </label>
+
+              <label className="ls-quote-settings-field">
+                <span className="ls-quote-settings-label">Deposit %</span>
+                <input
+                  type="number"
+                  className="ls-input"
+                  inputMode="decimal"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  placeholder={
+                    companyDefaultDepositPercent != null
+                      ? formatPercentDisplay(companyDefaultDepositPercent)
+                      : "50"
+                  }
+                  value={depositPctDraft}
+                  onChange={(e) => setDepositPctDraft(e.target.value)}
+                  disabled={!canEditJobPricing || saving}
+                />
+                <span className="ls-quote-settings-hint">
+                  Empty falls back to the company default (Settings &rarr; Pricing defaults).
+                </span>
+              </label>
+
+              <label className="ls-quote-settings-field">
+                <span className="ls-quote-settings-label">Deposit $ (override)</span>
+                <input
+                  type="number"
+                  className="ls-input"
+                  inputMode="decimal"
+                  min={0}
+                  step={1}
+                  placeholder="Auto from %"
+                  value={depositAmtDraft}
+                  onChange={(e) => setDepositAmtDraft(e.target.value)}
+                  disabled={!canEditJobPricing || saving}
+                />
+                <span className="ls-quote-settings-hint">
+                  Override only if the customer agreed to a fixed deposit dollar amount.
+                </span>
+              </label>
+
+              {jobPricingError ? (
+                <p className="ls-quote-settings-error" role="alert">
+                  {jobPricingError}
+                </p>
+              ) : null}
+            </div>
+
             <label className="ls-quote-settings-field">
               <span className="ls-quote-settings-label">Material price markup</span>
               <input

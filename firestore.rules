@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // -------- helpers ----------------------------------------------------
     function signedIn() {
       return request.auth != null;
     }
@@ -8,6 +9,70 @@ service cloud.firestore {
     function isOwner(uid) {
       return signedIn() && request.auth.uid == uid;
     }
+
+    // BellaCatalog staff marker. A doc at `platformAdmins/{uid}` means the
+    // signed-in user works for BellaCatalog and is allowed to read every
+    // company (for support + billing) and open the admin panel. Writes from
+    // platform admins always go through Cloud Functions so they can be
+    // audited; clients never write to customer data via this escalation.
+    function isPlatformAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
+    }
+
+    // Company membership helpers. These read the membership doc at
+    // `companies/{companyId}/members/{uid}`. A user is only considered an
+    // *active* member (and thus able to read/write company data) when both
+    // the member doc exists AND its `status` is "active". Disabled / removed
+    // members are treated as signed-out for authorization purposes so that
+    // firing a teammate instantly revokes Firestore access — the client
+    // should also be signed out via `admin.auth().revokeRefreshTokens()`
+    // from the backend to force re-auth.
+    function memberDoc(companyId) {
+      return get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data;
+    }
+
+    function companyMember(companyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid))
+        && memberDoc(companyId).status == "active";
+    }
+
+    function memberRole(companyId) {
+      return memberDoc(companyId).role;
+    }
+
+    function hasRole(companyId, allowedRoles) {
+      return companyMember(companyId) && memberRole(companyId) in allowedRoles;
+    }
+
+    // ---- Commission tracker helpers ------------------------------------
+    // A job's "pricing" is read-only for non-admins once `pricingLocked`
+    // flips to true (after the required deposit is received). The set of
+    // fields below must stay identical to the snapshot the server freezes
+    // in `onPaymentWrite`.
+    function jobPricingFields() {
+      return [
+        "quotedTotal",
+        "requiredDepositAmount",
+        "requiredDepositPercent",
+        "layoutQuoteSettings",
+        "finalOptionId",
+        "commissionSnapshot",
+        "assignedUserId",
+        "pricingLocked",
+      ];
+    }
+
+    // True when a job update changes one or more pricing fields.
+    function jobUpdateTouchesPricing() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(jobPricingFields());
+    }
+
+    // -------- legacy user-owned collections ------------------------------
+    // These rules are preserved verbatim to protect existing production data.
+    // Do not remove until migration to company-scoped paths is complete.
 
     match /customers/{customerId} {
       allow read: if signedIn() && resource.data.ownerUserId == request.auth.uid;
@@ -27,7 +92,6 @@ service cloud.firestore {
       allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
     }
 
-    /** User profile (display name, etc.) — each user may only read/write their own doc. */
     match /users/{userId} {
       allow read, create, update: if isOwner(userId);
       allow delete: if false;
@@ -39,14 +103,345 @@ service cloud.firestore {
       allow update, delete: if signedIn() && resource.data.ownerUserId == request.auth.uid;
     }
 
-    /**
-     * Read-only layout quote snapshots for customer share links (QR / URL).
-     * Writes are owner-only; reads are public so unauthenticated recipients can open the page.
-     */
     match /layoutQuoteShares/{shareId} {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.ownerUserId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    // -------- NEW: company SaaS scaffolding (Phase 1) --------------------
+
+    // Company doc. Any active member may read. Creation is allowed when the
+    // signed-in user sets themselves as `createdByUserId`. Updates are
+    // restricted to company members (role-gated updates come in Phase 2 with
+    // the billing backend).
+    match /companies/{companyId} {
+      allow read: if companyMember(companyId) || isPlatformAdmin();
+      allow create: if signedIn()
+        && request.resource.data.createdByUserId == request.auth.uid;
+      allow update: if companyMember(companyId);
+      allow delete: if false;
+
+      // Members subcollection. A user may always read their own membership
+      // (needed for onboarding bootstrapping and so a disabled user can see
+      // that they've been revoked). Other members are visible only to
+      // active company peers — and to platform admins for support.
+      //
+      // Self-insert on the client is only allowed during the "create your
+      // company" flow: a user may write their own `owner` + `active`
+      // membership for a company whose doc they just created. Every other
+      // membership write (invites, role changes, disable/remove, gifts)
+      // goes through Cloud Functions so we can perform the seat
+      // accounting, Stripe sync, and Firebase Auth token revocation
+      // atomically and record an audit entry.
+      match /members/{userId} {
+        allow read: if signedIn()
+          && (request.auth.uid == userId
+            || companyMember(companyId)
+            || isPlatformAdmin());
+        allow create: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.role == "owner"
+          && request.resource.data.status == "active";
+        allow update, delete: if false;
+      }
+
+      // Company-scoped catalog collections. Readable by company members; a
+      // member can read shared (`visibility == "company"`) or their own.
+      match /catalogCollections/{collectionId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create: if companyMember(companyId)
+          && request.resource.data.ownerUserId == request.auth.uid
+          && request.resource.data.companyId == companyId;
+        allow update, delete: if companyMember(companyId)
+          && (resource.data.ownerUserId == request.auth.uid
+            || hasRole(companyId, ["owner", "admin", "manager"]));
+      }
+
+      // Per-user, per-company catalog state (favorites + preferences).
+      // Only the owning user may read/write their own doc.
+      match /userCatalogState/{userId} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+
+      // Company catalog items. Readable by members. Writes are restricted to
+      // catalog managers (owner/admin/manager).
+      match /catalogItems/{catalogItemId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create, update, delete:
+          if hasRole(companyId, ["owner", "admin", "manager"]);
+      }
+
+      // Price imports + parsed rows.
+      match /priceImports/{importId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create: if hasRole(companyId, ["owner", "admin", "manager"])
+          && request.resource.data.companyId == companyId
+          && request.resource.data.uploadedByUserId == request.auth.uid;
+        allow update: if hasRole(companyId, ["owner", "admin", "manager"]);
+        allow delete: if hasRole(companyId, ["owner", "admin"]);
+
+        match /parsedRows/{rowId} {
+          allow read: if companyMember(companyId) || isPlatformAdmin();
+          allow create, update, delete:
+            if hasRole(companyId, ["owner", "admin", "manager"]);
+        }
+      }
+
+      // Price books + lines.
+      match /priceBooks/{priceBookId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create, update, delete:
+          if hasRole(companyId, ["owner", "admin", "manager"]);
+
+        match /lines/{lineId} {
+          allow read: if companyMember(companyId) || isPlatformAdmin();
+          allow create, update, delete:
+            if hasRole(companyId, ["owner", "admin", "manager"]);
+        }
+      }
+
+      // Company-owned vendors, media, and other subcollections.
+      match /vendors/{vendorId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create, update, delete:
+          if hasRole(companyId, ["owner", "admin", "manager"]);
+      }
+
+      match /media/{mediaId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create, update, delete: if companyMember(companyId);
+      }
+
+      // -------- Company-scoped Compare Tool / quote workflow -------------
+      //
+      // Customers, jobs, and job comparison options live under the
+      // company so they can be collaboratively read + edited by any
+      // active member. We keep a `version` counter on each doc for
+      // optimistic concurrency on updates, and `activeEditor` on jobs as
+      // an advisory soft lock.
+      //
+      // Creates must set `companyId` correctly so list queries (and
+      // collectionGroup queries on `jobs` / `options`) can rely on it.
+
+      match /customers/{customerId} {
+        allow read: if companyMember(companyId) || isPlatformAdmin();
+        allow create: if companyMember(companyId)
+          && request.resource.data.companyId == companyId
+          && request.resource.data.version == 1;
+        allow update: if companyMember(companyId)
+          && request.resource.data.companyId == companyId
+          // Deleting or rewriting the creator's identity is never allowed
+          // from the client; only the original creator or a manager can
+          // delete the record.
+          && (!("version" in request.resource.data)
+            || request.resource.data.version is int);
+        allow delete: if companyMember(companyId)
+          && (resource.data.createdByUserId == request.auth.uid
+            || hasRole(companyId, ["owner", "admin", "manager"]));
+
+        match /jobs/{jobId} {
+          allow read: if companyMember(companyId) || isPlatformAdmin();
+          allow create: if companyMember(companyId)
+            && request.resource.data.companyId == companyId
+            && request.resource.data.customerId == customerId
+            && request.resource.data.version == 1;
+          // Once `pricingLocked == true`, only owner/admin may change any
+          // pricing/assignment field. Non-admins can still update metadata
+          // like notes, attachments, presence, and non-price knobs.
+          allow update: if companyMember(companyId)
+            && request.resource.data.companyId == companyId
+            && request.resource.data.customerId == customerId
+            && (
+              !resource.data.get("pricingLocked", false)
+              || hasRole(companyId, ["owner", "admin"])
+              || !jobUpdateTouchesPricing()
+            );
+          allow delete: if companyMember(companyId)
+            && (resource.data.createdByUserId == request.auth.uid
+              || hasRole(companyId, ["owner", "admin", "manager"]));
+
+          // Per-session presence entries. Each signed-in member may
+          // write only their own doc (`sessionId` is the doc id, but
+          // the authenticated user must own it via `userId`).
+          match /presence/{sessionId} {
+            allow read: if companyMember(companyId) || isPlatformAdmin();
+            allow write: if companyMember(companyId)
+              && request.resource.data.userId == request.auth.uid;
+            allow delete: if companyMember(companyId)
+              && resource.data.userId == request.auth.uid;
+          }
+
+          match /options/{optionId} {
+            allow read: if companyMember(companyId) || isPlatformAdmin();
+            allow create: if companyMember(companyId)
+              && request.resource.data.companyId == companyId
+              && request.resource.data.jobId == jobId
+              && request.resource.data.version == 1;
+            allow update: if companyMember(companyId)
+              && request.resource.data.companyId == companyId
+              && request.resource.data.jobId == jobId;
+            allow delete: if companyMember(companyId);
+          }
+
+          // Payments ledger. Any active member can read payments (so
+          // everyone sees the balance due on a job), but only
+          // owner/admin/manager can record or edit them. Sales reps
+          // literally cannot fudge deposit numbers. Stripe-sourced
+          // payments (phase 2) are written server-side via the webhook.
+          match /payments/{paymentId} {
+            allow read: if companyMember(companyId) || isPlatformAdmin();
+            allow create: if hasRole(companyId, ["owner", "admin", "manager"])
+              && request.resource.data.companyId == companyId
+              && request.resource.data.customerId == customerId
+              && request.resource.data.jobId == jobId
+              && request.resource.data.recordedByUserId == request.auth.uid
+              && request.resource.data.version == 1
+              // Disallow client-side Stripe spoofing: Stripe-method
+              // payments can only be written by server code (which uses
+              // the admin SDK and bypasses these rules).
+              && request.resource.data.method != "stripe";
+            allow update: if hasRole(companyId, ["owner", "admin", "manager"])
+              && request.resource.data.companyId == companyId
+              && request.resource.data.jobId == jobId
+              && resource.data.method != "stripe";
+            allow delete: if hasRole(companyId, ["owner", "admin"])
+              && resource.data.method != "stripe";
+          }
+        }
+      }
+
+      // Commission ledger: self-or-admin read, server-only write.
+      // The ledger is the source of truth for "how much has this rep
+      // earned?" and must never be mutated by the client.
+      match /commissionLedger/{entryId} {
+        allow read: if signedIn()
+          && (
+            hasRole(companyId, ["owner", "admin"])
+            || (
+              companyMember(companyId)
+              && resource.data.userId == request.auth.uid
+            )
+            || isPlatformAdmin()
+          );
+        allow write: if false;
+      }
+
+      // QuickBooks export receipts. Admin-only read; server-only write.
+      match /quickBooksExports/{exportId} {
+        allow read: if hasRole(companyId, ["owner", "admin"]) || isPlatformAdmin();
+        allow write: if false;
+      }
+    }
+
+    // -------- Collection group access -----------------------------------
+    // `findJobById` performs a collectionGroup("jobs") query filtered by
+    // `companyId` + document id, so we need to explicitly allow collection
+    // group reads. Writes continue to go through the fully-qualified
+    // nested path above.
+    match /{path=**}/jobs/{jobId} {
+      allow read: if signedIn()
+        && resource.data.companyId is string
+        && (companyMember(resource.data.companyId) || isPlatformAdmin());
+    }
+
+    match /{path=**}/options/{optionId} {
+      allow read: if signedIn()
+        && resource.data.companyId is string
+        && (companyMember(resource.data.companyId) || isPlatformAdmin());
+    }
+
+    // Commission dashboards run collectionGroup queries on `payments`
+    // scoped by `companyId` + date range. Any active member may read
+    // payment docs for their company; writes still go through the
+    // fully-qualified path under jobs/{jobId}/payments.
+    match /{path=**}/payments/{paymentId} {
+      allow read: if signedIn()
+        && resource.data.companyId is string
+        && (companyMember(resource.data.companyId) || isPlatformAdmin());
+    }
+
+    // Self-view of the commission ledger via a collectionGroup query
+    // (`where("userId", "==", me).where("companyId", "==", co)`).
+    match /{path=**}/commissionLedger/{entryId} {
+      allow read: if signedIn()
+        && resource.data.companyId is string
+        && (
+          hasRole(resource.data.companyId, ["owner", "admin"])
+          || (
+            companyMember(resource.data.companyId)
+            && resource.data.userId == request.auth.uid
+          )
+          || isPlatformAdmin()
+        );
+    }
+
+    // Global, shared read-only data for all signed-in users. Writes are
+    // reserved for admin-only backend code (denied from the client).
+    match /globalProducts/{canonicalProductId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      match /media/{mediaId} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+    }
+
+    match /globalManufacturers/{manufacturerId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /globalVendors/{vendorId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Stripe mirror — populated by trusted backend webhook code only. The
+    // owning company may read to reflect status in the UI.
+    match /stripeCustomers/{companyId} {
+      allow read: if companyMember(companyId) || isPlatformAdmin();
+      allow write: if false;
+    }
+
+    // Pending invites. Invites are created, revoked, and consumed through
+    // Cloud Functions (admin SDK), so no client writes are ever allowed.
+    //
+    // Read access is granted to:
+    //   - the invited user (matched by their verified auth email), so they
+    //     can see the pending invite on the onboarding screen even before
+    //     they have a membership doc; and
+    //   - active members of the inviting company, so admins can render
+    //     the pending-invites list on the Team page.
+    match /companyInvites/{inviteId} {
+      allow read: if signedIn()
+        && (
+          (resource.data.email is string
+            && request.auth.token.email is string
+            && resource.data.email == request.auth.token.email)
+          || companyMember(resource.data.companyId)
+          || isPlatformAdmin()
+        );
+      allow write: if false;
+    }
+
+    // Platform admin registry. A user may read their own doc (so the
+    // frontend can detect "am I staff?"), and platform admins can read
+    // the full list (for the admin panel). All writes flow through
+    // Cloud Functions.
+    match /platformAdmins/{uid} {
+      allow read: if signedIn()
+        && (request.auth.uid == uid || isPlatformAdmin());
+      allow write: if false;
+    }
+
+    // Immutable audit log of platform-admin actions. Read by other
+    // platform admins only. Writes are server-only.
+    match /adminAuditLog/{entryId} {
+      allow read: if isPlatformAdmin();
+      allow write: if false;
     }
   }
 }

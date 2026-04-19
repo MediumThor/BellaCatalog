@@ -29,6 +29,7 @@ The intended user flow is:
 9. Visually review fit, slab count, and overall presentation
 10. Save the result to that specific job option
 11. Feed the result into quoting
+12. *(Optional, internal)* Open the **Cut** phase after Quote to place an imported **DXF** on a **real scanned slab** from inventory (external library) and export a handoff for **Alphacam** toolpaths — see [50_LAYOUT_STUDIO_CUT_PHASE.md](./50_LAYOUT_STUDIO_CUT_PHASE.md)
 
 ---
 
@@ -37,6 +38,8 @@ The intended user flow is:
 This feature is meant to help quote more kitchens faster.
 
 The output only needs to be quote-accurate, not fabrication-accurate.
+
+**Cut phase exception:** The first three phases (Plan, Layout, Quote) are quote-first and customer-facing. **Cut** is the single workflow step that is **fabrication-adjacent**: it does **not** perform machining or CAM inside BellaCatalog; it only **positions** a supplied DXF on a **real scanned slab** (proper scale) and **hands off** to external Alphacam tooling. It is **optional** and **internal** (not a sales presentation phase).
 
 The feature should support:
 - material comparison
@@ -72,7 +75,8 @@ Priority order:
 The following are out of scope for V1 unless explicitly requested:
 
 - full CAD system
-- fabrication-ready DXF workflows
+- turning Layout Studio into a general-purpose CAD/CAM product (the **Cut** phase may use **scanned slab placement** and a **byte-preserving DXF** for shop handoff only — not arbitrary fabrication modeling)
+- fabrication-ready DXF workflows *as a core quoting abstraction* (Cut treats DXF as **immutable** import + placement metadata; see [50_LAYOUT_STUDIO_CUT_PHASE.md](./50_LAYOUT_STUDIO_CUT_PHASE.md))
 - advanced constraint solving
 - true nesting optimization
 - precise sink geometry

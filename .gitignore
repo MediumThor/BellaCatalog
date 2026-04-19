@@ -1,10 +1,17 @@
 node_modules
 dist
+functions/node_modules
+functions/lib
 .DS_Store
 *.log
 .env
 .env.*
 .env.local
+
+# Firebase admin service account keys — never commit
+*service-account*.json
+*firebase-adminsdk*.json
+serviceAccountKey*.json
 .venv
 scripts/_*.txt
 

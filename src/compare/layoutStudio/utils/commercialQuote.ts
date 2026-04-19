@@ -27,13 +27,27 @@ export type CommercialQuoteBreakdown = {
   rawMaterialTotal: number;
   fabricationTotal: number;
   installationTotal: number;
-  /** Sink + outlet cutouts at `cutoutEachPrice` (same as job “Sink cutout (each)” setting). */
+  /**
+   * Sink + outlet cutouts. Outlets and built-in sinks WITHOUT a per-cut
+   * price snapshot are billed at `cutoutEachPrice`. Sinks with a
+   * snapshot price (company-defined customs and built-ins placed under
+   * a company override) use the snapshotted price
+   * (`PieceSinkCutout.customTemplate.priceUsd`).
+   */
   sinkAddOnTotal: number;
   sinkCutoutCount: number;
   /** Electrical outlet cutouts summed from `pieces[].outletCount`. */
   outletCutoutCount: number;
-  /** Effective $/cut from settings (`sinkCutoutEach`). */
+  /** Default $/cut from settings (`sinkCutoutEach`); snapshotted sinks may override. */
   cutoutEachPrice: number;
+  /**
+   * Sum of the per-cut prices snapshotted on placed sinks (custom company
+   * sinks and built-ins placed under an override). Excluded from
+   * `(sinkCutoutCount - customSinkCount) * cutoutEachPrice`.
+   */
+  customSinkAddOnTotal: number;
+  /** Number of placed sinks that carry a per-cut price snapshot. */
+  customSinkCount: number;
   splashAddOnTotal: number;
   profileAddOnTotal: number;
   miterAddOnTotal: number;
@@ -153,6 +167,47 @@ export function mergeLineItemsIntoBreakdown(
     lineItemsTotal,
     grandTotal: base.grandTotal + lineItemsTotal,
   };
+}
+
+function nonNegNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/**
+ * Convert a raw company defaults object into a strict
+ * `Partial<LayoutQuoteSettings>`, dropping garbage values so they
+ * can't poison the merged result.
+ */
+function sanitizeCompanyLayoutQuoteDefaults(
+  raw: Partial<LayoutQuoteSettings>,
+): Partial<LayoutQuoteSettings> {
+  const out: Partial<LayoutQuoteSettings> = {};
+  const markup = positiveNumber(raw.materialMarkup);
+  if (markup != null) out.materialMarkup = markup;
+  if (raw.fabricationPerSqftOverride === null) {
+    out.fabricationPerSqftOverride = null;
+  } else {
+    const fab = nonNegNumber(raw.fabricationPerSqftOverride);
+    if (fab != null) out.fabricationPerSqftOverride = fab;
+  }
+  const install = nonNegNumber(raw.installationPerSqft);
+  if (install != null) out.installationPerSqft = install;
+  const cutout = nonNegNumber(raw.sinkCutoutEach);
+  if (cutout != null) out.sinkCutoutEach = cutout;
+  const splash = nonNegNumber(raw.splashPerLf);
+  if (splash != null) out.splashPerLf = splash;
+  const profile = nonNegNumber(raw.profilePerLf);
+  if (profile != null) out.profilePerLf = profile;
+  const miter = nonNegNumber(raw.miterPerLf);
+  if (miter != null) out.miterPerLf = miter;
+  if (raw.materialChargeMode === "full_slab" || raw.materialChargeMode === "sqft_used") {
+    out.materialChargeMode = raw.materialChargeMode;
+  }
+  return out;
 }
 
 function parseCustomLineItems(raw: unknown): LayoutQuoteLineItem[] {
@@ -296,26 +351,42 @@ export function computeSlabMaterialQuoteLines(input: {
     .filter((line): line is SlabMaterialQuoteLine => line != null);
 }
 
-export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
+/**
+ * Build the effective layout-quote settings for a job. Per-job
+ * `job.layoutQuoteSettings` always wins; missing values fall back to
+ * the company-wide defaults set in Settings → Pricing defaults; and if
+ * those are missing too, to `DEFAULT_LAYOUT_QUOTE_SETTINGS`.
+ */
+export function mergeLayoutQuoteSettings(
+  job: JobRecord,
+  companyDefaults?: Partial<LayoutQuoteSettings> | null,
+): LayoutQuoteSettings {
+  const baseDefaults: LayoutQuoteSettings = {
+    ...DEFAULT_LAYOUT_QUOTE_SETTINGS,
+    ...(companyDefaults && typeof companyDefaults === "object"
+      ? sanitizeCompanyLayoutQuoteDefaults(companyDefaults)
+      : {}),
+  };
+
   const raw = job.layoutQuoteSettings;
-  if (!raw || typeof raw !== "object") return { ...DEFAULT_LAYOUT_QUOTE_SETTINGS };
+  if (!raw || typeof raw !== "object") return { ...baseDefaults };
   const rawRecord = raw as unknown as Record<string, unknown>;
   const materialMarkup =
     typeof raw.materialMarkup === "number" && Number.isFinite(raw.materialMarkup) && raw.materialMarkup > 0
       ? raw.materialMarkup
-      : DEFAULT_LAYOUT_QUOTE_SETTINGS.materialMarkup;
+      : baseDefaults.materialMarkup;
   const fabricationPerSqftOverride =
     typeof raw.fabricationPerSqftOverride === "number" && Number.isFinite(raw.fabricationPerSqftOverride) && raw.fabricationPerSqftOverride >= 0
       ? raw.fabricationPerSqftOverride
-      : null;
+      : baseDefaults.fabricationPerSqftOverride;
   const installationPerSqft =
     typeof raw.installationPerSqft === "number" && Number.isFinite(raw.installationPerSqft) && raw.installationPerSqft >= 0
       ? raw.installationPerSqft
-      : 0;
+      : baseDefaults.installationPerSqft;
   const sinkCutoutEach =
     typeof raw.sinkCutoutEach === "number" && Number.isFinite(raw.sinkCutoutEach) && raw.sinkCutoutEach >= 0
       ? raw.sinkCutoutEach
-      : 0;
+      : baseDefaults.sinkCutoutEach;
   const splashPerLf =
     typeof rawRecord.splashPerLf === "number" && Number.isFinite(rawRecord.splashPerLf) && rawRecord.splashPerLf >= 0
       ? rawRecord.splashPerLf
@@ -323,19 +394,19 @@ export function mergeLayoutQuoteSettings(job: JobRecord): LayoutQuoteSettings {
           Number.isFinite(rawRecord.splashPerSqft) &&
           rawRecord.splashPerSqft >= 0
         ? rawRecord.splashPerSqft
-      : 0;
+      : baseDefaults.splashPerLf;
   const profilePerLf =
     typeof raw.profilePerLf === "number" && Number.isFinite(raw.profilePerLf) && raw.profilePerLf >= 0
       ? raw.profilePerLf
-      : 0;
+      : baseDefaults.profilePerLf;
   const miterPerLf =
     typeof raw.miterPerLf === "number" && Number.isFinite(raw.miterPerLf) && raw.miterPerLf >= 0
       ? raw.miterPerLf
-      : 0;
+      : baseDefaults.miterPerLf;
   const materialChargeMode =
     raw.materialChargeMode === "full_slab" || raw.materialChargeMode === "sqft_used"
       ? raw.materialChargeMode
-      : DEFAULT_LAYOUT_QUOTE_SETTINGS.materialChargeMode;
+      : baseDefaults.materialChargeMode;
   const slabChargeModes =
     raw.slabChargeModes && typeof raw.slabChargeModes === "object"
       ? Object.entries(raw.slabChargeModes as Record<string, unknown>).reduce<Record<string, MaterialChargeMode>>(
@@ -437,6 +508,28 @@ export function computeCommercialLayoutQuote(input: {
   const sinkCutoutCount = Math.max(0, sinkCount);
   const cutoutEachPrice =
     Number.isFinite(settings.sinkCutoutEach) && settings.sinkCutoutEach >= 0 ? settings.sinkCutoutEach : 0;
+  /**
+   * Sinks with a snapshotted template (company-defined customs AND
+   * built-ins placed under a per-company price override) bill at their
+   * snapshot per-cut price instead of the global "Cutout each" rate.
+   * Built-ins without a snapshot and electrical outlets continue to
+   * bill at `cutoutEachPrice`.
+   */
+  let customSinkAddOnTotal = 0;
+  let customSinkCount = 0;
+  for (const p of pieces) {
+    for (const sink of p.sinks ?? []) {
+      if (sink.customTemplate) {
+        const price = Number.isFinite(sink.customTemplate.priceUsd)
+          ? Math.max(0, sink.customTemplate.priceUsd)
+          : 0;
+        customSinkAddOnTotal += price;
+        customSinkCount += 1;
+      }
+    }
+  }
+  /** Sinks billed at the flat per-cut rate (excludes snapshot-priced sinks). */
+  const flatRateSinkCount = Math.max(0, sinkCutoutCount - customSinkCount);
 
   let catalogMaterialPerSqft: number | null = null;
 
@@ -524,7 +617,8 @@ export function computeCommercialLayoutQuote(input: {
 
   const fabricationTotal = fabricatedSf * fabPerSqft;
   const installationTotal = fabricatedSf * installationPerSqft;
-  const sinkAddOnTotal = (sinkCutoutCount + outletCutoutCount) * cutoutEachPrice;
+  const sinkAddOnTotal =
+    (flatRateSinkCount + outletCutoutCount) * cutoutEachPrice + customSinkAddOnTotal;
   const splashAddOnTotal = splashLf * settings.splashPerLf;
   const profileAddOnTotal = Math.max(0, profileEdgeLf) * settings.profilePerLf;
   const miterAddOnTotal = Math.max(0, miterEdgeLf) * settings.miterPerLf;
@@ -551,6 +645,8 @@ export function computeCommercialLayoutQuote(input: {
     sinkCutoutCount,
     outletCutoutCount,
     cutoutEachPrice,
+    customSinkAddOnTotal,
+    customSinkCount,
     splashAddOnTotal,
     profileAddOnTotal,
     miterAddOnTotal,

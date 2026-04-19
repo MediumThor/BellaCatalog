@@ -75,6 +75,11 @@ function parseCatalogCollection(
   return {
     id,
     ownerUserId,
+    ownerDisplayName:
+      typeof row.ownerDisplayName === "string" ? row.ownerDisplayName : null,
+    companyId: null,
+    visibility: "private",
+    source: "legacy",
     name,
     description: typeof row.description === "string" ? row.description : "",
     type,

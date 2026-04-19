@@ -31,8 +31,11 @@ function extFromMimeOrUrl(contentType: string | null, url: string): string {
 }
 
 export async function mirrorJobOptionImage(input: {
-  ownerUserId: string;
+  companyId: string;
+  customerId: string;
   jobId: string;
+  /** Firebase Auth uid of the teammate who added the option (audit only). */
+  ownerUserId: string;
   sourceImageUrl: string | null | undefined;
   catalogItemId?: string | null;
   productName?: string | null;
@@ -53,7 +56,11 @@ export async function mirrorJobOptionImage(input: {
   const itemSlug = slugPart(input.catalogItemId, "catalog-item");
   const productSlug = slugPart(input.productName, "material");
   const safeName = `${productSlug}-${itemSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const storagePath = `job-option-images/${input.ownerUserId}/jobs/${input.jobId}/${safeName}`;
+  const storagePath =
+    `companies/${input.companyId}` +
+    `/customers/${input.customerId}` +
+    `/jobs/${input.jobId}` +
+    `/option-images/${safeName}`;
   const storageRef = ref(firebaseStorage, storagePath);
   await uploadBytes(storageRef, blob, { contentType });
   const downloadUrl = await getDownloadURL(storageRef);

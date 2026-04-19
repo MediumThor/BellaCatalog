@@ -2,6 +2,7 @@ import { PenSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import {
   createJob,
   deleteCustomer,
@@ -67,12 +68,14 @@ function customerToFormValues(c: {
 
 function CustomerJobRow({
   job,
-  ownerUserId,
+  companyId,
+  customerId,
   deleting,
   onDelete,
 }: {
   job: JobRecord;
-  ownerUserId: string;
+  companyId: string;
+  customerId: string;
   deleting: boolean;
   onDelete: (job: JobRecord) => void;
 }) {
@@ -82,7 +85,7 @@ function CustomerJobRow({
     let cancelled = false;
     (async () => {
       try {
-        const opts = await fetchOptionsForJob(job.id, ownerUserId);
+        const opts = await fetchOptionsForJob(companyId, customerId, job.id);
         if (cancelled) return;
         setThumbs(thumbnailUrlsForOptions(opts));
       } catch {
@@ -92,7 +95,7 @@ function CustomerJobRow({
     return () => {
       cancelled = true;
     };
-  }, [job.id, ownerUserId]);
+  }, [companyId, customerId, job.id]);
 
   return (
     <li className={`compare-job-list__item${deleting ? " compare-job-list__item--busy" : ""}`}>
@@ -155,6 +158,7 @@ function CustomerJobRow({
 export function CustomerDetailPage() {
   const { customerId } = useParams<{ customerId: string }>();
   const { user } = useAuth();
+  const { activeCompanyId } = useCompany();
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<CustomerRecord | null | undefined>(undefined);
   const [jobs, setJobs] = useState<JobRecord[]>([]);
@@ -168,14 +172,21 @@ export function CustomerDetailPage() {
   }, [customerId]);
 
   useEffect(() => {
-    if (!customerId || !user?.uid) return;
-    return subscribeCustomer(customerId, user.uid, setCustomer, (e) => setErr(e.message));
-  }, [customerId, user?.uid]);
+    if (!customerId || !activeCompanyId) return;
+    return subscribeCustomer(activeCompanyId, customerId, setCustomer, (e) =>
+      setErr(e.message)
+    );
+  }, [activeCompanyId, customerId]);
 
   useEffect(() => {
-    if (!customerId || !user?.uid) return;
-    return subscribeJobsForCustomer(customerId, user.uid, setJobs, (e) => setErr(e.message));
-  }, [customerId, user?.uid]);
+    if (!customerId || !activeCompanyId) return;
+    return subscribeJobsForCustomer(
+      activeCompanyId,
+      customerId,
+      setJobs,
+      (e) => setErr(e.message)
+    );
+  }, [activeCompanyId, customerId]);
 
   if (!customerId) {
     return <p className="compare-warning">Missing customer.</p>;
@@ -185,16 +196,16 @@ export function CustomerDetailPage() {
     return <p className="compare-warning">Sign in to view this customer.</p>;
   }
 
+  if (!activeCompanyId) {
+    return <p className="compare-warning">No active company selected.</p>;
+  }
+
   if (customer === undefined) {
     return <p className="product-sub">Loading customer…</p>;
   }
 
   if (customer === null) {
     return <p className="compare-warning">Customer not found or you do not have access.</p>;
-  }
-
-  if (customer.ownerUserId !== user.uid) {
-    return <p className="compare-warning">You do not have access to this customer.</p>;
   }
 
   return (
@@ -279,7 +290,8 @@ export function CustomerDetailPage() {
               <CustomerJobRow
                 key={j.id}
                 job={j}
-                ownerUserId={user.uid}
+                companyId={activeCompanyId}
+                customerId={customerId}
                 deleting={deletingJobId === j.id}
                 onDelete={async (job) => {
                   if (
@@ -292,7 +304,7 @@ export function CustomerDetailPage() {
                   setDeletingJobId(job.id);
                   setErr(null);
                   try {
-                    await deleteJob(job.id, user.uid);
+                    await deleteJob(activeCompanyId, customerId, job.id);
                   } catch (e) {
                     setErr(e instanceof Error ? e.message : "Could not delete job.");
                   } finally {
@@ -310,11 +322,11 @@ export function CustomerDetailPage() {
         initialValues={customerToFormValues(customer)}
         onClose={() => setEditOpen(false)}
         onDelete={async () => {
-          await deleteCustomer(customer.id, user.uid);
+          await deleteCustomer(activeCompanyId, customer.id);
           navigate("/compare");
         }}
         onSubmit={async (values: CustomerFormValues) => {
-          await updateCustomer(customer.id, {
+          await updateCustomer(activeCompanyId, customer.id, {
             customerType: values.customerType,
             businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),
@@ -332,8 +344,10 @@ export function CustomerDetailPage() {
         onClose={() => setJobOpen(false)}
         onSubmit={async (values: JobFormValues) => {
           const initialAreaName = values.name.trim();
-          await createJob(user.uid, {
-            customerId,
+          await createJob(activeCompanyId, customerId, {
+            ownerUserId: user.uid,
+            createdByUserId: user.uid,
+            assignedUserId: user.uid,
             name: initialAreaName,
             contactName: values.contactName.trim(),
             contactPhone: values.contactPhone.trim(),
@@ -344,6 +358,7 @@ export function CustomerDetailPage() {
             notes: values.notes.trim(),
             assumptions: values.assumptions.trim(),
             status: "draft",
+            visibility: "company",
             dxfAttachmentUrl: null,
             drawingAttachmentUrl: null,
           });

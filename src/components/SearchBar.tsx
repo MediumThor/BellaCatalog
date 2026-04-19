@@ -4,24 +4,23 @@ type Props = {
   value: string;
   onChange: (v: string) => void;
   id?: string;
-  onAiSearch?: () => void;
-  aiBusy?: boolean;
-  aiDisabledReason?: string;
   /** Compact header row: hides hint, screen-reader label only */
   variant?: "default" | "header";
+  /** Visible label / sr-only label when in header variant. */
+  label?: string;
+  /** Input placeholder text. */
+  placeholder?: string;
 };
 
 function SearchBarInner({
   value,
   onChange,
   id = "catalog-search",
-  onAiSearch,
-  aiBusy = false,
-  aiDisabledReason,
   variant = "default",
+  label = "Search catalog",
+  placeholder = "Name, SKU, vendor, material, tier, notes…",
 }: Props) {
   const [focused, setFocused] = useState(false);
-  const aiDisabled = Boolean(aiDisabledReason) || !value.trim() || aiBusy;
   const isHeader = variant === "header";
   return (
     <div
@@ -29,37 +28,21 @@ function SearchBarInner({
       data-focused={focused ? "true" : "false"}
     >
       <label htmlFor={id} className={isHeader ? "sr-only" : undefined}>
-        Search catalog
+        {label}
       </label>
       <div className="catalog-search-row">
         <input
           id={id}
           className="search-input catalog-search-input"
           type="search"
-          placeholder="Name, SKU, vendor, material, tier, notes…"
+          placeholder={placeholder}
           autoComplete="off"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
         />
-        {onAiSearch ? (
-          <button
-            type="button"
-            className="btn"
-            onClick={onAiSearch}
-            disabled={aiDisabled}
-            title={aiDisabledReason || "Use Gemini to turn this request into catalog filters"}
-          >
-            {aiBusy ? "Thinking..." : "AI search"}
-          </button>
-        ) : null}
       </div>
-      {onAiSearch && !isHeader ? (
-        <div className="filter-hint">
-          {aiDisabledReason || "Use natural language like: brown stone with soft movement"}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobComparisonOptionRecord, JobRecord } from "../../../types/compareQuote";
 import { createDefaultLayoutState } from "../constants";
 import {
@@ -13,6 +13,7 @@ import { useResolvedLayoutSlabs } from "./useResolvedLayoutSlabs";
 export type LayoutSaveStatus = "idle" | "saving" | "saved" | "error";
 
 type Params = {
+  companyId: string | null;
   job: JobRecord | null;
   jobId: string | undefined;
   areaId?: string | null;
@@ -20,11 +21,25 @@ type Params = {
   optionId: string | undefined;
 };
 
-export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params) {
+export function useLayoutStudio({ companyId, job, jobId, areaId, option, optionId }: Params) {
   const [draft, setDraft] = useState<SavedLayoutStudioState>(() => createDefaultLayoutState());
   const layoutSlabs = useResolvedLayoutSlabs(option, draft.slabClones);
   const [saveStatus, setSaveStatus] = useState<LayoutSaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  /**
+   * Tracks whether the local draft has unsaved edits. While true, the re-hydrate effect
+   * will refuse to overwrite the draft with incoming server snapshots — this prevents
+   * delayed Firestore subscription updates (e.g. triggered by collaboration heartbeats
+   * or unrelated writes) from clobbering local changes such as a freshly applied
+   * auto-nest layout. Reset to false on context switches and on successful saves.
+   */
+  const dirtyRef = useRef(false);
+  /**
+   * Identifies the job/area/option triple we last hydrated. A change here represents
+   * an actual context switch and always forces a fresh hydration (even if dirty).
+   */
+  const hydratedKeyRef = useRef<string>("");
 
   const planSig = areaId
     ? JSON.stringify(job?.areas?.find((area) => area.id === areaId)?.layoutStudioPlan ?? null)
@@ -37,13 +52,22 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
   useEffect(() => {
     if (!jobId || !job) {
       setDraft(createDefaultLayoutState());
+      dirtyRef.current = false;
+      hydratedKeyRef.current = "";
+      return;
+    }
+    const key = `${jobId}|${areaId ?? ""}|${optionId ?? ""}`;
+    const isContextSwitch = key !== hydratedKeyRef.current;
+    if (!isContextSwitch && dirtyRef.current) {
       return;
     }
     setDraft(hydrateMergedLayoutState(job, option ?? null, areaId ?? null));
     setSaveStatus("idle");
     setSaveError(null);
+    dirtyRef.current = false;
+    hydratedKeyRef.current = key;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid resetting on every job snapshot reference; rely on serialized plan/option payloads
-  }, [areaId, jobId, option?.id, planSig, optionPlacementSig, legacyOptionSig]);
+  }, [areaId, jobId, optionId, planSig, optionPlacementSig, legacyOptionSig]);
 
   /** Recompute summary when resolved slab dimensions change (e.g. photo aspect loaded). */
   useEffect(() => {
@@ -53,6 +77,7 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
 
   const updateDraft = useCallback(
     (fn: (d: SavedLayoutStudioState) => SavedLayoutStudioState) => {
+      dirtyRef.current = true;
       setDraft((d) => {
         const next = fn(d);
         return recomputeDraftSummary(next, option ?? null, layoutSlabs);
@@ -63,7 +88,17 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
 
   const replaceDraft = useCallback(
     (next: SavedLayoutStudioState) => {
+      dirtyRef.current = true;
       setDraft(recomputeDraftSummary(next, option ?? null, layoutSlabs));
+    },
+    [option, layoutSlabs]
+  );
+
+  /** Internal: replace draft with server-confirmed state without marking dirty. */
+  const applyServerDraft = useCallback(
+    (next: SavedLayoutStudioState) => {
+      setDraft(recomputeDraftSummary(next, option ?? null, layoutSlabs));
+      dirtyRef.current = false;
     },
     [option, layoutSlabs]
   );
@@ -84,17 +119,23 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
   /** Pass `draftOverride` when persisting state that is not yet committed to React state (e.g. same-tick tab switch). */
   const save = useCallback(
     async (draftOverride?: SavedLayoutStudioState): Promise<boolean> => {
-      if (!job || !jobId) return false;
+      if (!job || !jobId || !companyId) return false;
       const toPersist = draftOverride ?? draft;
       setSaveStatus("saving");
       setSaveError(null);
       try {
         const previewBlob = await buildPreviewBlob(toPersist);
-        const saved = await persistLayoutDraft(jobId, job, optionId, option ?? null, toPersist, areaId ?? null, {
-          previewBlob,
-          layoutSlabs,
-        });
-        replaceDraft(recomputeDraftSummary(saved, option ?? null, layoutSlabs));
+        const saved = await persistLayoutDraft(
+          companyId,
+          jobId,
+          job,
+          optionId,
+          option ?? null,
+          toPersist,
+          areaId ?? null,
+          { previewBlob, layoutSlabs }
+        );
+        applyServerDraft(recomputeDraftSummary(saved, option ?? null, layoutSlabs));
         setSaveStatus("saved");
         window.setTimeout(() => setSaveStatus("idle"), 2200);
         return true;
@@ -104,21 +145,26 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
         return false;
       }
     },
-    [areaId, buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]
+    [applyServerDraft, areaId, buildPreviewBlob, companyId, draft, job, jobId, layoutSlabs, option, optionId]
   );
 
   const saveQuotePhase = useCallback(async (): Promise<boolean> => {
-    if (!job || !jobId || !option || !optionId) return false;
+    if (!job || !jobId || !option || !optionId || !companyId) return false;
     setSaveStatus("saving");
     setSaveError(null);
     try {
       const previewBlob = await buildPreviewBlob(draft);
-      const saved = await persistLayoutDraft(jobId, job, optionId, option, draft, areaId ?? null, {
-        previewBlob,
-        quotePromotion: true,
-        layoutSlabs,
-      });
-      replaceDraft(recomputeDraftSummary(saved, option, layoutSlabs));
+      const saved = await persistLayoutDraft(
+        companyId,
+        jobId,
+        job,
+        optionId,
+        option,
+        draft,
+        areaId ?? null,
+        { previewBlob, quotePromotion: true, layoutSlabs }
+      );
+      applyServerDraft(recomputeDraftSummary(saved, option, layoutSlabs));
       setSaveStatus("saved");
       window.setTimeout(() => setSaveStatus("idle"), 2200);
       return true;
@@ -127,7 +173,7 @@ export function useLayoutStudio({ job, jobId, areaId, option, optionId }: Params
       setSaveError(e instanceof Error ? e.message : "Could not save layout.");
       return false;
     }
-  }, [areaId, buildPreviewBlob, draft, job, jobId, layoutSlabs, option, optionId, replaceDraft]);
+  }, [applyServerDraft, areaId, buildPreviewBlob, companyId, draft, job, jobId, layoutSlabs, option, optionId]);
 
   return {
     draft,

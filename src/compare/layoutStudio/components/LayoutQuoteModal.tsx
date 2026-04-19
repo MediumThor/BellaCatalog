@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import {
+  canTransitionJobStatus,
   customerDisplayName,
+  JOB_STATUS_COLOR,
+  JOB_STATUS_LABELS,
+  normalizeJobStatus,
   type CustomerRecord,
   type JobComparisonOptionRecord,
   type JobRecord,
+  type JobStatus,
   type LayoutQuoteCustomerRowId,
   type LayoutQuoteSettings,
   type MaterialChargeMode,
 } from "../../../types/compareQuote";
-import type { LayoutQuoteShareLivePreviewV1 } from "../types/layoutQuoteShare";
+import type {
+  LayoutQuoteBrandingSnapshot,
+  LayoutQuoteShareLivePreviewV1,
+} from "../types/layoutQuoteShare";
+import { useAuth } from "../../../auth/AuthProvider";
+import { useCompany } from "../../../company/useCompany";
+import { transitionJobStatus } from "../../../services/compareQuoteFirestore";
 import { formatMoney } from "../../../utils/priceHelpers";
 import { effectiveQuoteSquareFootage } from "../../../utils/quotedPrice";
 import type { LayoutSlab, SavedLayoutStudioState } from "../types";
@@ -32,7 +43,7 @@ import {
 } from "../utils/commercialQuote";
 import { piecesHaveAnyScale } from "../utils/sourcePages";
 import { PlaceLayoutPreview } from "./PlaceLayoutPreview";
-import { LayoutQuoteSheet } from "./LayoutQuoteSheet";
+import { LayoutQuoteSheet, type LayoutQuoteSheetPricing } from "./LayoutQuoteSheet";
 import type { QuoteAllMaterialsSection } from "./QuotePhaseAllMaterialsView";
 
 type Props = {
@@ -129,6 +140,41 @@ export function LayoutQuoteModal({
   const [createError, setCreateError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const { activeCompany, role, permissions } = useCompany();
+  const { user } = useAuth();
+  const canEditPricing = Boolean(
+    role === "owner" || role === "admin" || role === "manager" || permissions.canCreateJobs
+  );
+  const companyDefaultDepositPct =
+    activeCompany?.settings?.defaultRequiredDepositPercent ?? null;
+
+  const brandingSnapshot = useMemo<LayoutQuoteBrandingSnapshot | null>(() => {
+    if (!activeCompany) return null;
+    const address = activeCompany.address;
+    const addressLines: string[] = [];
+    if (address?.line1?.trim()) addressLines.push(address.line1.trim());
+    if (address?.line2?.trim()) addressLines.push(address.line2.trim());
+    const cityLine = [
+      address?.city?.trim(),
+      [address?.state?.trim(), address?.postalCode?.trim()]
+        .filter(Boolean)
+        .join(" "),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    if (cityLine) addressLines.push(cityLine);
+    const country = address?.country?.trim();
+    if (country && country.toUpperCase() !== "US") addressLines.push(country);
+    return {
+      companyName: activeCompany.name ?? null,
+      companyLogoUrl: activeCompany.branding.logoUrl ?? null,
+      companyAddressLines: addressLines,
+      quoteHeaderText: activeCompany.branding.quoteHeaderText ?? null,
+      quoteFooterText: activeCompany.branding.quoteFooterText ?? null,
+      primaryColor: activeCompany.branding.primaryColor ?? null,
+      accentColor: activeCompany.branding.accentColor ?? null,
+    };
+  }, [activeCompany]);
 
   const primarySlab = useMemo(() => {
     if (!layoutSlabs.length) return null;
@@ -138,6 +184,29 @@ export function LayoutQuoteModal({
 
   const isAllMaterialsQuote = (allMaterialsSections?.length ?? 0) > 0;
   const activeSlabLabel = primarySlab?.label ?? "—";
+
+  // ---- Job pricing snapshot (read-only here) ------------------------------
+  // Editing happens in the Quote phase tab's `Pricing settings` modal so that
+  // sales reps configure deposit + quoted total once per job rather than
+  // every time they open this share/print modal.
+  const persistedTotal =
+    typeof job.quotedTotal === "number" && Number.isFinite(job.quotedTotal) && job.quotedTotal >= 0
+      ? job.quotedTotal
+      : null;
+  const persistedDepositPct =
+    typeof job.requiredDepositPercent === "number" && Number.isFinite(job.requiredDepositPercent)
+      ? job.requiredDepositPercent
+      : null;
+  const persistedDepositAmt =
+    typeof job.requiredDepositAmount === "number" && Number.isFinite(job.requiredDepositAmount)
+      ? job.requiredDepositAmount
+      : null;
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setStatusError(null);
+  }, [open]);
 
   const ppi = draft.calibration.pixelsPerInch;
   const hasScaledPieces = piecesHaveAnyScale(previewPieces, ppi);
@@ -338,6 +407,8 @@ export function LayoutQuoteModal({
         Number.isFinite(quoteSettings.sinkCutoutEach) && quoteSettings.sinkCutoutEach >= 0
           ? quoteSettings.sinkCutoutEach
           : 0,
+      customSinkAddOnTotal: 0,
+      customSinkCount: 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
       miterAddOnTotal: 0,
@@ -364,6 +435,8 @@ export function LayoutQuoteModal({
       total.sinkAddOnTotal += section.commercial.sinkAddOnTotal;
       total.sinkCutoutCount += section.commercial.sinkCutoutCount;
       total.outletCutoutCount += section.commercial.outletCutoutCount;
+      total.customSinkAddOnTotal += section.commercial.customSinkAddOnTotal;
+      total.customSinkCount += section.commercial.customSinkCount;
       total.splashAddOnTotal += section.commercial.splashAddOnTotal;
       total.profileAddOnTotal += section.commercial.profileAddOnTotal;
       total.miterAddOnTotal += section.commercial.miterAddOnTotal;
@@ -460,7 +533,7 @@ export function LayoutQuoteModal({
     [allMaterialsSections],
   );
 
-  const model = useMemo(
+  const baseModel = useMemo(
     () =>
       isAllMaterialsQuote
         ? buildAllMaterialsLayoutQuoteDisplayModel({
@@ -511,6 +584,42 @@ export function LayoutQuoteModal({
       singleCustomerRows,
       singleCustomerTotal,
     ],
+  );
+
+  const computedTotal = isAllMaterialsQuote ? allMaterialsCustomerTotal : singleCustomerTotal;
+  const sheetPricing = useMemo<LayoutQuoteSheetPricing>(() => {
+    const customerTotal = persistedTotal ?? computedTotal ?? null;
+    const isEstimate = persistedTotal == null;
+    let depositPercent = persistedDepositPct;
+    if (depositPercent == null) depositPercent = companyDefaultDepositPct;
+    let depositAmount = persistedDepositAmt;
+    if (depositAmount == null && depositPercent != null && customerTotal != null) {
+      depositAmount = Math.round((depositPercent / 100) * customerTotal * 100) / 100;
+    }
+    return {
+      customerTotal,
+      isEstimate,
+      depositPercent,
+      depositAmount,
+    };
+  }, [
+    companyDefaultDepositPct,
+    computedTotal,
+    persistedDepositAmt,
+    persistedDepositPct,
+    persistedTotal,
+  ]);
+
+  const model = useMemo(
+    () => ({
+      ...baseModel,
+      branding: brandingSnapshot ?? null,
+      // Carry the persisted pricing/deposit snapshot on the model so it
+      // round-trips through `sharePayloadFromDisplayModel` and renders on
+      // the public read-only share page.
+      pricing: sheetPricing,
+    }),
+    [baseModel, brandingSnapshot, sheetPricing]
   );
 
   const livePlacement =
@@ -640,6 +749,7 @@ export function LayoutQuoteModal({
           ...basePayload,
           ...(layoutLivePreview ? { layoutLivePreview } : {}),
           ...(layoutLiveMaterialPreviews ? { layoutLiveMaterialPreviews } : {}),
+          ...(brandingSnapshot ? { branding: brandingSnapshot } : {}),
         },
       });
       setShareId(id);
@@ -672,6 +782,31 @@ export function LayoutQuoteModal({
       setCreateError("Clipboard unavailable.");
     }
   }, [shareUrl]);
+
+  const canonicalStatus = normalizeJobStatus(job.status);
+  const canMarkAsQuote =
+    canEditPricing && canTransitionJobStatus(job.status, "quote" as JobStatus);
+  const handleMarkAsQuote = useCallback(async () => {
+    if (!job.companyId || !user?.uid) {
+      setStatusError("Cannot update status without a signed-in user.");
+      return;
+    }
+    setStatusSaving(true);
+    setStatusError(null);
+    try {
+      await transitionJobStatus(
+        job.companyId,
+        job.customerId,
+        job.id,
+        "quote" as JobStatus,
+        user.uid,
+      );
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "Failed to advance status.");
+    } finally {
+      setStatusSaving(false);
+    }
+  }, [job, user?.uid]);
 
   if (!open) return null;
 
@@ -737,12 +872,72 @@ export function LayoutQuoteModal({
           </p>
         )}
 
+        <section
+          className="ls-layout-quote-pricing-editor ls-layout-quote-pricing-editor--status-only ls-no-print glass-panel"
+          aria-labelledby="ls-layout-quote-pricing-editor-title"
+        >
+          <header className="ls-layout-quote-pricing-editor__head">
+            <div>
+              <h3 id="ls-layout-quote-pricing-editor-title" className="ls-layout-quote-pricing-editor__title">
+                Pricing &amp; deposit
+              </h3>
+              <p className="ls-layout-quote-pricing-editor__lede">
+                Quoted total{" "}
+                <strong>
+                  {sheetPricing.customerTotal != null
+                    ? formatMoney(sheetPricing.customerTotal)
+                    : "—"}
+                  {sheetPricing.isEstimate ? " (live estimate)" : ""}
+                </strong>
+                {sheetPricing.depositAmount != null ? (
+                  <>
+                    {" · Required deposit "}
+                    <strong>{formatMoney(sheetPricing.depositAmount)}</strong>
+                    {sheetPricing.depositPercent != null
+                      ? ` (${formatPercentDisplay(sheetPricing.depositPercent)}%)`
+                      : ""}
+                  </>
+                ) : (
+                  " · No deposit configured"
+                )}
+                . Edit these from the Quote phase tab&rsquo;s{" "}
+                <strong>Pricing settings</strong>.
+              </p>
+            </div>
+            <div className="ls-layout-quote-pricing-editor__status">
+              <span
+                className="ls-layout-quote-pricing-editor__status-pill"
+                style={{ backgroundColor: JOB_STATUS_COLOR[canonicalStatus] }}
+              >
+                {JOB_STATUS_LABELS[canonicalStatus]}
+              </span>
+              {canMarkAsQuote ? (
+                <button
+                  type="button"
+                  className="ls-btn ls-btn-primary"
+                  onClick={() => void handleMarkAsQuote()}
+                  disabled={statusSaving}
+                >
+                  {statusSaving ? "Updating…" : "Mark as Quote sent"}
+                </button>
+              ) : null}
+            </div>
+          </header>
+
+          {statusError ? (
+            <p className="ls-layout-quote-pricing-editor__error" role="alert">
+              {statusError}
+            </p>
+          ) : null}
+        </section>
+
         <div className="ls-layout-quote-modal-body">
           <LayoutQuoteSheet
             sheetId="ls-layout-quote-print-root"
             model={model}
             livePlacement={livePlacement ?? undefined}
             liveMaterialSections={liveMaterialSections ?? undefined}
+            pricing={sheetPricing}
           />
         </div>
       </div>
@@ -833,11 +1028,23 @@ function buildCustomerRows(input: {
       });
     }
     if (include("sinkCutouts")) {
-      const cutSub =
-        commercial.cutoutEachPrice > 0
-          ? ` (${commercial.sinkCutoutCount} sink + ${commercial.outletCutoutCount} outlet × ${formatMoney(commercial.cutoutEachPrice)})`
+      const flatSinks = Math.max(0, commercial.sinkCutoutCount - commercial.customSinkCount);
+      const flatTerms: string[] = [];
+      if (commercial.cutoutEachPrice > 0) {
+        if (flatSinks > 0) flatTerms.push(`${flatSinks} sink`);
+        if (commercial.outletCutoutCount > 0) flatTerms.push(`${commercial.outletCutoutCount} outlet`);
+      }
+      const flatSub =
+        flatTerms.length > 0
+          ? `${flatTerms.join(" + ")} × ${formatMoney(commercial.cutoutEachPrice)}`
           : "";
-      rows.push({ label: `Cutouts${cutSub}`, value: formatMoney(commercial.sinkAddOnTotal) });
+      const customSub =
+        commercial.customSinkCount > 0
+          ? `${commercial.customSinkCount} custom sink${commercial.customSinkCount === 1 ? "" : "s"} = ${formatMoney(commercial.customSinkAddOnTotal)}`
+          : "";
+      const subParts = [flatSub, customSub].filter(Boolean);
+      const subText = subParts.length > 0 ? ` (${subParts.join("; ")})` : "";
+      rows.push({ label: `Cutouts${subText}`, value: formatMoney(commercial.sinkAddOnTotal) });
     }
     if (include("splashAddOn")) {
       rows.push({
@@ -882,4 +1089,9 @@ function materialChargeModeLabelFromLines(
 
 function chargeModeLabel(mode: MaterialChargeMode): string {
   return mode === "full_slab" ? "Full slab" : "Material used";
+}
+
+function formatPercentDisplay(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : String(rounded);
 }

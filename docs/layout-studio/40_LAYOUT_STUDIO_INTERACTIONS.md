@@ -54,6 +54,35 @@ Key actions:
 
 These modes should be easy to switch between.
 
+### Mode 4: Cut (after Quote)
+
+Internal fabrication handoff — not a customer-facing sales step. See [50_LAYOUT_STUDIO_CUT_PHASE.md](./50_LAYOUT_STUDIO_CUT_PHASE.md).
+
+**Layout:** two panes — **slab placement on the left**, **DXF on the right**.
+
+**Key actions:**
+
+- pick a scanned slab from the external inventory library
+- import a DXF from an external source
+- drag / rotate the DXF footprint on the scanned slab (correct physical scale)
+- verify alignment, then export for Alphacam handoff
+
+**Explicitly not in scope here:**
+
+- editing DXF geometry (read-only preview)
+- editing the slab photograph
+- Plan-style calibration on the slab (the scan arrives **pre-calibrated** from the external project)
+
+---
+
+## Cut phase interaction notes
+
+- **Right pane (DXF):** present as **read-only** reference — clear that the file is the shop’s source-of-truth bytes, unchanged.
+- **Left pane (slab):** focus on **placement** affordances — drag, rotate, optional mirror; clear active slab / selection state.
+- **Out of bounds:** warn when geometry extends past the slab; avoid harsh blocking unless policy requires it.
+- **Export:** calm confirmation that the **original DXF is unchanged** and that placement is carried as metadata / sidecar for Alphacam.
+- **Handoff copy:** user understands the package is for **external** toolpath work, not executed inside BellaCatalog.
+
 ---
 
 ## UX principle: guided, not overwhelming

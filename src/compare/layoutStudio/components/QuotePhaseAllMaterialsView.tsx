@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   JobComparisonOptionRecord,
   JobRecord,
@@ -44,6 +44,19 @@ type Props = {
   onOpenQuoteSettings: () => void;
   customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
   onSetCustomerExclusion: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
+  /** Quoted total override saved on the job (`null` means use the live estimate). */
+  jobQuotedTotalOverride: number | null;
+  /** Persisted deposit % override on the job. */
+  jobDepositPercentOverride: number | null;
+  /** Persisted deposit $ override on the job. */
+  jobDepositAmountOverride: number | null;
+  /** Company-wide default deposit % (Settings → Pricing defaults). */
+  companyDefaultDepositPercent: number | null;
+  /**
+   * Reports the live combined installed estimate up to the parent so it can be
+   * shown as the placeholder for the quoted-total override in the settings modal.
+   */
+  onLiveEstimateChange?: (total: number | null) => void;
 };
 
 type ComputedMaterial = QuoteAllMaterialsSection & {
@@ -74,6 +87,11 @@ export function QuotePhaseAllMaterialsView({
   onOpenQuoteSettings,
   customerExclusions,
   onSetCustomerExclusion,
+  jobQuotedTotalOverride,
+  jobDepositPercentOverride,
+  jobDepositAmountOverride,
+  companyDefaultDepositPercent,
+  onLiveEstimateChange,
 }: Props) {
   const [slabPricingOptionId, setSlabPricingOptionId] = useState<string | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
@@ -159,6 +177,8 @@ export function QuotePhaseAllMaterialsView({
         Number.isFinite(quoteSettings.sinkCutoutEach) && quoteSettings.sinkCutoutEach >= 0
           ? quoteSettings.sinkCutoutEach
           : 0,
+      customSinkAddOnTotal: 0,
+      customSinkCount: 0,
       splashAddOnTotal: 0,
       profileAddOnTotal: 0,
       miterAddOnTotal: 0,
@@ -185,6 +205,8 @@ export function QuotePhaseAllMaterialsView({
       total.sinkAddOnTotal += material.commercial.sinkAddOnTotal;
       total.sinkCutoutCount += material.commercial.sinkCutoutCount;
       total.outletCutoutCount += material.commercial.outletCutoutCount;
+      total.customSinkAddOnTotal += material.commercial.customSinkAddOnTotal;
+      total.customSinkCount += material.commercial.customSinkCount;
       total.splashAddOnTotal += material.commercial.splashAddOnTotal;
       total.profileAddOnTotal += material.commercial.profileAddOnTotal;
       total.miterAddOnTotal += material.commercial.miterAddOnTotal;
@@ -247,6 +269,29 @@ export function QuotePhaseAllMaterialsView({
     return combinedCommercial.grandTotal;
   }, [combinedCommercial]);
   const customerPerSqft = customerTotal != null && totalAreaSqFt > 0 ? customerTotal / totalAreaSqFt : null;
+
+  useEffect(() => {
+    onLiveEstimateChange?.(customerTotal);
+  }, [customerTotal, onLiveEstimateChange]);
+
+  const resolvedTotalForDeposit = jobQuotedTotalOverride ?? customerTotal ?? null;
+  const resolvedDepositPercent =
+    jobDepositPercentOverride != null ? jobDepositPercentOverride : companyDefaultDepositPercent;
+  const resolvedDepositAmount = useMemo(() => {
+    if (jobDepositAmountOverride != null) return jobDepositAmountOverride;
+    if (resolvedDepositPercent != null && resolvedTotalForDeposit != null) {
+      return Math.round((resolvedDepositPercent / 100) * resolvedTotalForDeposit * 100) / 100;
+    }
+    return null;
+  }, [jobDepositAmountOverride, resolvedDepositPercent, resolvedTotalForDeposit]);
+  const depositSourceLabel =
+    jobDepositAmountOverride != null
+      ? "fixed override"
+      : jobDepositPercentOverride != null
+        ? "job override"
+        : companyDefaultDepositPercent != null
+          ? "company default"
+          : null;
   /** Area-weighted catalog $/sq ft across materials (matches combined material charge). */
   const blendedVendorCatalogPerSqft = useMemo(() => {
     let num = 0;
@@ -631,12 +676,7 @@ export function QuotePhaseAllMaterialsView({
                 dt={
                   <>
                     Cutouts{" "}
-                    {combinedCommercial.cutoutEachPrice > 0 ? (
-                      <span className="ls-quote-dl-sub">
-                        ({combinedCommercial.sinkCutoutCount} sink + {combinedCommercial.outletCutoutCount} outlet ×{" "}
-                        {formatMoney(combinedCommercial.cutoutEachPrice)})
-                      </span>
-                    ) : null}
+                    <CutoutsSubLabel commercial={combinedCommercial} />
                   </>
                 }
                 dd={formatMoney(combinedCommercial.sinkAddOnTotal)}
@@ -712,6 +752,37 @@ export function QuotePhaseAllMaterialsView({
 
         </dl>
 
+        <div
+          className="ls-quote-deposit-row"
+          aria-label="Required deposit (saved on the job)"
+        >
+          <div className="ls-quote-deposit-row__copy">
+            <span className="ls-quote-deposit-row__label">Required deposit</span>
+            <span className="ls-quote-deposit-row__sub ls-muted">
+              {jobQuotedTotalOverride != null
+                ? `Based on quoted total override ${formatMoney(jobQuotedTotalOverride)}`
+                : customerTotal != null
+                  ? `Based on installed estimate ${formatMoney(customerTotal)}`
+                  : "Set a quoted total to compute deposit."}
+              {resolvedDepositPercent != null
+                ? ` · ${formatPercentDisplay(resolvedDepositPercent)}%${
+                    depositSourceLabel ? ` (${depositSourceLabel})` : ""
+                  }`
+                : " · No deposit configured"}
+            </span>
+          </div>
+          <div className="ls-quote-deposit-row__value">
+            <strong>{resolvedDepositAmount != null ? formatMoney(resolvedDepositAmount) : "—"}</strong>
+            <button
+              type="button"
+              className="ls-btn ls-btn-secondary ls-btn-xs"
+              onClick={onOpenQuoteSettings}
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
         {(job.assumptions || computedMaterials.some((material) => material.option.notes?.trim())) ? (
           <div className="ls-quote-assumptions">
             <p className="ls-quote-assumptions-title">Assumptions & notes</p>
@@ -749,6 +820,36 @@ export function QuotePhaseAllMaterialsView({
       ) : null}
     </div>
   );
+}
+
+function CutoutsSubLabel({
+  commercial,
+}: {
+  commercial: import("../utils/commercialQuote").CommercialQuoteBreakdown;
+}) {
+  const flatSinks = Math.max(0, commercial.sinkCutoutCount - commercial.customSinkCount);
+  const flatTerms: string[] = [];
+  if (commercial.cutoutEachPrice > 0) {
+    if (flatSinks > 0) flatTerms.push(`${flatSinks} sink`);
+    if (commercial.outletCutoutCount > 0)
+      flatTerms.push(`${commercial.outletCutoutCount} outlet`);
+  }
+  const flatPart =
+    flatTerms.length > 0
+      ? `${flatTerms.join(" + ")} × ${formatMoney(commercial.cutoutEachPrice)}`
+      : "";
+  const customPart =
+    commercial.customSinkCount > 0
+      ? `${commercial.customSinkCount} custom sink${commercial.customSinkCount === 1 ? "" : "s"} = ${formatMoney(commercial.customSinkAddOnTotal)}`
+      : "";
+  const parts = [flatPart, customPart].filter(Boolean);
+  if (parts.length === 0) return null;
+  return <span className="ls-quote-dl-sub">({parts.join("; ")})</span>;
+}
+
+function formatPercentDisplay(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : String(rounded);
 }
 
 function QuoteDlRow({

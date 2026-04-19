@@ -2,6 +2,7 @@ import type { CustomerRecord, JobComparisonOptionRecord, JobRecord } from "../..
 import type { LayoutPiece, LayoutSlab, SavedLayoutStudioState } from "../types";
 import {
   LAYOUT_QUOTE_DISCLAIMER,
+  type LayoutQuoteBrandingSnapshot,
   type LayoutQuoteCustomerSnapshot,
   type LayoutQuoteDisplayValue,
   type LayoutQuoteShareLivePreviewV1,
@@ -60,6 +61,22 @@ export function layoutQuoteShareLivePreviewFromStudio(input: {
   };
 }
 
+/**
+ * Persisted "Pricing & deposit" snapshot carried on the display model.
+ * Mirrors `LayoutQuoteSheetPricing` in `LayoutQuoteSheet.tsx` so the
+ * value can flow:
+ *
+ *   modal → display model → share payload → public page → sheet
+ *
+ * without a parallel side-channel.
+ */
+export type LayoutQuoteDisplayPricing = {
+  customerTotal: number | null;
+  isEstimate: boolean;
+  depositPercent: number | null;
+  depositAmount: number | null;
+};
+
 export type LayoutQuoteDisplayModel = {
   customer: LayoutQuoteCustomerSnapshot | null;
   jobName: string;
@@ -81,6 +98,13 @@ export type LayoutQuoteDisplayModel = {
   jobAssumptions: string | null;
   optionNotes: string | null;
   disclaimer: string;
+  branding?: LayoutQuoteBrandingSnapshot | null;
+  /**
+   * Optional persisted pricing + deposit snapshot. When present, both
+   * the in-app modal and the public share page render a "Pricing &
+   * deposit" block on the printable sheet.
+   */
+  pricing?: LayoutQuoteDisplayPricing | null;
 };
 
 export function buildSingleLayoutQuoteDisplayModel(input: {
@@ -202,6 +226,17 @@ export function sharePayloadFromDisplayModel(model: LayoutQuoteDisplayModel): La
     jobAssumptions: model.jobAssumptions,
     optionNotes: model.optionNotes,
     disclaimer: model.disclaimer,
+    ...(model.branding ? { branding: model.branding } : {}),
+    ...(model.pricing
+      ? {
+          pricing: {
+            customerTotal: model.pricing.customerTotal,
+            isEstimate: model.pricing.isEstimate,
+            depositPercent: model.pricing.depositPercent,
+            depositAmount: model.pricing.depositAmount,
+          },
+        }
+      : {}),
   };
 }
 
@@ -232,6 +267,8 @@ export function displayModelFromSharePayload(p: LayoutQuoteSharePayloadV1): Layo
     jobAssumptions: p.jobAssumptions,
     optionNotes: p.optionNotes,
     disclaimer: p.disclaimer,
+    branding: p.branding ?? null,
+    pricing: p.pricing ?? null,
   };
 }
 

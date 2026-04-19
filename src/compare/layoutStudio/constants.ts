@@ -1,4 +1,21 @@
-import { LAYOUT_STUDIO_VERSION, type SavedLayoutStudioState } from "./types";
+import {
+  CUT_PHASE_VERSION,
+  LAYOUT_STUDIO_VERSION,
+  type CutPhaseState,
+  type SavedLayoutStudioState,
+} from "./types";
+
+export function createDefaultCutPhaseState(): CutPhaseState {
+  const t = new Date().toISOString();
+  return {
+    version: CUT_PHASE_VERSION,
+    dxf: null,
+    slab: null,
+    placement: null,
+    export: { status: "idle" },
+    updatedAt: t,
+  };
+}
 
 export function createDefaultLayoutState(): SavedLayoutStudioState {
   const t = new Date().toISOString();

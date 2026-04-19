@@ -29,8 +29,27 @@ export type ManualPieceDimensions =
       orientation: LShapeOrientationDeg;
     };
 
-/** Catalog sink templates (dimensions in inches). */
+/** Built-in catalog sink templates (dimensions in inches). */
 export type PieceSinkTemplateKind = "kitchen" | "vanityRound" | "vanitySquare";
+
+/**
+ * Snapshot of a company-defined sink template captured on the placed
+ * `PieceSinkCutout` at the moment it was added to the layout. We persist
+ * the geometry + price here (instead of looking them up live from
+ * `CompanySettings.customSinkTemplates`) so that later edits or deletes
+ * to the company library do not silently mutate previously-quoted jobs.
+ */
+export interface PieceSinkCustomTemplateSnapshot {
+  /** Original `CustomSinkTemplate.id` so the sink can still resolve. */
+  id: string;
+  name: string;
+  shape: "rectangle" | "oval";
+  widthIn: number;
+  depthIn: number;
+  cornerRadiusIn: number;
+  /** Per-cut price added to the commercial quote (USD). */
+  priceUsd: number;
+}
 
 /** Center-to-center spacing between adjacent faucet holes (inches). */
 export type FaucetSpreadIn = 2 | 4 | 8 | 10 | 12;
@@ -60,7 +79,18 @@ export interface PieceSinkCutout {
   id: string;
   /** Required label for quoting. */
   name: string;
-  templateKind: PieceSinkTemplateKind;
+  /**
+   * `"kitchen" | "vanityRound" | "vanitySquare"` for built-in templates,
+   * or `"custom"` when the sink came from a company-defined template
+   * captured in {@link PieceSinkCutout.customTemplate}.
+   */
+  templateKind: PieceSinkTemplateKind | "custom";
+  /**
+   * Snapshot of the company-defined template (geometry + price) at the
+   * moment this sink was placed. Required when `templateKind === "custom"`
+   * and ignored otherwise.
+   */
+  customTemplate?: PieceSinkCustomTemplateSnapshot;
   /** Piece-local X of sink center (same units as `points`). */
   centerX: number;
   /** Piece-local Y of sink center (same units as `points`). */
@@ -335,7 +365,121 @@ export interface LayoutSlab {
   sizeFromSpec?: boolean;
 }
 
-export type LayoutStudioMode = "trace" | "place" | "quote";
+export type LayoutStudioMode = "trace" | "place" | "quote" | "cut";
+
+/* ============================================================================
+ * Cut phase (post-Quote fabrication handoff)
+ *
+ * The Cut phase places an externally-sourced DXF on a real scanned slab
+ * (from physical inventory) and produces a handoff for Alphacam toolpathing.
+ *
+ * Hard invariant: the uploaded DXF file is NEVER modified. Position / rotation
+ * / mirror are stored as metadata alongside the original file and verified by
+ * checksum on export. See docs/layout-studio/50_LAYOUT_STUDIO_CUT_PHASE.md.
+ * ========================================================================== */
+
+export const CUT_PHASE_VERSION = 1;
+
+/**
+ * Reference to the imported DXF.
+ *
+ * `checksum` is computed over the original bytes at upload time and re-verified
+ * on export. Any re-import REPLACES this record end-to-end (no in-place edit).
+ */
+export interface CutPhaseDxf {
+  /** Storage download URL of the original (untouched) DXF bytes. */
+  fileUrl: string;
+  /** Storage path of the original DXF bytes. */
+  fileStoragePath: string;
+  /** Original filename as uploaded. */
+  fileName: string;
+  /** Byte length of the original file. */
+  byteLength: number;
+  /** Lowercase hex SHA-256 of the original bytes. */
+  checksum: string;
+  uploadedAt: string;
+  /** Self-reported $INSUNITS value if present in the file (informational only). */
+  unitsCode?: number | null;
+  /** Resolved unit string from the parser (informational only). */
+  unitsLabel?: "mm" | "cm" | "in" | "ft" | "unitless" | null;
+  /** Bounding box of parsed geometry in DXF source units. */
+  bbox?: { minX: number; minY: number; maxX: number; maxY: number } | null;
+}
+
+/**
+ * Reference to a scanned slab from real physical inventory.
+ *
+ * `sourceProject` identifies the originating system. For the manual-upload
+ * adapter (V1, before the external library is wired in) this is `"manual"`
+ * and `externalId` is a locally-minted id. When the external scanned-slab
+ * project comes online, additional values (e.g. `"bella-slab-scanner"`) will
+ * be added.
+ */
+export interface ScannedSlabRef {
+  /** Stable id within `sourceProject`. */
+  externalId: string;
+  /** Originating system. `"manual"` = uploaded by user inside BellaCatalog. */
+  sourceProject: "manual" | string;
+  /** Display label shown in pickers (e.g. material name + slab tag). */
+  label: string;
+  /** Storage download URL of the scanned slab image. */
+  imageUrl: string;
+  /** Storage path of the scanned slab image (when sourceProject === "manual"). */
+  imageStoragePath?: string;
+  /** Real-world width of the slab in inches. */
+  widthIn: number;
+  /** Real-world height of the slab in inches. */
+  heightIn: number;
+  /** Resolved scale (informational; placement math uses widthIn/heightIn directly). */
+  pixelsPerInch?: number | null;
+  fetchedAt: string;
+  notes?: string | null;
+}
+
+/**
+ * Placement of the imported DXF on the scanned slab, expressed as a transform
+ * in slab inch space (origin = top-left of slab).
+ *
+ * `centerX`/`centerY` is the position of the DXF bounding-box center on the
+ * slab. Rotation is degrees clockwise. Mirror flips the DXF horizontally
+ * before rotation (rendering only — the file stays unchanged).
+ */
+export interface CutPlacement {
+  /** Inches from slab left edge to DXF bbox center. */
+  centerX: number;
+  /** Inches from slab top edge to DXF bbox center. */
+  centerY: number;
+  rotationDeg: number;
+  mirrored?: boolean;
+}
+
+export type CutExportStatus = "idle" | "pending" | "ready" | "error";
+
+export interface CutExportState {
+  status: CutExportStatus;
+  lastExportedAt?: string | null;
+  /** Storage URL of the most recent export package (manifest JSON or zip). */
+  exportArtifactUrl?: string | null;
+  exportArtifactStoragePath?: string | null;
+  /** Last error message when `status === "error"`. */
+  errorMessage?: string | null;
+}
+
+/**
+ * Sibling artifact to {@link SavedLayoutStudioState}. Persisted on the
+ * comparison option (per area when `layoutAreaStates` is in use).
+ *
+ * Quote data MUST stay clean — do not merge fields back into the layout draft.
+ */
+export interface CutPhaseState {
+  version: number;
+  dxf: CutPhaseDxf | null;
+  slab: ScannedSlabRef | null;
+  placement: CutPlacement | null;
+  export: CutExportState;
+  updatedAt: string;
+  updatedBy?: string | null;
+}
 
 export type TraceTool =
   | "select"

@@ -1,10 +1,19 @@
 rules_version = '2';
+// Rev: 2026-04-18 — re-released after granting firebase-rules SA datastore.viewer.
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() {
       return request.auth != null;
     }
 
+    function companyMember(companyId) {
+      return signedIn()
+        && firestore.exists(
+          /databases/(default)/documents/companies/$(companyId)/members/$(request.auth.uid)
+        );
+    }
+
+    // -------- Legacy per-user layout storage (kept for backward read) --
     match /layout-sources/{userId}/{optionId}/{allPaths=**} {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
@@ -19,6 +28,52 @@ service firebase.storage {
 
     match /layout-quote-shares/{userId}/{shareId}/{allPaths=**} {
       allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // -------- Company branding & price imports (SaaS) ----------------
+    // Company-owned branding assets (logos displayed in the app header
+    // and on shared/printed quotes). Logos are public-read so unsigned
+    // recipients of share links and generated PDFs can load them.
+    match /companies/{companyId}/branding/{allPaths=**} {
+      allow read: if true;
+      allow write: if companyMember(companyId);
+    }
+
+    // Company-owned price-sheet uploads (AI import pipeline). Reads are
+    // limited to company members; the backend parser (Cloud Function)
+    // uses a privileged SDK that bypasses these rules.
+    match /companies/{companyId}/price-imports/{allPaths=**} {
+      allow read, write: if companyMember(companyId);
+    }
+
+    // -------- Company-scoped compare/quote assets -------------------
+    // Mirrored job option images (thumbnails pulled in from catalog
+    // items), layout sources (plan PDFs/images uploaded per job), and
+    // layout preview snapshots used on shared quotes.
+    match /companies/{companyId}/customers/{customerId}/jobs/{jobId}/option-images/{allPaths=**} {
+      allow read: if companyMember(companyId);
+      allow write: if companyMember(companyId);
+    }
+
+    match /companies/{companyId}/customers/{customerId}/jobs/{jobId}/layout-sources/{allPaths=**} {
+      allow read: if companyMember(companyId);
+      allow write: if companyMember(companyId);
+    }
+
+    match /companies/{companyId}/customers/{customerId}/jobs/{jobId}/layout-previews/{allPaths=**} {
+      // Preview images are embedded in shared quote links, so we keep
+      // them public-read. Writes are restricted to members.
+      allow read: if true;
+      allow write: if companyMember(companyId);
+    }
+
+    // Cut phase (post-Quote fabrication handoff): immutable DXF bytes,
+    // manually-uploaded scanned slab images, and Alphacam handoff exports.
+    // Internal shop tooling — not embedded in customer-facing share links,
+    // so reads are restricted to company members.
+    match /companies/{companyId}/customers/{customerId}/jobs/{jobId}/cut-phase/{allPaths=**} {
+      allow read: if companyMember(companyId);
+      allow write: if companyMember(companyId);
     }
   }
 }

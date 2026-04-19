@@ -1,24 +1,23 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CatalogBrowser } from "./components/CatalogBrowser";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
-import { SettingsModal } from "./components/SettingsModal";
 import { useAuth } from "./auth/AuthProvider";
-import { useMergedCatalog } from "./hooks/useMergedCatalog";
+import { useCompany } from "./company/useCompany";
+import { useCompanyCatalog } from "./catalog/hooks/useCompanyCatalog";
 
 export default function App() {
+  const navigate = useNavigate();
   const { user, signOut, profileDisplayName } = useAuth();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { activeCompany, activeCompanyId, role, permissions } = useCompany();
   const {
-    baseCatalog,
     catalog,
     loadError,
-    importWarnings,
-    overlayVersion,
     bumpOverlay,
     horusCatalog,
-  } = useMergedCatalog();
+  } = useCompanyCatalog(activeCompanyId);
 
   const headerUserLabel = useMemo(() => {
     const name = profileDisplayName?.trim();
@@ -32,13 +31,19 @@ export default function App() {
     return null;
   }, [profileDisplayName, user?.email]);
 
+  const canManageCompany =
+    role === "owner" || role === "admin" || permissions.canManageCatalog;
+
   return (
     <AppShell>
       <Header
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => navigate("/settings")}
         userLabel={headerUserLabel}
         userTitle={headerUserTitle}
         onSignOut={() => void signOut()}
+        companyName={activeCompany?.name}
+        companyLogoUrl={activeCompany?.branding.logoUrl ?? null}
+        canManageCompany={canManageCompany}
       />
       <main className="app-main bella-page">
         <CatalogBrowser
@@ -48,16 +53,7 @@ export default function App() {
           horusCatalog={horusCatalog}
         />
       </main>
-      <Footer />
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        importWarnings={importWarnings}
-        showDataManager
-        baseCatalog={baseCatalog}
-        overlayVersion={overlayVersion}
-        bumpOverlay={bumpOverlay}
-      />
+      <Footer companyName={activeCompany?.name} />
     </AppShell>
   );
 }

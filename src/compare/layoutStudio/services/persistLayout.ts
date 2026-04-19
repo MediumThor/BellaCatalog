@@ -226,6 +226,7 @@ export function recomputeDraftSummary(
 }
 
 export async function persistLayoutDraft(
+  companyId: string,
   jobId: string,
   job: JobRecord,
   optionId: string | undefined,
@@ -234,6 +235,7 @@ export async function persistLayoutDraft(
   areaId?: string | null,
   opts?: { previewBlob?: Blob | null; quotePromotion?: boolean; layoutSlabs?: LayoutSlab[] }
 ): Promise<SavedLayoutStudioState> {
+  const customerId = job.customerId;
   const withPlacements = recomputeDraftSummary(draft, option, opts?.layoutSlabs);
   const t = new Date().toISOString();
 
@@ -245,7 +247,7 @@ export async function persistLayoutDraft(
         area.id === areaId ? { ...area, updatedAt: t, layoutStudioPlan } : area
       )
     : job.areas ?? null;
-  await updateJob(jobId, {
+  await updateJob(companyId, customerId, jobId, {
     layoutStudioPlan,
     ...(areaPatch ? { areas: areaPatch, areaType: areaPatch.map((area) => area.name).join(", ") } : {}),
   });
@@ -258,7 +260,13 @@ export async function persistLayoutDraft(
   let previewUrl: string | null = withPlacements.preview?.imageUrl ?? null;
 
   if (opts?.previewBlob) {
-    const { downloadUrl } = await uploadLayoutPreviewPng(option.ownerUserId, optionId, opts.previewBlob);
+    const { downloadUrl } = await uploadLayoutPreviewPng(
+      companyId,
+      customerId,
+      jobId,
+      optionId,
+      opts.previewBlob
+    );
     preview = { imageUrl: downloadUrl, generatedAt: t, variant: "plan" };
     previewUrl = downloadUrl;
   }
@@ -323,9 +331,14 @@ export async function persistLayoutDraft(
   }
 
   const cleaned = omitUndefinedDeep(patch as unknown as Record<string, unknown>) as Record<string, unknown>;
-  await updateJobComparisonOption(optionId, cleaned as Partial<JobComparisonOptionRecord>, {
-    clearLegacyLayoutStudio: !!option.layoutStudio,
-  });
+  await updateJobComparisonOption(
+    companyId,
+    customerId,
+    jobId,
+    optionId,
+    cleaned as Partial<JobComparisonOptionRecord>,
+    { clearLegacyLayoutStudio: !!option.layoutStudio }
+  );
 
   return {
     ...withPlacements,

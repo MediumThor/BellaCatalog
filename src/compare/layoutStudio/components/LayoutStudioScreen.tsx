@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Link, useSearchParams } from "react-router-dom";
+import { AnimatedTabBar, type AnimatedTabBarTab } from "../../../components/AnimatedTabBar";
 import {
   customerDisplayName,
   type CustomerRecord,
@@ -20,7 +21,11 @@ import {
   type LayoutQuoteCustomerRowId,
   type LayoutQuoteSettings,
 } from "../../../types/compareQuote";
-import { updateJob } from "../../../services/compareQuoteFirestore";
+import {
+  setJobDepositRequirement,
+  setJobQuotedTotal,
+  updateJob,
+} from "../../../services/compareQuoteFirestore";
 import { createDefaultLayoutState } from "../constants";
 import { recomputeDraftSummary } from "../services/persistLayout";
 import { uploadJobLayoutSource, uploadJobLayoutSourcePreviewPng } from "../services/layoutStorage";
@@ -120,8 +125,17 @@ import { DEFAULT_SLAB_THICKNESS_IN, parseThicknessToInches } from "../utils/pars
 import { LayoutQuoteModal } from "./LayoutQuoteModal";
 import { QuotePhaseAllMaterialsView } from "./QuotePhaseAllMaterialsView";
 import { QuotePhaseView } from "./QuotePhaseView";
+import { CutPhaseView } from "./CutPhaseView";
+import { useCutPhase } from "../hooks/useCutPhase";
 import { LayoutQuoteSettingsModal } from "./LayoutQuoteSettingsModal";
 import { mergeCustomerExclusions, mergeLayoutQuoteSettings } from "../utils/commercialQuote";
+import { useCompany } from "../../../company/useCompany";
+import { updateCompanySettings } from "../../../company/companyBrandingStorage";
+import type {
+  BuiltinSinkKind,
+  BuiltinSinkOverride,
+  CustomSinkTemplate,
+} from "../../../company/types";
 import { StudioEntryHub } from "./StudioEntryHub";
 import { UploadProgressRing } from "./UploadProgressRing";
 import {
@@ -902,7 +916,12 @@ type Props = {
   onOptionChange: (optionId: string) => void;
   onRemoveMaterialOption?: (optionId: string) => void;
   onOpenAddMaterials?: () => void;
-  ownerUserId: string;
+  /**
+   * Owner of the legacy user-scoped job. Still accepted for back-compat but
+   * unused now that uploads and writes are keyed by companyId/customerId.
+   */
+  ownerUserId?: string;
+  companyId: string;
   onBack: () => void | Promise<void>;
   defaultPlanCanvasExpanded?: boolean;
 };
@@ -917,7 +936,8 @@ export function LayoutStudioScreen({
   onOptionChange,
   onRemoveMaterialOption,
   onOpenAddMaterials,
-  ownerUserId,
+  ownerUserId: _ownerUserId,
+  companyId,
   onBack,
   defaultPlanCanvasExpanded = false,
 }: Props) {
@@ -925,17 +945,28 @@ export function LayoutStudioScreen({
   const uploadedPdfFileRef = useRef<{ uploadedAt: string; file: File } | null>(null);
   const { draft, updateDraft, setDraft, save, saveQuotePhase, saveStatus, saveError, layoutSlabs } =
     useLayoutStudio({
+      companyId,
       job,
       jobId: job.id,
       areaId: activeAreaId ?? null,
       option: activeOption,
       optionId,
     });
+
+  const cutPhase = useCutPhase({
+    companyId,
+    job,
+    jobId: job.id,
+    areaId: activeAreaId ?? null,
+    option: activeOption,
+    optionId,
+  });
   const [, setSearchParams] = useSearchParams();
 
   const [mode, setMode] = useState<LayoutStudioMode>(() => {
     if (typeof window === "undefined") return "trace";
     const p = new URLSearchParams(window.location.search).get("phase");
+    if (p === "cut") return "cut";
     if (p === "quote") return "quote";
     if (p === "place") return "place";
     return "trace";
@@ -1184,7 +1215,144 @@ export function LayoutStudioScreen({
     onOpenAddMaterials();
   }, [onOpenAddMaterials, save, showEntryHub]);
 
-  const mergedQuoteSettings = useMemo(() => mergeLayoutQuoteSettings(job), [job]);
+  const { activeCompany, activeCompanyId, userDoc } = useCompany();
+  const companyLayoutQuoteDefaults = activeCompany?.settings?.defaultLayoutQuoteSettings ?? null;
+  const companyCustomSinkTemplates = activeCompany?.settings?.customSinkTemplates ?? null;
+  const companyBuiltinSinkOverrides = activeCompany?.settings?.builtinSinkOverrides ?? null;
+  const createCompanySinkTemplate = useCallback(
+    async (
+      input: Omit<CustomSinkTemplate, "id" | "createdAt" | "createdByUserId">,
+    ): Promise<CustomSinkTemplate> => {
+      if (!activeCompanyId) {
+        throw new Error("No active company. Switch into a company before creating a sink template.");
+      }
+      const next: CustomSinkTemplate = {
+        id: crypto.randomUUID(),
+        name: input.name,
+        shape: input.shape,
+        widthIn: input.widthIn,
+        depthIn: input.depthIn,
+        cornerRadiusIn: input.shape === "oval" ? 0 : input.cornerRadiusIn,
+        priceUsd: input.priceUsd,
+        createdAt: new Date().toISOString(),
+        createdByUserId: userDoc?.id ?? null,
+      };
+      const existing = activeCompany?.settings?.customSinkTemplates ?? [];
+      await updateCompanySettings(activeCompanyId, {
+        customSinkTemplates: [...existing, next],
+      });
+      return next;
+    },
+    [activeCompany?.settings?.customSinkTemplates, activeCompanyId, userDoc?.id],
+  );
+  /**
+   * Updates a single field set on an existing company sink template. Edits
+   * only update the company library — they do NOT propagate to placed sinks
+   * because each `PieceSinkCutout` already carries a snapshot of the
+   * template at the time it was placed (see `customTemplate` on
+   * `PieceSinkCutout`). This keeps historical jobs stable when prices or
+   * dimensions change.
+   */
+  const updateCompanySinkTemplate = useCallback(
+    async (
+      id: string,
+      patch: Omit<CustomSinkTemplate, "id" | "createdAt" | "createdByUserId">,
+    ): Promise<CustomSinkTemplate> => {
+      if (!activeCompanyId) {
+        throw new Error("No active company. Switch into a company before editing a sink template.");
+      }
+      const existing = activeCompany?.settings?.customSinkTemplates ?? [];
+      const current = existing.find((t) => t.id === id);
+      if (!current) throw new Error("That sink template no longer exists.");
+      const updated: CustomSinkTemplate = {
+        ...current,
+        name: patch.name,
+        shape: patch.shape,
+        widthIn: patch.widthIn,
+        depthIn: patch.depthIn,
+        cornerRadiusIn: patch.shape === "oval" ? 0 : patch.cornerRadiusIn,
+        priceUsd: patch.priceUsd,
+      };
+      const nextList = existing.map((t) => (t.id === id ? updated : t));
+      await updateCompanySettings(activeCompanyId, {
+        customSinkTemplates: nextList,
+      });
+      return updated;
+    },
+    [activeCompany?.settings?.customSinkTemplates, activeCompanyId],
+  );
+  /**
+   * Removes a company sink template. Does not affect already-placed sinks
+   * (they keep their snapshot) but the template will no longer appear in the
+   * dropdown for new sinks.
+   */
+  const deleteCompanySinkTemplate = useCallback(
+    async (id: string): Promise<void> => {
+      if (!activeCompanyId) {
+        throw new Error("No active company. Switch into a company before deleting a sink template.");
+      }
+      const existing = activeCompany?.settings?.customSinkTemplates ?? [];
+      const nextList = existing.filter((t) => t.id !== id);
+      await updateCompanySettings(activeCompanyId, {
+        customSinkTemplates: nextList,
+      });
+    },
+    [activeCompany?.settings?.customSinkTemplates, activeCompanyId],
+  );
+  /**
+   * Saves (or updates) a per-company override of a built-in sink template's
+   * dims and per-cut price. Like custom templates, edits affect ONLY new
+   * placements — existing placed sinks keep their snapshotted dims/price
+   * so historical jobs don't shift.
+   */
+  const upsertBuiltinSinkOverride = useCallback(
+    async (
+      kind: BuiltinSinkKind,
+      patch: Omit<BuiltinSinkOverride, "updatedAt" | "updatedByUserId">,
+    ): Promise<BuiltinSinkOverride> => {
+      if (!activeCompanyId) {
+        throw new Error("No active company. Switch into a company before editing built-in sinks.");
+      }
+      const existing = activeCompany?.settings?.builtinSinkOverrides ?? {};
+      const next: BuiltinSinkOverride = {
+        widthIn: patch.widthIn,
+        depthIn: patch.depthIn,
+        cornerRadiusIn:
+          kind === "vanityRound" ? 0 : patch.cornerRadiusIn,
+        priceUsd: patch.priceUsd,
+        updatedAt: new Date().toISOString(),
+        updatedByUserId: userDoc?.id ?? null,
+      };
+      await updateCompanySettings(activeCompanyId, {
+        builtinSinkOverrides: { ...existing, [kind]: next },
+      });
+      return next;
+    },
+    [activeCompany?.settings?.builtinSinkOverrides, activeCompanyId, userDoc?.id],
+  );
+  /**
+   * Removes the per-company override for a built-in sink, restoring the
+   * catalog defaults for new placements. Existing placed sinks keep their
+   * snapshot.
+   */
+  const resetBuiltinSinkOverride = useCallback(
+    async (kind: BuiltinSinkKind): Promise<void> => {
+      if (!activeCompanyId) {
+        throw new Error("No active company. Switch into a company before editing built-in sinks.");
+      }
+      const existing = activeCompany?.settings?.builtinSinkOverrides ?? {};
+      if (!existing[kind]) return;
+      const { [kind]: _removed, ...rest } = existing;
+      await updateCompanySettings(activeCompanyId, {
+        builtinSinkOverrides: rest,
+      });
+    },
+    [activeCompany?.settings?.builtinSinkOverrides, activeCompanyId],
+  );
+  const mergedQuoteSettings = useMemo(
+    () => mergeLayoutQuoteSettings(job, companyLayoutQuoteDefaults),
+    [job, companyLayoutQuoteDefaults],
+  );
   const [liveQuoteSettings, setLiveQuoteSettings] = useState<LayoutQuoteSettings>(mergedQuoteSettings);
 
   useEffect(() => {
@@ -1193,34 +1361,84 @@ export function LayoutStudioScreen({
 
   const saveLayoutQuoteSettings = useCallback(
     async (next: LayoutQuoteSettings) => {
-      const normalized = mergeLayoutQuoteSettings({
-        ...job,
-        layoutQuoteSettings: next,
-      });
+      const normalized = mergeLayoutQuoteSettings(
+        {
+          ...job,
+          layoutQuoteSettings: next,
+        },
+        companyLayoutQuoteDefaults,
+      );
       const previous = liveQuoteSettings;
       setLiveQuoteSettings(normalized);
       try {
-        await updateJob(job.id, { layoutQuoteSettings: normalized });
+        if (!job.companyId) throw new Error("Job missing company context");
+        await updateJob(job.companyId, job.customerId, job.id, {
+          layoutQuoteSettings: normalized,
+        });
       } catch (error) {
         setLiveQuoteSettings(previous);
         throw error;
       }
     },
-    [job, liveQuoteSettings]
+    [job, liveQuoteSettings, companyLayoutQuoteDefaults]
+  );
+
+  const companyDefaultDepositPercent = activeCompany?.settings?.defaultRequiredDepositPercent ?? null;
+
+  const jobQuotedTotalOverride =
+    typeof job.quotedTotal === "number" && Number.isFinite(job.quotedTotal) && job.quotedTotal >= 0
+      ? job.quotedTotal
+      : null;
+  const jobDepositPercentOverride =
+    typeof job.requiredDepositPercent === "number" && Number.isFinite(job.requiredDepositPercent)
+      ? job.requiredDepositPercent
+      : null;
+  const jobDepositAmountOverride =
+    typeof job.requiredDepositAmount === "number" && Number.isFinite(job.requiredDepositAmount)
+      ? job.requiredDepositAmount
+      : null;
+
+  /**
+   * Live installed estimate published by whichever quote phase view is
+   * currently rendered. Used as the placeholder for the quoted-total
+   * override in the pricing settings modal.
+   */
+  const [liveQuoteEstimate, setLiveQuoteEstimate] = useState<number | null>(null);
+
+  /**
+   * Persists the job-level pricing block (quoted total + deposit). Both
+   * writes are issued so that clearing a value with `null` propagates back
+   * to the customer-facing quote.
+   */
+  const saveJobPricing = useCallback(
+    async (next: {
+      quotedTotal: number | null;
+      requiredDepositPercent: number | null;
+      requiredDepositAmount: number | null;
+    }) => {
+      if (!job.companyId) throw new Error("Job missing company context");
+      await setJobQuotedTotal(job.companyId, job.customerId, job.id, next.quotedTotal);
+      await setJobDepositRequirement(job.companyId, job.customerId, job.id, {
+        requiredDepositPercent: next.requiredDepositPercent,
+        requiredDepositAmount: next.requiredDepositAmount,
+      });
+    },
+    [job.companyId, job.customerId, job.id],
   );
 
   const mergedCustomerExclusions = useMemo(() => mergeCustomerExclusions(job), [job]);
 
   const setCustomerExclusion = useCallback(
     async (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => {
-      await updateJob(job.id, {
+      if (!job.companyId) throw new Error("Job missing company context");
+      await updateJob(job.companyId, job.customerId, job.id, {
         layoutQuoteCustomerExclusions: {
           ...mergedCustomerExclusions,
           [rowId]: excluded,
         },
       });
     },
-    [job.id, mergedCustomerExclusions]
+    [job.companyId, job.customerId, job.id, mergedCustomerExclusions]
   );
 
   const sourcePages = useMemo(
@@ -1925,7 +2143,7 @@ export function LayoutStudioScreen({
   const pieceStaggerIn = draft.pieces.length * 6;
 
   useEffect(() => {
-    const map: Record<LayoutStudioMode, string> = { trace: "plan", place: "place", quote: "quote" };
+    const map: Record<LayoutStudioMode, string> = { trace: "plan", place: "place", quote: "quote", cut: "cut" };
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("phase", map[mode]);
@@ -2535,15 +2753,30 @@ export function LayoutStudioScreen({
     });
     const neededGeneratedSlabClones = generatedSlabClones.filter((clone) => usedSlabIds.includes(clone.id));
 
-    updateDraftWithUndo((d) => ({
-      ...d,
-      slabClones: [...(d.slabClones ?? []), ...neededGeneratedSlabClones],
+    // Compute the next draft synchronously so we can persist it immediately. Auto-nest
+    // is a bulk action that the user explicitly invoked — saving right away matches
+    // their intent and prevents any race with delayed Firestore snapshots from
+    // visually reverting the result.
+    const nextDraft: SavedLayoutStudioState = {
+      ...draft,
+      slabClones: [...(draft.slabClones ?? []), ...neededGeneratedSlabClones],
       placements: mergePlacementsForPieceIds(
-        ensurePlacementsForPieces(d.pieces, d.placements),
+        ensurePlacementsForPieces(draft.pieces, draft.placements),
         nextPl,
         activeMaterialPieceIds
       ),
-    }));
+    };
+    setRedoStack([]);
+    setUndoStack((prev) => [
+      ...prev.slice(-49),
+      {
+        pieces: structuredClone(draft.pieces),
+        placements: structuredClone(draft.placements),
+        slabClones: structuredClone(draft.slabClones ?? []),
+      },
+    ]);
+    setDraft(nextDraft);
+    void save(nextDraft);
     setAutoNestModalOpen(false);
     if (warnings.length) {
       setAutoNestFeedback({
@@ -2558,10 +2791,11 @@ export function LayoutStudioScreen({
     autoNestEdgeInsetStr,
     activeMaterialPieceIds,
     activeMaterialPlacements,
-    draft.calibration.pixelsPerInch,
+    draft,
     layoutSlabs,
     placeVisiblePieces,
-    updateDraftWithUndo,
+    save,
+    setDraft,
   ]);
 
   useEffect(() => {
@@ -2958,6 +3192,7 @@ export function LayoutStudioScreen({
   const confirmAddSink = (input: {
     name: string;
     templateKind: PieceSinkCutout["templateKind"];
+    customTemplate?: PieceSinkCutout["customTemplate"];
     faucetHoleCount: number;
     spreadIn: PieceSinkCutout["spreadIn"];
     evenHoleBias: FaucetEvenHoleBias;
@@ -2971,12 +3206,33 @@ export function LayoutStudioScreen({
       window.alert("Set scale on this page before adding sinks in trace mode.");
       return;
     }
+    /**
+     * `customTemplate` is set on the confirm payload for both
+     *   1. company-defined `"custom"` templates, and
+     *   2. built-in templates whose dims/price the company has overridden
+     *      (the modal snapshots the override into the payload so the
+     *      placed cutout locks in the override at placement time).
+     * In either case the snapshot determines geometry + price for this
+     * placement and survives later edits to the company library.
+     */
+    const customDimsForPlacement = input.customTemplate
+      ? {
+          widthIn: input.customTemplate.widthIn,
+          depthIn: input.customTemplate.depthIn,
+          cornerRadiusIn:
+            input.customTemplate.shape === "oval"
+              ? 0
+              : input.customTemplate.cornerRadiusIn,
+          shape: input.customTemplate.shape,
+        }
+      : null;
     const pl = sinkPlacementFromEdgeInCanonical(
       piece,
       addSinkEdge.edgeIndex,
       workingPieces,
       input.templateKind,
       coordPerInch,
+      customDimsForPlacement,
     );
     if (!pl) {
       window.alert("Could not align the sink to that edge.");
@@ -2987,6 +3243,7 @@ export function LayoutStudioScreen({
       id: crypto.randomUUID(),
       name: input.name,
       templateKind: input.templateKind,
+      ...(input.customTemplate ? { customTemplate: input.customTemplate } : {}),
       centerX: pl.centerX,
       centerY: pl.centerY,
       rotationDeg: pl.rotationDeg,
@@ -3440,17 +3697,23 @@ export function LayoutStudioScreen({
     setPdfRenderFailedPages({});
     uploadedPdfFileRef.current = null;
     try {
-      const { downloadUrl, storagePath } = await uploadJobLayoutSource(ownerUserId, job.id, file, {
-        onProgress: ({ percent }) => {
-          setUploadStage("uploading");
-          setUploadProgress(percent);
-          setUploadStatusText(
-            percent >= 99
-              ? "Finalizing secure upload..."
-              : `${Math.round(percent)}% of ${formatUploadSize(file.size)} uploaded`,
-          );
-        },
-      });
+      const { downloadUrl, storagePath } = await uploadJobLayoutSource(
+        companyId,
+        job.customerId,
+        job.id,
+        file,
+        {
+          onProgress: ({ percent }) => {
+            setUploadStage("uploading");
+            setUploadProgress(percent);
+            setUploadStatusText(
+              percent >= 99
+                ? "Finalizing secure upload..."
+                : `${Math.round(percent)}% of ${formatUploadSize(file.size)} uploaded`,
+            );
+          },
+        }
+      );
       setUploadStage("processing");
       setUploadProgress(100);
       setUploadStatusText(kind === "pdf" ? "Reading PDF pages and building frames..." : "Preparing image...");
@@ -3504,9 +3767,13 @@ export function LayoutStudioScreen({
           );
           const persistedPreviewResults = await Promise.allSettled(
             renderedPages.map(async (page) => {
-              const uploadedPreview = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, page.pngBlob, {
-                nameHint: `pdf-page-${page.pageNumber}`,
-              });
+              const uploadedPreview = await uploadJobLayoutSourcePreviewPng(
+                companyId,
+                job.customerId,
+                job.id,
+                page.pngBlob,
+                { nameHint: `pdf-page-${page.pageNumber}` }
+              );
               return [page.pageNumber, uploadedPreview] as const;
             }),
           );
@@ -3953,12 +4220,18 @@ export function LayoutStudioScreen({
         const kind = layoutSourceKindFromFile(file);
         if (kind !== "pdf" && kind !== "image") continue;
         setUploadStatusText(`Uploading file ${i + 1} of ${files.length}: ${file.name}`);
-        const { downloadUrl, storagePath } = await uploadJobLayoutSource(ownerUserId, job.id, file, {
-          onProgress: ({ percent }) => {
-            const fileProgress = Math.min(Math.max(percent, 0), 100);
-            setUploadProgress(((i + fileProgress / 100) / files.length) * 100);
-          },
-        });
+        const { downloadUrl, storagePath } = await uploadJobLayoutSource(
+          companyId,
+          job.customerId,
+          job.id,
+          file,
+          {
+            onProgress: ({ percent }) => {
+              const fileProgress = Math.min(Math.max(percent, 0), 100);
+              setUploadProgress(((i + fileProgress / 100) / files.length) * 100);
+            },
+          }
+        );
         uploads.push({ file, kind, downloadUrl, storagePath });
       }
       if (uploads.length === 0) throw new Error("No supported files were selected.");
@@ -4043,9 +4316,13 @@ export function LayoutStudioScreen({
       const persistedPreviewResults = await Promise.all(
         renderedPages.map(async (page, idx) => {
           setUploadProgress((idx / renderedPages.length) * 100);
-          const uploadedPreview = await uploadJobLayoutSourcePreviewPng(ownerUserId, job.id, page.pngBlob, {
-            nameHint: `${page.label}-${idx + 1}`,
-          });
+          const uploadedPreview = await uploadJobLayoutSourcePreviewPng(
+            companyId,
+            job.customerId,
+            job.id,
+            page.pngBlob,
+            { nameHint: `${page.label}-${idx + 1}` }
+          );
           return uploadedPreview;
         }),
       );
@@ -5213,36 +5490,55 @@ export function LayoutStudioScreen({
       </div>
     ) : null;
 
-  const renderPhaseToolbar = (className = "ls-phase-toggle-wrap glass-panel") => (
-    <div className={className}>
-      <div className="ls-segmented ls-segmented--3 ls-segmented--canvas" role="tablist" aria-label="Layout Studio phase">
-        <button
-          type="button"
-          className={mode === "trace" ? "is-active" : ""}
-          disabled={saveStatus === "saving" || phaseTransitionPending != null}
-          onClick={() => handleModeChange("trace")}
-        >
-          Plan
-        </button>
-        <button
-          type="button"
-          className={mode === "place" ? "is-active" : ""}
-          disabled={saveStatus === "saving" || phaseTransitionPending != null}
-          onClick={() => handleModeChange("place")}
-        >
-          Layout
-        </button>
-        <button
-          type="button"
-          className={mode === "quote" ? "is-active" : ""}
-          disabled={saveStatus === "saving" || phaseTransitionPending != null}
-          onClick={() => handleModeChange("quote")}
-        >
-          Quote
-        </button>
+  const renderPhaseToolbar = (className = "ls-phase-toggle-wrap glass-panel") => {
+    const phaseDisabled = saveStatus === "saving" || phaseTransitionPending != null;
+    /**
+     * Phase tabs map to the same hue palette as the Job lifecycle (Plan →
+     * green, Quote → blue) plus amber/indigo for Layout/Cut so the four
+     * stages read as a clear left-to-right progression.
+     */
+    const phaseTabs: AnimatedTabBarTab[] = [
+      {
+        id: "trace",
+        label: "Plan",
+        variant: "plan",
+        disabled: phaseDisabled,
+        onClick: () => handleModeChange("trace"),
+      },
+      {
+        id: "place",
+        label: "Layout",
+        variant: "layout",
+        disabled: phaseDisabled,
+        onClick: () => handleModeChange("place"),
+      },
+      {
+        id: "quote",
+        label: "Quote",
+        variant: "quote",
+        disabled: phaseDisabled,
+        onClick: () => handleModeChange("quote"),
+      },
+      {
+        id: "cut",
+        label: "Cut",
+        variant: "cut",
+        disabled: phaseDisabled,
+        title: "Place imported DXF on a real scanned slab and export for Alphacam",
+        onClick: () => handleModeChange("cut"),
+      },
+    ];
+    return (
+      <div className={className}>
+        <AnimatedTabBar
+          tabs={phaseTabs}
+          activeId={mode}
+          ariaLabel="Layout Studio phase"
+          className="animated-tabs--ls-phase"
+        />
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderLiveSummary = (className: string) => (
     <div className={className} aria-label="Live summary">
@@ -5432,7 +5728,9 @@ export function LayoutStudioScreen({
         ? "Layout"
         : phaseTransitionPending === "quote"
           ? "Quote"
-          : "Layout";
+          : phaseTransitionPending === "cut"
+            ? "Cut"
+            : "Layout";
 
   return (
     <div
@@ -5476,7 +5774,7 @@ export function LayoutStudioScreen({
               {saveStatus === "error" && "Save failed"}
               {saveStatus === "idle" && " "}
             </span>
-            {mode !== "quote" ? (
+            {mode !== "quote" && mode !== "cut" ? (
               <button
                 type="button"
                 className="ls-btn ls-btn-primary"
@@ -5514,7 +5812,7 @@ export function LayoutStudioScreen({
         }}
       />
 
-      {showEntryHub ? (
+      {showEntryHub && mode === "trace" ? (
         <div className="ls-entry-only">
           <StudioEntryHub
             kicker={layoutStudioJobContextKicker}
@@ -5528,8 +5826,8 @@ export function LayoutStudioScreen({
           className={`ls-body${
             mode === "place" || mode === "quote" ? " ls-body--place-or-quote" : ""
           }${mode === "trace" ? " ls-body--trace" : ""}${
-            !showLayoutRail && mode !== "trace" ? " ls-body--no-rail" : ""
-          }`}
+            mode === "cut" ? " ls-body--cut" : ""
+          }${!showLayoutRail && mode !== "trace" ? " ls-body--no-rail" : ""}`}
         >
         {showLayoutRail ? (
         <aside className="ls-rail glass-panel">
@@ -5629,8 +5927,8 @@ export function LayoutStudioScreen({
           {!planCanvasExpanded ? renderPhaseToolbar() : null}
           <section
             className={`ls-canvas-shell glass-panel${mode === "trace" ? " ls-canvas-shell--trace" : ""}${
-              mode === "place" || mode === "quote" ? " ls-canvas-shell--tall" : ""
-            }${mode === "quote" ? " ls-canvas-shell--quote" : ""}`}
+              mode === "place" || mode === "quote" || mode === "cut" ? " ls-canvas-shell--tall" : ""
+            }${mode === "quote" ? " ls-canvas-shell--quote" : ""}${mode === "cut" ? " ls-canvas-shell--cut" : ""}`}
           >
           {mode === "trace" && !showEntryHub ? (
             <input
@@ -5666,6 +5964,11 @@ export function LayoutStudioScreen({
                     onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
                     customerExclusions={mergedCustomerExclusions}
                     onSetCustomerExclusion={setCustomerExclusion}
+                    jobQuotedTotalOverride={jobQuotedTotalOverride}
+                    jobDepositPercentOverride={jobDepositPercentOverride}
+                    jobDepositAmountOverride={jobDepositAmountOverride}
+                    companyDefaultDepositPercent={companyDefaultDepositPercent}
+                    onLiveEstimateChange={setLiveQuoteEstimate}
                   />
                 ) : (
                   <QuotePhaseView
@@ -5686,6 +5989,11 @@ export function LayoutStudioScreen({
                     onOpenQuoteSettings={() => setLayoutQuoteSettingsOpen(true)}
                     customerExclusions={mergedCustomerExclusions}
                     onSetCustomerExclusion={setCustomerExclusion}
+                    jobQuotedTotalOverride={jobQuotedTotalOverride}
+                    jobDepositPercentOverride={jobDepositPercentOverride}
+                    jobDepositAmountOverride={jobDepositAmountOverride}
+                    companyDefaultDepositPercent={companyDefaultDepositPercent}
+                    onLiveEstimateChange={setLiveQuoteEstimate}
                   />
                 )}
                 <div className="ls-canvas-footer ls-quote-export-footer">
@@ -5709,6 +6017,38 @@ export function LayoutStudioScreen({
                   <p className="ls-muted">
                     Add a slab or product to this job from the catalog, then return here to review option-specific
                     pricing and placement. Your shared plan is already saved on the job.
+                  </p>
+                  <Link className="ls-btn ls-btn-primary" to={`/layout/jobs/${job.id}/add`}>
+                    Add product / slab
+                  </Link>
+                </div>
+              </>
+            )
+          ) : mode === "cut" ? (
+            activeOption && companyId ? (
+              <>
+                {planCanvasExpanded ? fullScreenPhaseToolbar : null}
+                <CutPhaseView
+                  job={job}
+                  option={activeOption}
+                  companyId={companyId}
+                  draft={cutPhase.draft}
+                  onChange={cutPhase.setDraft}
+                  onSave={cutPhase.save}
+                  saveStatus={cutPhase.saveStatus}
+                  fullscreen={planCanvasExpanded}
+                  onToggleFullscreen={() => setPlanCanvasExpanded((v) => !v)}
+                />
+              </>
+            ) : (
+              <>
+                {planCanvasExpanded ? fullScreenPhaseToolbar : null}
+                <div className="ls-phase-empty ls-phase-empty--cut glass-panel">
+                  <p className="ls-phase-empty-kicker">Cut</p>
+                  <h2 className="ls-phase-empty-title">Select a material option</h2>
+                  <p className="ls-muted">
+                    The Cut phase places an imported DXF on a real scanned slab and exports an Alphacam handoff
+                    for fabrication. Pick a material option for this job to begin.
                   </p>
                   <Link className="ls-btn ls-btn-primary" to={`/layout/jobs/${job.id}/add`}>
                     Add product / slab
@@ -6669,18 +7009,21 @@ export function LayoutStudioScreen({
               </div>
             )
           ) : !activeOption ? (
-            <div className="ls-phase-empty ls-phase-empty--place glass-panel">
-              <p className="ls-phase-empty-kicker">Layout</p>
-              <h2 className="ls-phase-empty-title">No slab options yet</h2>
-              <p className="ls-muted">
-                The kitchen plan you draw on the Plan tab is shared for this job. When you add slab or material
-                options from the catalog (or “Add product / slab” on the job), you can place the same plan on each
-                stone here — without redrawing.
-              </p>
-              <Link className="ls-btn ls-btn-primary" to={`/layout/jobs/${job.id}/add`}>
-                Add product / slab
-              </Link>
-            </div>
+            <>
+              {planCanvasExpanded ? fullScreenPhaseToolbar : null}
+              <div className="ls-phase-empty ls-phase-empty--place glass-panel">
+                <p className="ls-phase-empty-kicker">Layout</p>
+                <h2 className="ls-phase-empty-title">No slab options yet</h2>
+                <p className="ls-muted">
+                  The kitchen plan you draw on the Plan tab is shared for this job. When you add slab or material
+                  options from the catalog (or “Add product / slab” on the job), you can place the same plan on each
+                  stone here — without redrawing.
+                </p>
+                <Link className="ls-btn ls-btn-primary" to={`/layout/jobs/${job.id}/add`}>
+                  Add product / slab
+                </Link>
+              </div>
+            </>
           ) : (
             <div className="ls-place-canvas-host">
               {fullScreenPhaseToolbar}
@@ -6994,6 +7337,14 @@ export function LayoutStudioScreen({
       <AddSinkModal
         open={addSinkModalOpen}
         previewRotationDeg={addSinkPreviewRotationDeg}
+        customTemplates={companyCustomSinkTemplates}
+        builtinOverrides={companyBuiltinSinkOverrides}
+        canManageCustomTemplates={Boolean(activeCompanyId)}
+        onCreateCustomTemplate={createCompanySinkTemplate}
+        onUpdateCustomTemplate={updateCompanySinkTemplate}
+        onDeleteCustomTemplate={deleteCompanySinkTemplate}
+        onUpsertBuiltinOverride={upsertBuiltinSinkOverride}
+        onResetBuiltinOverride={resetBuiltinSinkOverride}
         onClose={() => {
           setAddSinkModalOpen(false);
           setAddSinkEdge(null);
@@ -7304,6 +7655,14 @@ export function LayoutStudioScreen({
           onClose={() => setLayoutQuoteSettingsOpen(false)}
           initial={liveQuoteSettings}
           onSave={saveLayoutQuoteSettings}
+          jobPricing={{
+            quotedTotal: jobQuotedTotalOverride,
+            requiredDepositPercent: jobDepositPercentOverride,
+            requiredDepositAmount: jobDepositAmountOverride,
+          }}
+          computedTotal={liveQuoteEstimate}
+          companyDefaultDepositPercent={companyDefaultDepositPercent}
+          onSaveJobPricing={saveJobPricing}
         />
       ) : null}
 

@@ -7,6 +7,7 @@ import {
 } from "../types/compareQuote";
 import { computeCurrentLayoutQuoteForOption } from "../compare/layoutStudio/utils/currentQuote";
 import { formatMoney } from "./priceHelpers";
+import type { CompanyAddress, CompanyBranding } from "../company/types";
 
 type ExportMode = "directory" | "zip";
 
@@ -27,6 +28,12 @@ type ExportQuotePackageInput = {
   areaId?: string | null;
   areaName?: string | null;
   areaSelectedOptionId?: string | null;
+  /** Active company name — brands the summary header. */
+  companyName?: string | null;
+  /** Active company branding — provides header/footer text. */
+  companyBranding?: CompanyBranding | null;
+  /** Active company address — printed under the company name. */
+  companyAddress?: CompanyAddress | null;
 };
 
 type FileWriterHandle = {
@@ -98,6 +105,25 @@ function quotedSummaryLines(
   return lines;
 }
 
+function formatAddressBlock(address?: CompanyAddress | null): string[] {
+  if (!address) return [];
+  const lines: string[] = [];
+  const l1 = address.line1?.trim();
+  const l2 = address.line2?.trim();
+  const city = address.city?.trim();
+  const state = address.state?.trim();
+  const postal = address.postalCode?.trim();
+  const country = address.country?.trim();
+  if (l1) lines.push(l1);
+  if (l2) lines.push(l2);
+  const cityLine = [city, [state, postal].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  if (cityLine) lines.push(cityLine);
+  if (country && country.toUpperCase() !== "US") lines.push(country);
+  return lines;
+}
+
 function buildSummaryText({
   job,
   customer,
@@ -108,6 +134,9 @@ function buildSummaryText({
   areaId,
   areaName,
   areaSelectedOptionId,
+  companyName,
+  companyBranding,
+  companyAddress,
 }: ExportQuotePackageInput): string {
   const finalOption =
     options.find((option) => option.id === (areaSelectedOptionId ?? job.finalOptionId)) ?? null;
@@ -118,10 +147,22 @@ function buildSummaryText({
       .map((option) => computeCurrentLayoutQuoteForOption({ job, option, areaId }).quoteAreaSqFt)
       .find((areaSqFt) => areaSqFt > 0) ??
     0;
+  const effectiveCompanyName = (companyName?.trim() || "Bella Stone");
+  const title = `${effectiveCompanyName} Quote Summary`;
   const lines: string[] = [
-    "Bella Stone Quote Summary",
-    "=========================",
+    title,
+    "=".repeat(title.length),
     "",
+  ];
+  const addressBlock = formatAddressBlock(companyAddress ?? null);
+  if (addressBlock.length) {
+    lines.push(...addressBlock, "");
+  }
+  const headerMessage = companyBranding?.quoteHeaderText?.trim();
+  if (headerMessage) {
+    lines.push(headerMessage, "");
+  }
+  lines.push(
     `Generated: ${generatedAt}`,
     "",
     "Rep",
@@ -134,8 +175,8 @@ function buildSummaryText({
     customer ? customerDisplayName(customer) : "—",
     customer?.phone || "—",
     customer?.email || "—",
-    customer?.address || "—",
-  ];
+    customer?.address || "—"
+  );
 
   if (customer?.notes.trim()) {
     lines.push("", "Customer notes", "--------------", customer.notes.trim());
@@ -161,7 +202,7 @@ function buildSummaryText({
     "Assumptions",
     "-----------",
     job.assumptions.trim() ||
-      "Estimated installed material pricing per Bella Stone quote schedule (material markup + fabrication). Subject to final template verification."
+      `Estimated installed material pricing per ${effectiveCompanyName} quote schedule (material markup + fabrication). Subject to final template verification.`
   );
 
   lines.push(
@@ -185,6 +226,11 @@ function buildSummaryText({
     );
     lines.push("");
   });
+
+  const footerMessage = companyBranding?.quoteFooterText?.trim();
+  if (footerMessage) {
+    lines.push("---", footerMessage);
+  }
 
   return lines.join("\r\n").trimEnd() + "\r\n";
 }

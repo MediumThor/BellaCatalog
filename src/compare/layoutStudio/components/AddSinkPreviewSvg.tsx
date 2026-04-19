@@ -1,16 +1,28 @@
 import { useMemo } from "react";
-import type { FaucetEvenHoleBias, FaucetSpreadIn, PieceSinkCutout, PieceSinkTemplateKind } from "../types";
+import type {
+  FaucetEvenHoleBias,
+  FaucetSpreadIn,
+  PieceSinkCustomTemplateSnapshot,
+  PieceSinkCutout,
+  PieceSinkTemplateKind,
+} from "../types";
 import {
   FAUCET_DECK_EXTRA_OFFSET_IN,
   FAUCET_DECK_GAP_IN,
   FAUCET_HOLE_RADIUS_IN,
   faucetHoleCentersXInches,
+  sinkDimsForSink,
   sinkOutlinePathDLocal,
-  sinkTemplateDims,
 } from "../utils/pieceSinks";
 
 type Props = {
-  templateKind: PieceSinkTemplateKind;
+  templateKind: PieceSinkTemplateKind | "custom";
+  /**
+   * Effective dims snapshot. Required when `templateKind === "custom"`,
+   * and also passed for built-ins when the active company has overridden
+   * their dims so the preview reflects the override.
+   */
+  customTemplate?: PieceSinkCustomTemplateSnapshot | null;
   faucetHoleCount: number;
   spreadIn: FaucetSpreadIn;
   evenHoleBias: FaucetEvenHoleBias;
@@ -27,21 +39,26 @@ function rotatePt(x: number, y: number, deg: number): { x: number; y: number } {
 
 export function AddSinkPreviewSvg({
   templateKind,
+  customTemplate,
   faucetHoleCount,
   spreadIn,
   evenHoleBias,
   previewRotationDeg = 0,
 }: Props) {
   const n = Math.max(1, Math.min(5, Math.floor(faucetHoleCount) || 1));
-  const dims = sinkTemplateDims(templateKind);
-  const w = dims.widthIn;
-  const h = dims.depthIn;
 
   const previewSink = useMemo((): PieceSinkCutout => {
+    /**
+     * `sinkDimsForSink` honors a snapshot regardless of `templateKind`,
+     * so passing `customTemplate` for built-ins with a company override
+     * makes the preview reflect the override geometry. Built-ins without
+     * an override pass `undefined` and fall back to catalog defaults.
+     */
     return {
       id: "preview",
       name: "",
       templateKind,
+      customTemplate: customTemplate ?? undefined,
       centerX: 0,
       centerY: 0,
       rotationDeg: 0,
@@ -49,7 +66,11 @@ export function AddSinkPreviewSvg({
       spreadIn,
       evenHoleBias: n === 2 || n === 4 ? evenHoleBias : undefined,
     };
-  }, [templateKind, n, spreadIn, evenHoleBias]);
+  }, [templateKind, customTemplate, n, spreadIn, evenHoleBias]);
+
+  const dims = sinkDimsForSink(previewSink);
+  const w = dims.widthIn;
+  const h = dims.depthIn;
 
   const pathD = useMemo(() => sinkOutlinePathDLocal(previewSink, 1), [previewSink]);
 

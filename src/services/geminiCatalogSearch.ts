@@ -75,6 +75,26 @@ function getModel(): string {
   return import.meta.env.VITE_GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 }
 
+// One-shot deprecation warning. The frontend is moving off direct Gemini
+// calls because the API key in `VITE_GEMINI_API_KEY` ships to every browser
+// and to anyone who downloads `dist/`. AI calls are migrating to Cloud
+// Function Callables (`aiSearchCatalog`, `aiVisualMatch`) — see
+// `docs/saas-refactor/42_ai_catalog_search_callable.md`.
+let deprecationWarned = false;
+function warnDeprecatedFrontendGemini(): void {
+  if (deprecationWarned) return;
+  deprecationWarned = true;
+  if (typeof console !== "undefined" && typeof console.warn === "function") {
+    console.warn(
+      "[BellaCatalog] geminiCatalogSearch.ts is deprecated. The Gemini API " +
+        "key is exposed in the browser bundle. Migrate to the server-side " +
+        "Callables described in docs/saas-refactor/42_ai_catalog_search_callable.md, " +
+        "then rotate VITE_GEMINI_API_KEY in Google Cloud Console and remove it " +
+        "from .env."
+    );
+  }
+}
+
 function toPrompt(userRequest: string, options: GeminiCatalogFilterOptions): string {
   return [
     "You map a salesperson's natural-language stone search into structured catalog filters.",
@@ -106,6 +126,7 @@ export async function runGeminiCatalogSearch(
   userRequest: string,
   options: GeminiCatalogFilterOptions
 ): Promise<GeminiCatalogSearchResult> {
+  warnDeprecatedFrontendGemini();
   const apiKey = getApiKey();
   const model = getModel();
   if (!apiKey) {
@@ -272,6 +293,7 @@ export async function runGeminiCatalogVisualMatch(
   userRequest: string,
   candidates: CatalogItem[]
 ): Promise<GeminiCatalogVisualMatchResult | null> {
+  warnDeprecatedFrontendGemini();
   const apiKey = getApiKey();
   const model = getModel();
   if (!apiKey) {

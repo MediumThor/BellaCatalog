@@ -71,8 +71,14 @@ export function sinkPlacementFromEdgeInCanonical(
   piece: LayoutPiece,
   edgeIndex: number,
   allPieces: readonly LayoutPiece[],
-  templateKind: PieceSinkTemplateKind,
+  templateKind: PieceSinkTemplateKind | "custom",
   coordPerInch = 1,
+  /**
+   * Effective dims for this placement. Required for `templateKind === "custom"`,
+   * and also passed for built-ins when the company has overridden their dims so
+   * the placement uses the override geometry.
+   */
+  customDims?: SinkTemplateDims | null,
 ): { centerX: number; centerY: number; rotationDeg: number } | null {
   const display = planDisplayPoints(piece, allPieces);
   const ring = normalizeClosedRing(display);
@@ -84,7 +90,9 @@ export function sinkPlacementFromEdgeInCanonical(
   const a = ring[edgeIndex]!;
   const b = ring[(edgeIndex + 1) % n]!;
   const M = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  const dims = sinkTemplateDims(templateKind);
+  const dims = customDims
+    ? customDims
+    : sinkTemplateDims(templateKind === "custom" ? "kitchen" : templateKind);
   const depth = dims.depthIn * safeCoordPerInch;
   const along = (SINK_FRONT_SETBACK_FROM_EDGE_IN * safeCoordPerInch) + depth / 2;
   const Cworld = {
@@ -113,6 +121,29 @@ export function sinkTemplateDims(kind: PieceSinkTemplateKind): SinkTemplateDims 
     default:
       return { widthIn: 30, depthIn: 16, cornerRadiusIn: 0.7, shape: "rectangle" };
   }
+}
+
+/**
+ * Effective dims for a placed sink. Uses the captured `customTemplate`
+ * snapshot when present — that snapshot is set both for company-defined
+ * `"custom"` sinks AND for built-in sinks placed under a company that
+ * has overridden the built-in's dims (so the cutout renders / clips
+ * with the overridden geometry). Falls back to {@link sinkTemplateDims}
+ * for built-ins without a snapshot.
+ */
+export function sinkDimsForSink(sink: PieceSinkCutout): SinkTemplateDims {
+  if (sink.customTemplate) {
+    const c = sink.customTemplate;
+    return {
+      widthIn: c.widthIn,
+      depthIn: c.depthIn,
+      cornerRadiusIn: c.shape === "oval" ? 0 : c.cornerRadiusIn,
+      shape: c.shape,
+    };
+  }
+  const builtin: PieceSinkTemplateKind =
+    sink.templateKind === "custom" ? "kitchen" : sink.templateKind;
+  return sinkTemplateDims(builtin);
 }
 
 /** Blank plan: 1 plan unit = 1 inch. Trace: multiply inches by PPI. */
@@ -185,7 +216,7 @@ export function localFaucetHoleCentersInches(
   sink: PieceSinkCutout,
   coordPerInch = 1,
 ): LayoutPoint[] {
-  const dims = sinkTemplateDims(sink.templateKind);
+  const dims = sinkDimsForSink(sink);
   const n = Math.max(1, Math.min(5, Math.floor(sink.faucetHoleCount) || 1));
   const spread = sink.spreadIn;
   const yDeck =
@@ -309,7 +340,7 @@ export function allSinkCutoutRingsPlanWorld(
  * Previous version only sampled arcs with wrong sweep sign and omitted edge segments, which produced pinched corners in 3D.
  */
 function sampleSinkHullInLocal(sink: PieceSinkCutout, coordPerInch: number): LayoutPoint[] {
-  const dims = sinkTemplateDims(sink.templateKind);
+  const dims = sinkDimsForSink(sink);
   const w = dims.widthIn * coordPerInch;
   const h = dims.depthIn * coordPerInch;
   const cr = dims.cornerRadiusIn * coordPerInch;
@@ -484,7 +515,7 @@ export function defaultSinkCenterInPieceCanonical(
 /** Axis-aligned kitchen footprint in world display (for edge stroke clipping). */
 /** SVG path in local coords (center 0,0), plan units. */
 export function sinkOutlinePathDLocal(sink: PieceSinkCutout, coordPerInch: number): string {
-  const dims = sinkTemplateDims(sink.templateKind);
+  const dims = sinkDimsForSink(sink);
   const w = dims.widthIn * coordPerInch;
   const h = dims.depthIn * coordPerInch;
   const rRaw = dims.cornerRadiusIn * coordPerInch;
@@ -522,7 +553,7 @@ export function kitchenSinkRectWorldDisplay(
   coordPerInch: number
 ): { minX: number; maxX: number; minY: number; maxY: number } | null {
   if (sink.templateKind !== "kitchen") return null;
-  const dims = sinkTemplateDims(sink.templateKind);
+  const dims = sinkDimsForSink(sink);
   const w = dims.widthIn * coordPerInch;
   const h = dims.depthIn * coordPerInch;
   const corners = [

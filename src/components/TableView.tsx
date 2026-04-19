@@ -21,6 +21,9 @@ type Props = {
   onToggleCompareBag?: (id: string) => void;
   collectionMembershipCounts?: Record<string, number>;
   onOpenCollections?: (item: CatalogItem) => void;
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelected?: (id: string) => void;
 };
 
 function TableViewInner({
@@ -41,14 +44,18 @@ function TableViewInner({
   onToggleCompareBag,
   collectionMembershipCounts,
   onOpenCollections,
+  selectMode,
+  selectedIds,
+  onToggleSelected,
 }: Props) {
   const showNotesCol = columns.notes || columns.freight;
 
   return (
     <div className="table-wrap">
-      <table className="data-table">
+      <table className="data-table" data-select-mode={selectMode || undefined}>
         <thead>
           <tr>
+            {selectMode ? <th aria-label="Select" /> : null}
             <th>Fav</th>
             {compareBagEnabled ? (
               <th scope="col">
@@ -99,6 +106,9 @@ function TableViewInner({
               onToggleCompareBag={onToggleCompareBag}
               collectionCount={collectionMembershipCounts?.[item.id] ?? 0}
               onOpenCollections={onOpenCollections}
+              selectMode={selectMode}
+              selected={selectMode ? Boolean(selectedIds?.has(item.id)) : false}
+              onToggleSelected={onToggleSelected}
             />
           ))}
         </tbody>

@@ -57,11 +57,11 @@ Avoid cramming too many controls into a single row if it hurts clarity.
 Buttons should feel tactile and polished.
 
 ### Button categories
-- primary
-- secondary
-- tertiary
-- ghost
-- destructive (used sparingly)
+- primary (the single brand CTA on a screen — filled red `.btn-primary`)
+- secondary (default `.btn` — soft neutral)
+- ghost (`.btn-ghost`)
+- success / positive intent (`.btn-success` — green outline)
+- danger / negative intent (`.btn-danger` — red outline)
 - icon button
 - segmented toggle button
 
@@ -73,6 +73,53 @@ Buttons should feel tactile and polished.
 
 Primary buttons should feel luminous and important.
 Secondary buttons should feel refined, not weak.
+
+### Intent color convention (site-wide)
+
+Action color carries meaning. Apply consistently so reps can scan a
+screen and know what each button will do without reading the label
+twice.
+
+- **Positive / constructive actions → `.btn-success` (green outline)**
+  - Use for: *Approve, Approve quote, Accept, Confirm, Create, Save,
+    Mark complete, Mark paid, Publish, Send, Add (when it commits a
+    creation).*
+  - Outline-first so multiple positive actions on one screen don't
+    fight for attention.
+
+- **Negative / destructive actions → `.btn-danger` (red outline)**
+  - Use for: *Cancel, Delete, Remove, Reject, Decline, Archive,
+    Discard, Clear, Revoke, Unassign.*
+  - Reserve filled red (`.btn-primary`) for the single dominant brand
+    CTA on a screen; do **not** use it for destructive actions or it
+    will read as "do this" instead of "be careful."
+
+- **Neutral / navigational actions → `.btn` or `.btn-ghost`**
+  - Use for: *Open, View, Edit, Studio, Back, Close (without losing
+    work), Filter, Sort.*
+
+- **The single brand CTA → `.btn-primary` (filled red)**
+  - One per screen, max. The "do the headline thing" button (e.g.
+    *Record payment*, *Create job*).
+
+#### Examples
+
+```html
+<!-- Approve a quoted layout as the customer's choice -->
+<button class="btn btn-success btn-sm">Approve quote</button>
+
+<!-- Remove a payment from the ledger -->
+<button class="btn btn-danger btn-sm">Delete payment</button>
+
+<!-- Open Layout Studio -->
+<a class="btn btn-ghost btn-sm">Open in Studio</a>
+
+<!-- Headline CTA for the whole screen -->
+<button class="btn btn-primary">Record payment</button>
+```
+
+When in doubt, ask: *"If the rep clicks this by accident, is it
+constructive or destructive?"* — that's the color.
 
 ---
 

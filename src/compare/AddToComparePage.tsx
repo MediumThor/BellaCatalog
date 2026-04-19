@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { useMergedCatalog } from "../hooks/useMergedCatalog";
 import {
-  getJob,
-  prepareJobComparisonOptionFields,
   addJobComparisonOption,
+  findJobById,
+  prepareJobComparisonOptionFields,
+  subscribeJob,
   subscribeOptionsForJob,
   updateJob,
 } from "../services/compareQuoteFirestore";
+import type { JobRecord } from "../types/compareQuote";
 import type { CatalogItem } from "../types/catalog";
 import type { JobComparisonOptionRecord } from "../types/compareQuote";
 import { jobQuoteSquareFootage } from "../utils/quotedPrice";
@@ -17,36 +20,53 @@ import { AddPriceOptionModal } from "./AddPriceOptionModal";
 
 export function AddToComparePage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const { user } = useAuth();
+  const { user, profileDisplayName } = useAuth();
+  const { activeCompanyId } = useCompany();
   const nav = useNavigate();
   const { catalog, loadError, bumpOverlay, horusCatalog } = useMergedCatalog();
-  const [job, setJob] = useState<Awaited<ReturnType<typeof getJob>>>(null);
+  const [job, setJob] = useState<JobRecord | null>(null);
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [jobOptions, setJobOptions] = useState<JobComparisonOptionRecord[]>([]);
   const [pendingItem, setPendingItem] = useState<CatalogItem | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId || !activeCompanyId) return;
     let cancelled = false;
     (async () => {
-      const j = await getJob(jobId);
-      if (!cancelled) setJob(j);
+      const found = await findJobById(activeCompanyId, jobId);
+      if (cancelled) return;
+      if (!found) {
+        setJob(null);
+        setCustomerId(null);
+        return;
+      }
+      setCustomerId(found.customerId);
     })();
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [activeCompanyId, jobId]);
 
   useEffect(() => {
-    if (!jobId || !user?.uid) return;
-    return subscribeOptionsForJob(jobId, user.uid, setJobOptions);
-  }, [jobId, user?.uid]);
+    if (!activeCompanyId || !customerId || !jobId) return;
+    return subscribeJob(activeCompanyId, customerId, jobId, setJob);
+  }, [activeCompanyId, customerId, jobId]);
+
+  useEffect(() => {
+    if (!activeCompanyId || !customerId || !jobId) return;
+    return subscribeOptionsForJob(
+      activeCompanyId,
+      customerId,
+      jobId,
+      setJobOptions
+    );
+  }, [activeCompanyId, customerId, jobId]);
 
   if (!jobId) return <p className="compare-warning">Missing job.</p>;
-  if (!job) return <p className="product-sub">Loading job…</p>;
-  if (user?.uid !== job.ownerUserId) {
-    return <p className="compare-warning">You do not have access to this job.</p>;
-  }
+  if (!activeCompanyId)
+    return <p className="compare-warning">No active company selected.</p>;
+  if (!job || !customerId) return <p className="product-sub">Loading job…</p>;
 
   const quoteBasisSqFt = jobQuoteSquareFootage(job, jobOptions);
 
@@ -86,10 +106,26 @@ export function AddToComparePage() {
         }}
         onConfirm={async (payload) => {
           if (!user?.uid || !pendingItem) return;
-          const fields = await prepareJobComparisonOptionFields(user.uid, pendingItem, job.id, quoteBasisSqFt, payload);
-          await addJobComparisonOption(user.uid, fields);
+          const fields = await prepareJobComparisonOptionFields(
+            activeCompanyId,
+            customerId,
+            job.id,
+            user.uid,
+            pendingItem,
+            quoteBasisSqFt,
+            payload
+          );
+          await addJobComparisonOption(activeCompanyId, customerId, job.id, {
+            ...fields,
+            ownerUserId: user.uid,
+            createdByUserId: user.uid,
+            createdByDisplayName: profileDisplayName ?? null,
+            visibility: "company",
+          });
           if (job.status === "draft") {
-            await updateJob(job.id, { status: "comparing" });
+            await updateJob(activeCompanyId, customerId, job.id, {
+              status: "comparing",
+            });
           }
           setModalOpen(false);
           setPendingItem(null);

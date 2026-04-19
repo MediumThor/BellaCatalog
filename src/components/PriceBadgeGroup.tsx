@@ -13,8 +13,7 @@ function PriceBadgeGroupInner({ entries }: Props) {
   return (
     <div className="price-badges">
       {entries.map((e, i) => (
-        <span key={`${e.label}-${i}`} className="price-badge" title={e.sourceContext}>
-          <span className="price-badge-label">{e.label}</span>
+        <span key={`${e.label}-${i}`} className="price-badge" title={e.sourceContext ?? e.label}>
           <span className="price-badge-value">
             {formatMoney(e.price)}
             {e.unit && e.unit !== "unknown" ? (

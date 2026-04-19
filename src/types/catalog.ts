@@ -136,6 +136,17 @@ export type SortKey =
 
 export type CatalogCollectionType = "manual" | "smart";
 
+/**
+ * Who can see a collection.
+ *
+ * - `private`: only the owner (this was the pre-SaaS default).
+ * - `company`: all active members of the owning company can see it.
+ *
+ * For legacy top-level collections (no company context) this always behaves
+ * as `private`; see `src/services/catalogCollectionsFirestore.ts`.
+ */
+export type CatalogCollectionVisibility = "private" | "company";
+
 export interface CatalogCollectionSnapshot {
   searchQuery: string;
   vendor: string;
@@ -158,6 +169,26 @@ export interface CatalogCollectionSnapshot {
 export interface CatalogCollection {
   id: string;
   ownerUserId: string;
+  /**
+   * Optional display name for the owner (mirrored on write so the UI can label
+   * "Shared by Bob" without reading another document). Falls back to the
+   * owner's email or id when absent.
+   */
+  ownerDisplayName?: string | null;
+  /**
+   * Company the collection lives in. `null` for legacy per-user collections
+   * stored at the top-level `catalogCollections` path.
+   */
+  companyId?: string | null;
+  /** See {@link CatalogCollectionVisibility}. Legacy records are always "private". */
+  visibility: CatalogCollectionVisibility;
+  /**
+   * Internal source marker used while migrating from the top-level legacy path
+   * to the company-scoped path. UI does not surface this directly, but the
+   * collection manager shows a subtle "Legacy" tag so users can understand
+   * where the record came from.
+   */
+  source?: "legacy" | "company";
   name: string;
   description: string;
   type: CatalogCollectionType;

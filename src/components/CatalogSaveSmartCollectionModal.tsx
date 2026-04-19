@@ -1,30 +1,44 @@
 import { memo, useEffect, useState } from "react";
-import type { CatalogCollectionSnapshot } from "../types/catalog";
+import type {
+  CatalogCollectionSnapshot,
+  CatalogCollectionVisibility,
+} from "../types/catalog";
 import { describeCollectionSnapshot } from "../utils/catalogCollections";
 
 type Props = {
   open: boolean;
   currentSnapshot: CatalogCollectionSnapshot;
+  canShareWithCompany: boolean;
+  defaultVisibility?: CatalogCollectionVisibility;
   onClose: () => void;
-  onCreate: (name: string, description: string) => Promise<void> | void;
+  onCreate: (
+    name: string,
+    description: string,
+    visibility: CatalogCollectionVisibility
+  ) => Promise<void> | void;
 };
 
 function CatalogSaveSmartCollectionModalInner({
   open,
   currentSnapshot,
+  canShareWithCompany,
+  defaultVisibility = "private",
   onClose,
   onCreate,
 }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [visibility, setVisibility] =
+    useState<CatalogCollectionVisibility>(defaultVisibility);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setDescription("");
+    setVisibility(canShareWithCompany ? defaultVisibility : "private");
     setSaving(false);
-  }, [open]);
+  }, [open, canShareWithCompany, defaultVisibility]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +70,7 @@ function CatalogSaveSmartCollectionModalInner({
           Save current view
         </h2>
         <p className="modal-sub">
-          This smart collection will reopen the current search and filters for your account.
+          A smart collection re-opens the current search + filters the next time you pick it.
         </p>
 
         <div className="catalog-collection-form-section" style={{ marginTop: 0 }}>
@@ -84,6 +98,51 @@ function CatalogSaveSmartCollectionModalInner({
           />
         </div>
 
+        <fieldset
+          className="catalog-collection-visibility"
+          aria-label="Who can see this collection"
+          disabled={saving}
+        >
+          <legend className="settings-section-title">Who can see this</legend>
+          <div className="catalog-collection-visibility__options" role="radiogroup">
+            <label className="catalog-collection-visibility__option" data-active={visibility === "private"}>
+              <input
+                type="radio"
+                name="new-smart-visibility"
+                value="private"
+                checked={visibility === "private"}
+                onChange={() => setVisibility("private")}
+              />
+              <span>
+                <strong>Just me</strong>
+                <span className="product-sub"> · private to your account</span>
+              </span>
+            </label>
+            <label
+              className="catalog-collection-visibility__option"
+              data-active={visibility === "company"}
+              aria-disabled={!canShareWithCompany}
+            >
+              <input
+                type="radio"
+                name="new-smart-visibility"
+                value="company"
+                checked={visibility === "company"}
+                disabled={!canShareWithCompany}
+                onChange={() => setVisibility("company")}
+              />
+              <span>
+                <strong>Everyone at my company</strong>
+                <span className="product-sub">
+                  {canShareWithCompany
+                    ? " · visible to all active seats"
+                    : " · upgrade seat role to share"}
+                </span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancel
@@ -95,7 +154,7 @@ function CatalogSaveSmartCollectionModalInner({
             onClick={async () => {
               setSaving(true);
               try {
-                await onCreate(name.trim(), description.trim());
+                await onCreate(name.trim(), description.trim(), visibility);
                 onClose();
               } finally {
                 setSaving(false);

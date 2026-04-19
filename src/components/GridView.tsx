@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { ExternalLink, Globe, Image as ImageIcon } from "lucide-react";
 import type { CatalogItem } from "../types/catalog";
 import { CatalogCollectionButton } from "./CatalogCollectionButton";
 import { CompareBagButton } from "./CompareBagButton";
@@ -18,18 +19,47 @@ function primarySizeLine(item: CatalogItem): string {
   return "";
 }
 
-/** Short label for a URL (hostname + path, truncated). */
-function shortUrlDisplay(url: string, maxLen = 46): string {
-  try {
-    const u = new URL(url, typeof window !== "undefined" ? window.location.href : "https://local/");
-    const host = u.hostname.replace(/^www\./, "");
-    const path = u.pathname + u.search;
-    const combined = host ? `${host}${path}` : path || url;
-    if (combined.length <= maxLen) return combined;
-    return `${combined.slice(0, Math.max(0, maxLen - 1))}…`;
-  } catch {
-    return url.length <= maxLen ? url : `${url.slice(0, maxLen - 1)}…`;
-  }
+type LinkButtonProps = {
+  href: string;
+  icon: "product" | "image";
+  label: string;
+  itemName: string;
+};
+
+function CatalogLinkButton({ href, icon, label, itemName }: LinkButtonProps) {
+  const Glyph = icon === "product" ? Globe : ImageIcon;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="catalog-grid-card__link-btn"
+      title={`${label}: ${href}`}
+      aria-label={`Open ${label.toLowerCase()} for ${itemName} in a new tab`}
+    >
+      <Glyph aria-hidden="true" size={14} className="catalog-grid-card__link-btn-glyph" />
+      <span className="catalog-grid-card__link-btn-label">{label}</span>
+      <ExternalLink
+        aria-hidden="true"
+        size={12}
+        className="catalog-grid-card__link-btn-out"
+      />
+    </a>
+  );
+}
+
+function CatalogLinkButtonDisabled({ icon, label }: { icon: "product" | "image"; label: string }) {
+  const Glyph = icon === "product" ? Globe : ImageIcon;
+  return (
+    <span
+      className="catalog-grid-card__link-btn catalog-grid-card__link-btn--disabled"
+      aria-disabled="true"
+      title={`No ${label.toLowerCase()} available`}
+    >
+      <Glyph aria-hidden="true" size={14} className="catalog-grid-card__link-btn-glyph" />
+      <span className="catalog-grid-card__link-btn-label">{label}</span>
+    </span>
+  );
 }
 
 type Props = {
@@ -50,6 +80,10 @@ type Props = {
   onToggleCompareBag?: (id: string) => void;
   collectionMembershipCounts?: Record<string, number>;
   onOpenCollections?: (item: CatalogItem) => void;
+  /** When true, render a large selection checkbox overlay on every card and dim non-essential actions. */
+  selectMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelected?: (id: string) => void;
 };
 
 function GridViewInner({
@@ -69,9 +103,12 @@ function GridViewInner({
   onToggleCompareBag,
   collectionMembershipCounts,
   onOpenCollections,
+  selectMode,
+  selectedIds,
+  onToggleSelected,
 }: Props) {
   return (
-    <div className="catalog-grid" role="list">
+    <div className="catalog-grid" role="list" data-select-mode={selectMode || undefined}>
       {items.map((item) => {
         const imageUrl = item.imageUrl?.trim() ?? "";
         const hasImage = Boolean(imageUrl);
@@ -81,33 +118,54 @@ function GridViewInner({
         const collectionCount = collectionMembershipCounts?.[item.id] ?? 0;
         const sizeLine = primarySizeLine(item);
         const tagGroups = buildCatalogTagGroups(item);
+        const selected = selectMode ? Boolean(selectedIds?.has(item.id)) : false;
         return (
           <article
             key={item.id}
             className="catalog-grid-card"
             data-favorite={favorite}
             data-compare-bag={compareBagEnabled && compareBagIds?.has(item.id) ? true : undefined}
+            data-selected={selected || undefined}
             role="listitem"
+            onClick={
+              selectMode && onToggleSelected
+                ? (e) => {
+                    /**
+                     * In select mode the whole card is a tap target. We
+                     * still let inner anchors/buttons fire normally — they
+                     * stop propagation themselves where it matters.
+                     */
+                    const target = e.target as HTMLElement;
+                    if (target.closest("a, button, input, label")) return;
+                    onToggleSelected(item.id);
+                  }
+                : undefined
+            }
           >
+            {selectMode && onToggleSelected ? (
+              <label
+                className="catalog-grid-card__select"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={() => onToggleSelected(item.id)}
+                  aria-label={`Select ${item.displayName}`}
+                />
+                <span aria-hidden="true" />
+              </label>
+            ) : null}
             <div className="catalog-grid-card__media">
-              {(compareBagEnabled && compareBagIds && onToggleCompareBag) || onOpenCollections ? (
+              {onOpenCollections ? (
                 <div className="catalog-grid-card__media-actions catalog-grid-card__media-actions--left">
                   <div className="catalog-grid-card__selection-stack">
-                    {onOpenCollections ? (
-                      <CatalogCollectionButton
-                        active={collectionCount > 0}
-                        count={collectionCount}
-                        onClick={() => onOpenCollections(item)}
-                        label={item.displayName}
-                      />
-                    ) : null}
-                    {compareBagEnabled && compareBagIds && onToggleCompareBag ? (
-                      <CompareBagButton
-                        selected={compareBagIds.has(item.id)}
-                        onToggle={() => onToggleCompareBag(item.id)}
-                        label={item.displayName}
-                      />
-                    ) : null}
+                    <CatalogCollectionButton
+                      active={collectionCount > 0}
+                      count={collectionCount}
+                      onClick={() => onOpenCollections(item)}
+                      label={item.displayName}
+                    />
                   </div>
                 </div>
               ) : null}
@@ -117,6 +175,13 @@ function GridViewInner({
                   onToggle={() => onToggleFavorite(item.id)}
                   label={item.displayName}
                 />
+                {compareBagEnabled && compareBagIds && onToggleCompareBag ? (
+                  <CompareBagButton
+                    selected={compareBagIds.has(item.id)}
+                    onToggle={() => onToggleCompareBag(item.id)}
+                    label={item.displayName}
+                  />
+                ) : null}
               </div>
               {hasImage ? (
                 <SlabThumbnailLightbox
@@ -147,49 +212,27 @@ function GridViewInner({
                 ) : null}
               </div>
               <div className="catalog-grid-card__vendor">{item.vendor}</div>
-              <div className="catalog-grid-card__links">
-                <div className="catalog-grid-card__link-row">
-                  <span className="catalog-grid-card__meta-label">Product</span>
-                  {productHref ? (
-                    <a
-                      href={productHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="catalog-grid-card__link-out"
-                      title={productHref}
-                    >
-                      <span className="catalog-grid-card__link-out-text">
-                        {shortUrlDisplay(productHref)}
-                      </span>
-                      <span className="catalog-grid-card__link-out-icon" aria-hidden="true">
-                        ↗
-                      </span>
-                    </a>
-                  ) : (
-                    <span className="catalog-grid-card__no-link-url">No URL</span>
-                  )}
-                </div>
-                <div className="catalog-grid-card__link-row">
-                  <span className="catalog-grid-card__meta-label">Image</span>
-                  {hasImage ? (
-                    <a
-                      href={imageUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="catalog-grid-card__link-out"
-                      title={imageUrl}
-                    >
-                      <span className="catalog-grid-card__link-out-text">
-                        {shortUrlDisplay(imageUrl)}
-                      </span>
-                      <span className="catalog-grid-card__link-out-icon" aria-hidden="true">
-                        ↗
-                      </span>
-                    </a>
-                  ) : (
-                    <span className="catalog-grid-card__no-link-url">No URL</span>
-                  )}
-                </div>
+              <div className="catalog-grid-card__links" role="group" aria-label="Source links">
+                {productHref ? (
+                  <CatalogLinkButton
+                    href={productHref}
+                    icon="product"
+                    label="Product"
+                    itemName={item.displayName}
+                  />
+                ) : (
+                  <CatalogLinkButtonDisabled icon="product" label="Product" />
+                )}
+                {hasImage ? (
+                  <CatalogLinkButton
+                    href={imageUrl}
+                    icon="image"
+                    label="Image"
+                    itemName={item.displayName}
+                  />
+                ) : (
+                  <CatalogLinkButtonDisabled icon="image" label="Image" />
+                )}
               </div>
               {sizeLine ? (
                 <div className="catalog-grid-card__size">

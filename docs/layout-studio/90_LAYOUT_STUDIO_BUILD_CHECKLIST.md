@@ -61,3 +61,19 @@ Use this checklist before considering Layout Studio complete.
 - [ ] User can create a rectangle manually
 - [ ] User can create an L-shape manually
 - [ ] Manual pieces use the same placement/persistence model as traced pieces
+
+## Cut phase (post-Quote fabrication handoff)
+
+See [50_LAYOUT_STUDIO_CUT_PHASE.md](./50_LAYOUT_STUDIO_CUT_PHASE.md) and [60_CUT_PHASE_EXTERNAL_INTEGRATION.md](./60_CUT_PHASE_EXTERNAL_INTEGRATION.md).
+
+- [ ] User can open the Cut phase after Quote
+- [ ] User can select a scanned slab from the external library
+- [ ] User can import a DXF from an external source
+- [ ] DXF is never modified by Layout Studio (verified by checksum on export)
+- [ ] DXF renders read-only in the right pane
+- [ ] DXF can be positioned and rotated on the scanned slab in the left pane
+- [ ] Scanned slab image is displayed at correct physical scale
+- [ ] Out-of-bounds placement is warned, not blocked destructively
+- [ ] Export produces an Alphacam-compatible handoff artifact with the original DXF unchanged
+- [ ] External scanned-slab project is accessed via a replaceable service adapter (not hardcoded)
+- [ ] Cut phase data persists separately from quote-focused layout state

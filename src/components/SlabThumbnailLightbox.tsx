@@ -12,12 +12,20 @@ type Props = {
 function SlabThumbnailLightboxInner({ src, label, className }: Props) {
   const [open, setOpen] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);
+  const [thumbLoaded, setThumbLoaded] = useState(false);
   const [modalFailed, setModalFailed] = useState(false);
+  const [modalLoaded, setModalLoaded] = useState(false);
 
   useEffect(() => {
     setThumbFailed(false);
+    setThumbLoaded(false);
     setModalFailed(false);
+    setModalLoaded(false);
   }, [src]);
+
+  useEffect(() => {
+    if (!open) setModalLoaded(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,12 +72,22 @@ function SlabThumbnailLightboxInner({ src, label, className }: Props) {
                 <p className="slab-lightbox-fallback__hint">The link may be broken or blocked.</p>
               </div>
             ) : (
-              <img
-                className="slab-lightbox__img"
-                src={src}
-                alt=""
-                onError={() => setModalFailed(true)}
-              />
+              <>
+                {!modalLoaded ? (
+                  <div
+                    className="slab-lightbox__skeleton"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <img
+                  className="slab-lightbox__img"
+                  src={src}
+                  alt=""
+                  data-loaded={modalLoaded || undefined}
+                  onLoad={() => setModalLoaded(true)}
+                  onError={() => setModalFailed(true)}
+                />
+              </>
             )}
           </div>
         </div>,
@@ -96,12 +114,19 @@ function SlabThumbnailLightboxInner({ src, label, className }: Props) {
         className={["product-thumb-wrap", "product-thumb-trigger", className].filter(Boolean).join(" ")}
         onClick={() => setOpen(true)}
         aria-label={`Expand slab image: ${label}`}
+        data-loading={!thumbLoaded || undefined}
       >
+        {!thumbLoaded ? (
+          <span className="product-thumb-skeleton" aria-hidden="true" />
+        ) : null}
         <img
           className="product-thumb"
           src={src}
           alt=""
           loading="lazy"
+          decoding="async"
+          data-loaded={thumbLoaded || undefined}
+          onLoad={() => setThumbLoaded(true)}
           onError={() => setThumbFailed(true)}
         />
       </button>

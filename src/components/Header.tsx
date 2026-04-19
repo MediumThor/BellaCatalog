@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { NavLink } from "react-router-dom";
+import { AnimatedTabBar, type AnimatedTabBarTab } from "./AnimatedTabBar";
 
 type Props = {
   onOpenSettings: () => void;
@@ -10,11 +10,30 @@ type Props = {
   onSignOut?: () => void;
   /** Hide settings (rare). */
   showSettingsButton?: boolean;
+  /** Active company name — drives the brand name lockup. */
+  companyName?: string | null;
+  /** Active company logo URL — replaces the text brand when present. */
+  companyLogoUrl?: string | null;
+  /** Optional tagline shown next to the company name. */
+  companyTag?: string | null;
+  /** Whether to show the "Company" settings link (owner/admin only). */
+  canManageCompany?: boolean;
 };
 
-function navClass({ isActive }: { isActive: boolean }) {
-  return `btn btn-ghost btn-header${isActive ? " header-nav-link--active" : ""}`;
-}
+/**
+ * Primary route tabs. Each variant maps to a hue from the shared product
+ * palette (Catalog → brand gold, Layout Studio → quote blue, Jobs → active
+ * green, Stats → complete indigo) so the tab bar reads as a quick
+ * "where am I?" map across the app. We keep the `commissions` variant
+ * name on the Stats tab so the existing CSS hue continues to apply
+ * without introducing a brand-new palette token.
+ */
+const PRIMARY_TABS: AnimatedTabBarTab[] = [
+  { id: "catalog", to: "/", end: true, label: "Catalog", variant: "catalog" },
+  { id: "layout", to: "/layout", label: "Layout Studio", variant: "layout-studio" },
+  { id: "jobs", to: "/jobs", label: "Jobs", variant: "jobs" },
+  { id: "stats", to: "/stats", label: "Stats", variant: "commissions" },
+];
 
 function HeaderInner({
   onOpenSettings,
@@ -22,13 +41,27 @@ function HeaderInner({
   userTitle,
   onSignOut,
   showSettingsButton = true,
+  companyName,
+  companyLogoUrl,
+  companyTag,
+  canManageCompany: _canManageCompany,
 }: Props) {
+  const brandName = companyName?.trim() || "Bella Stone";
+  const brandTag = companyTag ?? "Wholesale Catalog";
+
   return (
     <header className="app-header">
       <div className="app-header-inner">
         <div className="brand-lockup">
-          <span className="brand-name">Bella Stone</span>
-          <span className="brand-tag">Wholesale Catalog</span>
+          {companyLogoUrl ? (
+            <img
+              className="brand-logo"
+              src={companyLogoUrl}
+              alt={`${brandName} logo`}
+            />
+          ) : null}
+          <span className="brand-name">{brandName}</span>
+          {brandTag ? <span className="brand-tag">{brandTag}</span> : null}
         </div>
 
         <div
@@ -38,14 +71,11 @@ function HeaderInner({
         />
 
         <div className="header-end">
-          <nav className="header-nav" aria-label="Primary">
-            <NavLink to="/" end className={navClass}>
-              Catalog
-            </NavLink>
-            <NavLink to="/layout" className={navClass}>
-              Layout Studio
-            </NavLink>
-          </nav>
+          <AnimatedTabBar
+            tabs={PRIMARY_TABS}
+            ariaLabel="Primary"
+            className="animated-tabs--header"
+          />
           <div className="header-actions">
             {userLabel ? (
               <span className="header-user" title={userTitle ?? userLabel}>

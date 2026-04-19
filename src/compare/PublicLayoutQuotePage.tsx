@@ -85,12 +85,16 @@ export function PublicLayoutQuotePage() {
     ) : null
   );
 
+  const brandTitle = payload.branding?.companyName?.trim()
+    ? `${payload.branding.companyName} — Layout quote`
+    : "Layout quote";
+
   return (
     <main className="compare-page public-layout-quote">
       <div className="ls-modal glass-panel ls-layout-quote-modal">
         <div className="ls-layout-quote-modal-toolbar">
           <h2 className="ls-layout-quote-modal-title" id="public-layout-quote-title">
-            Layout quote
+            {brandTitle}
           </h2>
         </div>
         <div className="ls-layout-quote-modal-body ls-layout-quote-modal-body--public">

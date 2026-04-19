@@ -216,6 +216,56 @@ The layout should still be fully reconstructable without the preview image.
 
 Store preview metadata separately from the core geometry state.
 
+---
+
+## Cut phase data
+
+Cut is **not** merged into `SavedLayoutStudioState`. Persist a **sibling** record (conceptually `CutPhaseState`) per option/area as implementation allows, so quote layout data stays clean.
+
+**Rules:**
+
+- The **DXF file referenced here is immutable.** Any re-import **replaces** the Cut-phase DXF record end-to-end; there is no in-place edit path.
+- **Scanned slab images** are **not** copied into BellaCatalog’s canonical material catalog. Reference the external library by **external id** (and URLs only as returned by that system).
+
+Example shape (illustrative):
+
+```ts
+type CutPhaseState = {
+  version: number
+  dxf: {
+    fileUrl: string
+    fileName: string
+    uploadedAt: string
+    /** e.g. SHA-256 of original bytes — export must verify match */
+    checksum: string
+  } | null
+  slabScan: {
+    externalId: string
+    sourceProject: string
+    imageUrl: string
+    widthIn: number
+    heightIn: number
+    pixelsPerInch?: number
+    fetchedAt: string
+  } | null
+  placement: {
+    x: number
+    y: number
+    rotation: number
+    mirrored?: boolean
+  } | null
+  export: {
+    status: 'idle' | 'pending' | 'ready' | 'error'
+    lastExportedAt?: string
+    exportArtifactUrl?: string
+  }
+  updatedAt: string
+  updatedBy?: string
+}
+```
+
+See also [50_LAYOUT_STUDIO_CUT_PHASE.md](./50_LAYOUT_STUDIO_CUT_PHASE.md) and [60_CUT_PHASE_EXTERNAL_INTEGRATION.md](./60_CUT_PHASE_EXTERNAL_INTEGRATION.md).
+
 Data anti-patterns to avoid
 
 Avoid:

@@ -2,12 +2,14 @@ import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, use
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogCollection, CatalogItem, NormalizedCatalog, UiPreferences } from "../types/catalog";
+import { CatalogAddSlabsToCollectionModal } from "./CatalogAddSlabsToCollectionModal";
 import { CatalogAddToCollectionModal } from "./CatalogAddToCollectionModal";
 import { CatalogAddMaterialModal } from "./CatalogAddMaterialModal";
 import { CatalogCollectionsBar } from "./CatalogCollectionsBar";
 import { CatalogCreateManualCollectionModal } from "./CatalogCreateManualCollectionModal";
 import { CatalogCollectionsManagerModal } from "./CatalogCollectionsManagerModal";
 import { CatalogSaveSmartCollectionModal } from "./CatalogSaveSmartCollectionModal";
+import { CatalogSelectionActionBar } from "./CatalogSelectionActionBar";
 import { CompareCatalogOnboardingModal } from "./CompareCatalogOnboardingModal";
 import { FloatingCompareButton } from "./FloatingCompareButton";
 import { ActiveFilterChips } from "./ActiveFilterChips";
@@ -19,15 +21,11 @@ import { CatalogViewToggle } from "./CatalogViewToggle";
 import { FilterPanel } from "./FilterPanel";
 import { SearchBar } from "./SearchBar";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { CatalogGridSkeleton } from "./CatalogGridSkeleton";
 import { GridView } from "./GridView";
 import { TableView } from "./TableView";
 import { ThicknessQuickFilter } from "./ThicknessQuickFilter";
 import { VendorTabs } from "./VendorTabs";
-import {
-  geminiCatalogSearchConfigured,
-  runGeminiCatalogSearch,
-  runGeminiCatalogVisualMatch,
-} from "../services/geminiCatalogSearch";
 import { buildFilterOptions } from "../utils/catalogOptions";
 import {
   COLLECTION_QUERY_PARAM,
@@ -44,12 +42,16 @@ import { searchCatalog } from "../utils/searchCatalog";
 import { sortCatalog } from "../utils/sortCatalog";
 import { markItemRemoved, saveOverlayState } from "../utils/import/importStorage";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import {
-  createCatalogCollection,
-  deleteCatalogCollection,
-  subscribeCatalogCollections,
-  updateCatalogCollection,
-} from "../services/catalogCollectionsFirestore";
+  canEditCollection,
+  canShareCollection,
+  createUnifiedCatalogCollection,
+  deleteUnifiedCatalogCollection,
+  subscribeUnifiedCatalogCollections,
+  updateUnifiedCatalogCollection,
+} from "../services/unifiedCatalogCollections";
+import type { CatalogCollectionVisibility } from "../types/catalog";
 
 export type CatalogBrowserProps = {
   catalog: NormalizedCatalog | null;
@@ -82,7 +84,8 @@ export function CatalogBrowser({
   searchPlacement = "header",
   compareBagAction,
 }: CatalogBrowserProps) {
-  const { user } = useAuth();
+  const { user, profileDisplayName } = useAuth();
+  const { activeCompanyId, role } = useCompany();
   const [searchParams, setSearchParams] = useSearchParams();
   const [prefs, setPrefs] = useState<UiPreferences>(() => mergePreferences(loadPreferences()));
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => [...loadFavoriteIds()]);
@@ -91,12 +94,6 @@ export function CatalogBrowser({
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<CatalogItem | null>(null);
   const [collectionDeleteConfirm, setCollectionDeleteConfirm] = useState<CatalogCollection | null>(null);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiRankedIds, setAiRankedIds] = useState<string[]>([]);
-  const [aiStatus, setAiStatus] = useState<{
-    kind: "idle" | "success" | "error";
-    message: string;
-  }>({ kind: "idle", message: "" });
   const [catalogToolsOpen, setCatalogToolsOpen] = useState(false);
   const [headerSearchSlot, setHeaderSearchSlot] = useState<HTMLElement | null>(null);
   const [compareBagIds, setCompareBagIds] = useState<string[]>([]);
@@ -109,7 +106,9 @@ export function CatalogBrowser({
   const [addToCollectionOpen, setAddToCollectionOpen] = useState(false);
   const [collectionModalItems, setCollectionModalItems] = useState<CatalogItem[]>([]);
   const [loadedCollectionId, setLoadedCollectionId] = useState<string | null>(null);
-  const aiConfigured = geminiCatalogSearchConfigured();
+  const [addSlabsToCollectionOpen, setAddSlabsToCollectionOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(() => new Set());
   const compareBagEnabled = Boolean(compareBagAction) || !pickMode;
   const canDeleteCatalogRows = allowDelete ?? !pickMode;
   const activeCollectionId = searchParams.get(COLLECTION_QUERY_PARAM);
@@ -140,19 +139,33 @@ export function CatalogBrowser({
     setCollectionsLoading(true);
     setCollectionsError(null);
     setCollections([]);
-    return subscribeCatalogCollections(
-      user.uid,
-      (rows) => {
+    return subscribeUnifiedCatalogCollections({
+      userId: user.uid,
+      companyId: activeCompanyId,
+      onData: (rows) => {
         setCollections(rows);
         setCollectionsLoading(false);
       },
-      (e) => {
+      onError: (e) => {
         setCollections([]);
         setCollectionsLoading(false);
         setCollectionsError(e.message);
-      }
-    );
-  }, [user?.uid]);
+      },
+    });
+  }, [user?.uid, activeCompanyId]);
+
+  const currentUserId = user?.uid ?? "";
+  const ownerDisplayName = useMemo(() => {
+    const name = profileDisplayName?.trim();
+    if (name) return name;
+    return user?.email ?? null;
+  }, [profileDisplayName, user?.email]);
+  const canShareWithCompanyNow = Boolean(activeCompanyId) && canShareCollection(role);
+  const canEditCollectionCb = useCallback(
+    (collection: import("../types/catalog").CatalogCollection) =>
+      canEditCollection({ collection, currentUserId, role }),
+    [currentUserId, role]
+  );
 
   const deferredSearch = useDeferredValue(prefs.searchQuery);
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
@@ -166,16 +179,24 @@ export function CatalogBrowser({
     if (!catalog || !user?.uid) return;
     const validIds = new Set(catalog.items.map((item) => item.id));
     const next = pruneCatalogCollections(collections, validIds);
-    const changedCollections = next.filter((collection, index) => collection !== collections[index]);
+    /**
+     * Only auto-prune collections the current user can actually edit. Other
+     * seats' private or shared-but-role-protected lists shouldn't get
+     * invalidated by our local catalog view.
+     */
+    const changedCollections = next.filter(
+      (collection, index) =>
+        collection !== collections[index] && canEditCollectionCb(collections[index])
+    );
     if (changedCollections.length === 0) return;
     void Promise.all(
       changedCollections.map((collection) =>
-        updateCatalogCollection(collection.id, {
+        updateUnifiedCatalogCollection(collection, {
           itemIds: collection.itemIds,
         })
       )
     );
-  }, [catalog, collections, user?.uid]);
+  }, [catalog, collections, user?.uid, canEditCollectionCb]);
 
   useEffect(() => {
     if (!activeCollectionId) {
@@ -204,8 +225,6 @@ export function CatalogBrowser({
     if (activeCollection.type === "smart" && activeCollection.smartSnapshot) {
       const snapshot = activeCollection.smartSnapshot;
       setPrefs((prev) => applyCollectionSnapshot(prev, snapshot));
-      setAiRankedIds([]);
-      setAiStatus({ kind: "idle", message: "" });
     }
   }, [activeCollection, loadedCollectionId]);
 
@@ -280,21 +299,8 @@ export function CatalogBrowser({
       favoriteIds: favoriteSet,
       hideWithoutPicture: prefs.hideWithoutPicture,
     });
-    const sorted = sortCatalog(filtered, prefs.sortKey);
-    if (!aiRankedIds.length) {
-      return sorted;
-    }
-
-    const rankedIndex = new Map(aiRankedIds.map((id, index) => [id, index]));
-    return [...sorted].sort((a, b) => {
-      const aRank = rankedIndex.get(a.id);
-      const bRank = rankedIndex.get(b.id);
-      if (aRank != null && bRank != null) return aRank - bRank;
-      if (aRank != null) return -1;
-      if (bRank != null) return 1;
-      return 0;
-    });
-  }, [catalog, collectionBaseItems, deferredSearch, prefs, favoriteSet, aiRankedIds]);
+    return sortCatalog(filtered, prefs.sortKey);
+  }, [catalog, collectionBaseItems, deferredSearch, prefs, favoriteSet]);
 
   const updatePrefs = useCallback((patch: Partial<UiPreferences>) => {
     setPrefs((p) => ({ ...p, ...patch, columns: { ...p.columns, ...patch.columns } }));
@@ -327,57 +333,113 @@ export function CatalogBrowser({
       } else {
         setLoadedCollectionId(null);
       }
-      setAiRankedIds([]);
-      setAiStatus({ kind: "idle", message: "" });
       updateCollectionParam(id);
     },
     [collections, updateCollectionParam]
   );
 
   const createManualCollection = useCallback(
-    async (name: string, description: string, itemIds: string[] = [], activate = true) => {
+    async (
+      name: string,
+      description: string,
+      visibility: CatalogCollectionVisibility,
+      itemIds: string[] = [],
+      activate = true
+    ) => {
       if (!user?.uid) return;
-      const id = await createCatalogCollection(user.uid, {
-        name,
-        description,
-        type: "manual",
-        itemIds: [...new Set(itemIds)],
-        smartSnapshot: null,
+      /**
+       * Guard against a user without the right role sending "company". The
+       * modal already greys it out, but the service call is the backstop.
+       */
+      const effectiveVisibility: CatalogCollectionVisibility =
+        visibility === "company" && canShareWithCompanyNow ? "company" : "private";
+      const id = await createUnifiedCatalogCollection({
+        userId: user.uid,
+        companyId: activeCompanyId,
+        ownerDisplayName,
+        data: {
+          name,
+          description,
+          type: "manual",
+          itemIds: [...new Set(itemIds)],
+          smartSnapshot: null,
+          visibility: effectiveVisibility,
+        },
       });
       if (activate) handleSelectCollection(id);
     },
-    [handleSelectCollection, user?.uid]
+    [
+      activeCompanyId,
+      canShareWithCompanyNow,
+      handleSelectCollection,
+      ownerDisplayName,
+      user?.uid,
+    ]
   );
 
   const createSmartCollection = useCallback(
-    async (name: string, description: string, activate = true) => {
+    async (
+      name: string,
+      description: string,
+      visibility: CatalogCollectionVisibility,
+      activate = true
+    ) => {
       if (!user?.uid) return;
-      const id = await createCatalogCollection(user.uid, {
-        name,
-        description,
-        type: "smart",
-        itemIds: [],
-        smartSnapshot: currentCollectionSnapshot,
+      const effectiveVisibility: CatalogCollectionVisibility =
+        visibility === "company" && canShareWithCompanyNow ? "company" : "private";
+      const id = await createUnifiedCatalogCollection({
+        userId: user.uid,
+        companyId: activeCompanyId,
+        ownerDisplayName,
+        data: {
+          name,
+          description,
+          type: "smart",
+          itemIds: [],
+          smartSnapshot: currentCollectionSnapshot,
+          visibility: effectiveVisibility,
+        },
       });
       if (activate) handleSelectCollection(id);
     },
-    [currentCollectionSnapshot, handleSelectCollection, user?.uid]
+    [
+      activeCompanyId,
+      canShareWithCompanyNow,
+      currentCollectionSnapshot,
+      handleSelectCollection,
+      ownerDisplayName,
+      user?.uid,
+    ]
   );
 
-  const renameCollection = useCallback(async (id: string, name: string, description: string) => {
-    await updateCatalogCollection(id, {
-      name,
-      description,
-    });
-  }, []);
+  const renameCollection = useCallback(
+    async (
+      collection: import("../types/catalog").CatalogCollection,
+      name: string,
+      description: string
+    ) => {
+      await updateUnifiedCatalogCollection(collection, { name, description });
+    },
+    []
+  );
 
   const updateSmartCollection = useCallback(
-    async (id: string) => {
-      await updateCatalogCollection(id, {
+    async (collection: import("../types/catalog").CatalogCollection) => {
+      await updateUnifiedCatalogCollection(collection, {
         smartSnapshot: currentCollectionSnapshot,
       });
     },
     [currentCollectionSnapshot]
+  );
+
+  const setCollectionVisibility = useCallback(
+    async (
+      collection: import("../types/catalog").CatalogCollection,
+      visibility: CatalogCollectionVisibility
+    ) => {
+      await updateUnifiedCatalogCollection(collection, { visibility });
+    },
+    []
   );
 
   const openCollectionPickerForItems = useCallback((items: CatalogItem[]) => {
@@ -421,8 +483,6 @@ export function CatalogBrowser({
       favoritesOnly: false,
       hideWithoutPicture: false,
     }));
-    setAiRankedIds([]);
-    setAiStatus({ kind: "idle", message: "" });
   }, []);
 
   const toggleFavorite = useCallback((id: string) => {
@@ -450,7 +510,11 @@ export function CatalogBrowser({
   const handleSaveItemsToCollections = useCallback(
     async (
       selectedCollectionIds: string[],
-      createNew: { name: string; description: string } | null
+      createNew: {
+        name: string;
+        description: string;
+        visibility: CatalogCollectionVisibility;
+      } | null
     ) => {
       if (!user?.uid) return;
       const selectedItemIds = [...new Set(collectionModalItems.map((item) => item.id))];
@@ -459,6 +523,7 @@ export function CatalogBrowser({
       const selectedCollectionIdSet = new Set(selectedCollectionIds);
       const updates = collections
         .filter((collection) => collection.type === "manual")
+        .filter((collection) => canEditCollectionCb(collection))
         .map(async (collection) => {
           const hasOverlap = collection.itemIds.some((id) => selectedItemIdSet.has(id));
           const shouldInclude = selectedCollectionIdSet.has(collection.id);
@@ -469,14 +534,20 @@ export function CatalogBrowser({
             itemIds.length !== collection.itemIds.length ||
             itemIds.some((id, index) => id !== collection.itemIds[index]);
           if (!changed) return;
-          await updateCatalogCollection(collection.id, { itemIds });
+          await updateUnifiedCatalogCollection(collection, { itemIds });
         });
       await Promise.all(updates);
       if (createNew?.name.trim()) {
-        await createManualCollection(createNew.name.trim(), createNew.description.trim(), selectedItemIds, false);
+        await createManualCollection(
+          createNew.name.trim(),
+          createNew.description.trim(),
+          createNew.visibility ?? "private",
+          selectedItemIds,
+          false
+        );
       }
     },
-    [collections, collectionModalItems, createManualCollection, user?.uid]
+    [canEditCollectionCb, collections, collectionModalItems, createManualCollection, user?.uid]
   );
 
   /** Drop bag ids that no longer exist in the loaded catalog (overlay delete), not when filtered out. */
@@ -487,13 +558,123 @@ export function CatalogBrowser({
       const next = prev.filter((id) => valid.has(id));
       return next.length === prev.length ? prev : next;
     });
+    setSelectedItemIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (valid.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [catalog]);
+
+  const toggleSelectedItem = useCallback((id: string) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedItemIds(new Set());
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedItemIds(new Set());
+  }, []);
+
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((prev) => {
+      if (prev) {
+        setSelectedItemIds(new Set());
+      }
+      return !prev;
+    });
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedItemIds((prev) => {
+      const visibleIds = displayedItems.map((item) => item.id);
+      const allAlreadySelected =
+        visibleIds.length > 0 && visibleIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allAlreadySelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
+  }, [displayedItems]);
+
+  const allVisibleSelected = useMemo(() => {
+    if (displayedItems.length === 0) return false;
+    return displayedItems.every((item) => selectedItemIds.has(item.id));
+  }, [displayedItems, selectedItemIds]);
+
+  const selectedItems = useMemo((): CatalogItem[] => {
+    if (!catalog) return [];
+    if (selectedItemIds.size === 0) return [];
+    const map = new Map(catalog.items.map((i) => [i.id, i]));
+    const out: CatalogItem[] = [];
+    for (const id of selectedItemIds) {
+      const item = map.get(id);
+      if (item) out.push(item);
+    }
+    return out;
+  }, [catalog, selectedItemIds]);
+
+  const canEditActiveCollection = activeCollection
+    ? canEditCollectionCb(activeCollection)
+    : false;
+
+  const openAddSlabsToActiveCollection = useCallback(() => {
+    if (!activeCollection || activeCollection.type !== "manual") return;
+    if (!canEditActiveCollection) return;
+    setAddSlabsToCollectionOpen(true);
+  }, [activeCollection, canEditActiveCollection]);
+
+  const handleAddSlabsToActiveCollection = useCallback(
+    async (newItemIds: string[]) => {
+      if (!activeCollection || activeCollection.type !== "manual") return;
+      if (newItemIds.length === 0) return;
+      const existing = new Set(activeCollection.itemIds);
+      const additions = newItemIds.filter((id) => !existing.has(id));
+      if (additions.length === 0) return;
+      await updateUnifiedCatalogCollection(activeCollection, {
+        itemIds: [...activeCollection.itemIds, ...additions],
+      });
+    },
+    [activeCollection]
+  );
+
+  const openCollectionPickerForSelection = useCallback(() => {
+    if (selectedItems.length === 0) return;
+    openCollectionPickerForItems(selectedItems);
+  }, [openCollectionPickerForItems, selectedItems]);
+
+  const removeSelectedFromActiveCollection = useCallback(async () => {
+    if (!activeCollection || activeCollection.type !== "manual") return;
+    if (!canEditActiveCollection) return;
+    if (selectedItemIds.size === 0) return;
+    const remaining = activeCollection.itemIds.filter((id) => !selectedItemIds.has(id));
+    if (remaining.length === activeCollection.itemIds.length) return;
+    await updateUnifiedCatalogCollection(activeCollection, { itemIds: remaining });
+    clearSelection();
+  }, [activeCollection, canEditActiveCollection, clearSelection, selectedItemIds]);
 
   const handleDeleteCollection = useCallback(async () => {
     if (!collectionDeleteConfirm) return;
-    const deletingId = collectionDeleteConfirm.id;
-    await deleteCatalogCollection(deletingId);
-    if (activeCollectionId === deletingId) {
+    const deletingCollection = collectionDeleteConfirm;
+    await deleteUnifiedCatalogCollection(deletingCollection);
+    if (activeCollectionId === deletingCollection.id) {
       handleSelectCollection(null);
     }
     setCollectionDeleteConfirm(null);
@@ -536,96 +717,6 @@ export function CatalogBrowser({
     }));
   }, []);
 
-  const runAiSearch = useCallback(async () => {
-    if (!catalog || collectionBaseItems.length === 0) return;
-    const query = prefs.searchQuery.trim();
-    if (!query) return;
-    setAiBusy(true);
-    setAiRankedIds([]);
-    setAiStatus({ kind: "idle", message: "" });
-    try {
-      const plan = await runGeminiCatalogSearch(query, filterOptions);
-      const nextPrefs = {
-        ...prefs,
-        searchQuery: plan.searchText,
-        vendor: plan.vendor || "__all__",
-        manufacturers: plan.manufacturers,
-        materials: plan.materials,
-        thicknesses: plan.thicknesses,
-        tierGroups: plan.tierGroups,
-        finishes: plan.finishes,
-        sizeClasses: plan.sizeClasses,
-        priceTypes: plan.priceTypes,
-        colorFamilies: plan.colorFamilies,
-        undertones: plan.undertones,
-        patternTags: plan.patternTags,
-        movementLevels: plan.movementLevels,
-        styleTags: plan.styleTags,
-      };
-      setPrefs((p) => ({
-        ...p,
-        searchQuery: plan.searchText,
-        vendor: plan.vendor || "__all__",
-        manufacturers: plan.manufacturers,
-        materials: plan.materials,
-        thicknesses: plan.thicknesses,
-        tierGroups: plan.tierGroups,
-        finishes: plan.finishes,
-        sizeClasses: plan.sizeClasses,
-        priceTypes: plan.priceTypes,
-        colorFamilies: plan.colorFamilies,
-        undertones: plan.undertones,
-        patternTags: plan.patternTags,
-        movementLevels: plan.movementLevels,
-        styleTags: plan.styleTags,
-      }));
-
-      const searched = searchCatalog(collectionBaseItems, plan.searchText);
-      const filtered = filterCatalog(searched, {
-        vendor: nextPrefs.vendor,
-        manufacturers: nextPrefs.manufacturers,
-        materials: nextPrefs.materials,
-        thicknesses: nextPrefs.thicknesses,
-        tierGroups: nextPrefs.tierGroups,
-        finishes: nextPrefs.finishes,
-        sizeClasses: nextPrefs.sizeClasses,
-        priceTypes: nextPrefs.priceTypes,
-        colorFamilies: nextPrefs.colorFamilies,
-        undertones: nextPrefs.undertones,
-        patternTags: nextPrefs.patternTags,
-        movementLevels: nextPrefs.movementLevels,
-        styleTags: nextPrefs.styleTags,
-        favoritesOnly: nextPrefs.favoritesOnly,
-        favoriteIds: favoriteSet,
-        hideWithoutPicture: nextPrefs.hideWithoutPicture,
-      });
-      const visualCandidates = sortCatalog(
-        filtered.filter((item) => Boolean(item.imageUrl?.trim())),
-        prefs.sortKey
-      );
-      const visualMatch = await runGeminiCatalogVisualMatch(query, visualCandidates);
-      if (visualMatch?.orderedIds.length) {
-        setAiRankedIds(visualMatch.orderedIds);
-      }
-
-      const visualSuffix = visualMatch?.orderedIds.length
-        ? ` Visually ranked ${visualMatch.orderedIds.length} photo match${visualMatch.orderedIds.length === 1 ? "" : "es"} first.`
-        : "";
-      setAiStatus({
-        kind: "success",
-        message:
-          (plan.explanation || "AI search applied the closest matching catalog filters.") +
-          visualSuffix +
-          (visualMatch?.explanation ? ` ${visualMatch.explanation}` : ""),
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "AI search failed.";
-      setAiStatus({ kind: "error", message: msg });
-    } finally {
-      setAiBusy(false);
-    }
-  }, [catalog, collectionBaseItems, favoriteSet, filterOptions, prefs]);
-
   return (
     <>
       {loadError ? (
@@ -646,6 +737,8 @@ export function CatalogBrowser({
 
       <CatalogCreateManualCollectionModal
         open={createManualOpen}
+        canShareWithCompany={canShareWithCompanyNow}
+        defaultVisibility={canShareWithCompanyNow ? "company" : "private"}
         onClose={() => setCreateManualOpen(false)}
         onCreate={createManualCollection}
       />
@@ -666,6 +759,8 @@ export function CatalogBrowser({
       <CatalogSaveSmartCollectionModal
         open={saveSmartOpen}
         currentSnapshot={currentCollectionSnapshot}
+        canShareWithCompany={canShareWithCompanyNow}
+        defaultVisibility={canShareWithCompanyNow ? "company" : "private"}
         onClose={() => setSaveSmartOpen(false)}
         onCreate={createSmartCollection}
       />
@@ -673,24 +768,38 @@ export function CatalogBrowser({
       <CatalogCollectionsManagerModal
         open={collectionManagerOpen}
         collections={collections}
+        currentUserId={currentUserId}
         activeCollectionId={activeCollectionId}
         countsByCollectionId={countsByCollectionId}
+        canShareWithCompany={canShareWithCompanyNow}
+        canEdit={canEditCollectionCb}
         onClose={() => setCollectionManagerOpen(false)}
         onSelectCollection={handleSelectCollection}
         onRenameCollection={renameCollection}
-        onDeleteCollection={(id) => {
-          const next = collections.find((collection) => collection.id === id) ?? null;
-          setCollectionDeleteConfirm(next);
+        onDeleteCollection={(collection) => {
+          setCollectionDeleteConfirm(collection);
         }}
         onUpdateSmartCollection={updateSmartCollection}
+        onSetVisibility={setCollectionVisibility}
       />
 
       <CatalogAddToCollectionModal
         open={addToCollectionOpen}
         items={collectionModalItems}
         collections={collections}
+        currentUserId={currentUserId}
+        canShareWithCompany={canShareWithCompanyNow}
+        canEdit={canEditCollectionCb}
         onClose={() => setAddToCollectionOpen(false)}
         onSave={handleSaveItemsToCollections}
+      />
+
+      <CatalogAddSlabsToCollectionModal
+        open={addSlabsToCollectionOpen}
+        collection={activeCollection}
+        catalogItems={catalog?.items ?? []}
+        onClose={() => setAddSlabsToCollectionOpen(false)}
+        onAdd={handleAddSlabsToActiveCollection}
       />
 
       <FloatingCompareButton
@@ -751,14 +860,7 @@ export function CatalogBrowser({
             <SearchBar
               variant="header"
               value={prefs.searchQuery}
-              onChange={(searchQuery) => {
-                setAiRankedIds([]);
-                setAiStatus({ kind: "idle", message: "" });
-                updatePrefs({ searchQuery });
-              }}
-              onAiSearch={runAiSearch}
-              aiBusy={aiBusy}
-              aiDisabledReason={aiConfigured ? undefined : "Set VITE_GEMINI_API_KEY to enable AI search"}
+              onChange={(searchQuery) => updatePrefs({ searchQuery })}
             />,
             headerSearchSlot
           )
@@ -767,21 +869,8 @@ export function CatalogBrowser({
       {searchPlacement === "inline" ? (
         <SearchBar
           value={prefs.searchQuery}
-          onChange={(searchQuery) => {
-            setAiRankedIds([]);
-            setAiStatus({ kind: "idle", message: "" });
-            updatePrefs({ searchQuery });
-          }}
-          onAiSearch={runAiSearch}
-          aiBusy={aiBusy}
-          aiDisabledReason={aiConfigured ? undefined : "Set VITE_GEMINI_API_KEY to enable AI search"}
+          onChange={(searchQuery) => updatePrefs({ searchQuery })}
         />
-      ) : null}
-
-      {aiStatus.kind !== "idle" ? (
-        <div className="ai-search-status" data-kind={aiStatus.kind} role="status">
-          {aiStatus.message}
-        </div>
       ) : null}
 
       {collectionsError ? (
@@ -794,18 +883,25 @@ export function CatalogBrowser({
         collections={collections}
         activeCollection={activeCollection}
         activeCollectionId={activeCollectionId}
+        currentUserId={currentUserId}
         displayedCount={displayedItems.length}
         baseCount={collectionBaseItems.length}
         compareBagCount={compareBagItems.length}
+        canEditActiveCollection={canEditActiveCollection}
+        selectMode={selectMode}
+        selectedCount={selectedItemIds.size}
         onSelectCollection={handleSelectCollection}
         onOpenNewManual={openCreateManualModal}
         onOpenSaveCurrentView={openSaveSmartModal}
         onOpenManage={openManageCollectionsModal}
         onOpenAddToCollection={() => openCollectionPickerForItems(compareBagItems)}
+        onOpenAddSlabsToActiveCollection={openAddSlabsToActiveCollection}
         onUpdateActiveCollection={() => {
           if (activeCollection?.type !== "smart") return;
-          updateSmartCollection(activeCollection.id);
+          if (!canEditCollectionCb(activeCollection)) return;
+          void updateSmartCollection(activeCollection);
         }}
+        onToggleSelectMode={toggleSelectMode}
       />
 
       <CatalogToolsDrawer open={catalogToolsOpen} onOpenChange={setCatalogToolsOpen}>
@@ -958,6 +1054,8 @@ export function CatalogBrowser({
         <ActiveFilterChips prefs={prefs} onClear={clearFilters} onRemoveChip={updatePrefs} />
       </div>
 
+      {!loadError && !catalog ? <CatalogGridSkeleton /> : null}
+
       {!loadError && catalog && catalog.items.length === 0 ? (
         <div className="empty-state">
           No catalog items loaded. Add products to <code>public/catalog.json</code>.
@@ -989,6 +1087,9 @@ export function CatalogBrowser({
             onToggleCompareBag={toggleCompareBag}
             collectionMembershipCounts={collectionMembershipCounts}
             onOpenCollections={handleOpenCollectionsForItem}
+            selectMode={selectMode}
+            selectedIds={selectedItemIds}
+            onToggleSelected={toggleSelectedItem}
           />
         ) : (
           <TableView
@@ -1009,8 +1110,31 @@ export function CatalogBrowser({
             onToggleCompareBag={toggleCompareBag}
             collectionMembershipCounts={collectionMembershipCounts}
             onOpenCollections={handleOpenCollectionsForItem}
+            selectMode={selectMode}
+            selectedIds={selectedItemIds}
+            onToggleSelected={toggleSelectedItem}
           />
         )
+      ) : null}
+
+      {selectMode ? (
+        <CatalogSelectionActionBar
+          selectedCount={selectedItemIds.size}
+          visibleCount={displayedItems.length}
+          allVisibleSelected={allVisibleSelected}
+          activeManualCollectionName={
+            activeCollection?.type === "manual" && canEditActiveCollection
+              ? activeCollection.name
+              : null
+          }
+          onSelectAllVisible={selectAllVisible}
+          onClearSelection={clearSelection}
+          onAddToCollection={openCollectionPickerForSelection}
+          onRemoveFromActiveCollection={() => {
+            void removeSelectedFromActiveCollection();
+          }}
+          onExit={exitSelectMode}
+        />
       ) : null}
     </>
   );

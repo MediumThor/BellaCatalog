@@ -27,6 +27,21 @@ export type LayoutQuoteShareMaterialSection = {
   note: string | null;
 };
 
+/**
+ * Company branding captured at share-creation time. This is an immutable snapshot
+ * so shared links and PDFs keep the branding that was current when they were
+ * generated, even if the company changes their theme later.
+ */
+export type LayoutQuoteBrandingSnapshot = {
+  companyName?: string | null;
+  companyLogoUrl?: string | null;
+  companyAddressLines?: string[];
+  quoteHeaderText?: string | null;
+  quoteFooterText?: string | null;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+};
+
 /** Enough state to render the live plan preview (PlaceLayoutPreview) on the read-only share page. */
 export type LayoutQuoteShareLivePreviewV1 = {
   workspaceKind: "blank" | "source";
@@ -76,6 +91,25 @@ export type LayoutQuoteSharePayloadV1 = {
     quotedTotal: number | null;
     quotedPerSqft: number | null;
   };
+  /**
+   * Persisted "Pricing & deposit" snapshot saved on the job at the time
+   * the share link was created. Older snapshots may omit this field; the
+   * public page falls back to `price.quotedTotal` when absent.
+   *
+   * - `customerTotal` is the rep-saved quoted total (null when the rep
+   *   never saved one and the live computed estimate is being shown).
+   * - `isEstimate` flips the printable label between "Quoted total" and
+   *   "Quoted total (estimate)" so the customer can tell which it is.
+   * - `depositPercent` and `depositAmount` mirror the per-job
+   *   `requiredDepositPercent` / `requiredDepositAmount` (or the company
+   *   default % when the rep didn't override).
+   */
+  pricing?: {
+    customerTotal: number | null;
+    isEstimate: boolean;
+    depositPercent: number | null;
+    depositAmount: number | null;
+  } | null;
   customerRows?: LayoutQuoteShareRow[];
   sinkNames?: string[];
   materialSections?: LayoutQuoteShareMaterialSection[];
@@ -83,6 +117,8 @@ export type LayoutQuoteSharePayloadV1 = {
   jobAssumptions: string | null;
   optionNotes: string | null;
   disclaimer: string;
+  /** Optional company branding snapshot (name, logo, header/footer). */
+  branding?: LayoutQuoteBrandingSnapshot | null;
 };
 
 export const LAYOUT_QUOTE_DISCLAIMER =

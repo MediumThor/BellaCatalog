@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { PenSquare, Trash2, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import type { CatalogItem } from "../types/catalog";
 import { LayoutStudioScreen } from "./layoutStudio/components/LayoutStudioScreen";
@@ -18,8 +19,8 @@ import {
   deleteCustomer,
   deleteJob,
   fetchOptionsForJob,
+  findJobById,
   getCustomer,
-  getJob,
   subscribeCustomers,
   subscribeJob,
   subscribeJobsForCustomer,
@@ -30,10 +31,13 @@ import {
 } from "../services/compareQuoteFirestore";
 import {
   CUSTOMER_TYPE_OPTIONS,
+  JOB_STATUS_COLOR,
+  JOB_STATUS_LABELS,
   buildJobAreas,
   customerDisplayName,
   customerTypeLabel,
   normalizeCustomerType,
+  normalizeJobStatus,
   jobAreasForJob,
   primaryAreaForJob,
   type CustomerRecord,
@@ -46,6 +50,9 @@ import {
 import { CreateCustomerModal, type CustomerFormValues } from "./CreateCustomerModal";
 import { CreateJobModal, type JobFormValues } from "./CreateJobModal";
 import { AreaMaterialsCatalogModal } from "./AreaMaterialsCatalogModal";
+import { SearchBar } from "../components/SearchBar";
+import { useJobCollaboration } from "./useJobCollaboration";
+import { JobCollaborationBanner } from "./JobCollaborationBanner";
 
 type LayoutStudioCustomerFilter = "all" | CustomerType;
 
@@ -199,7 +206,8 @@ function SavedAreaLayoutPreview({
 
 export function LayoutStudioPage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const { user } = useAuth();
+  const { user, profileDisplayName } = useAuth();
+  const { activeCompanyId } = useCompany();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -232,27 +240,65 @@ export function LayoutStudioPage() {
   >(null);
 
   const [job, setJob] = useState<JobRecord | null>(null);
+  const [jobCustomerId, setJobCustomerId] = useState<string | null>(null);
   const [customer, setCustomer] = useState<CustomerRecord | null>(null);
   const [options, setOptions] = useState<JobComparisonOptionRecord[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const hasJobContext = Boolean(jobId);
 
+  /**
+   * Layout Studio is the primary editing surface. Claim the soft edit lock
+   * so other teammates see "Ryan is editing…" on their overview and are
+   * nudged to coordinate rather than save over each other.
+   */
+  const collaboration = useJobCollaboration({
+    job: hasJobContext ? job : null,
+    userId: user?.uid ?? null,
+    displayName: profileDisplayName ?? user?.displayName ?? user?.email ?? null,
+    mode: "editing",
+  });
+
+  /**
+   * Resolve the parent customerId for any job in the dashboard. Jobs are
+   * grouped by customer in `jobsByCustomer`, so we can read the row's
+   * `customerId` directly. Falls back to scanning all customer buckets.
+   */
+  const customerIdOfJob = (targetJobId: string): string | null => {
+    for (const [cid, rows] of Object.entries(jobsByCustomer)) {
+      if (rows.some((row) => row.id === targetJobId)) return cid;
+    }
+    return null;
+  };
+
   useLayoutEffect(() => {
     setHeaderSearchSlot(document.getElementById("catalog-header-search-root"));
   }, []);
 
+  /**
+   * Lock the dashboard to the viewport so only the two columns scroll under
+   * the sticky header. Scoped to the customer/job dashboard (no jobId) so the
+   * job editor routes keep their own scroll behavior.
+   */
   useEffect(() => {
-    if (!user?.uid || hasJobContext) return;
+    if (hasJobContext) return;
+    document.body.classList.add("ls-dashboard-viewport-lock");
+    return () => {
+      document.body.classList.remove("ls-dashboard-viewport-lock");
+    };
+  }, [hasJobContext]);
+
+  useEffect(() => {
+    if (!activeCompanyId || hasJobContext) return;
     return subscribeCustomers(
-      user.uid,
+      activeCompanyId,
       (rows) => {
         setCustomers(rows);
         setSelectedCustomerId((prev) => prev ?? rows[0]?.id ?? null);
       },
       () => setLoadError("Could not load customers.")
     );
-  }, [hasJobContext, user?.uid]);
+  }, [activeCompanyId, hasJobContext]);
 
   useEffect(() => {
     if (hasJobContext) return;
@@ -266,11 +312,11 @@ export function LayoutStudioPage() {
   }, [hasJobContext, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!user?.uid || hasJobContext || customers.length === 0) return;
+    if (!activeCompanyId || hasJobContext || customers.length === 0) return;
     const unsubscribers = customers.map((customerRow) =>
       subscribeJobsForCustomer(
+        activeCompanyId,
         customerRow.id,
-        user.uid,
         (jobs) => {
           setJobsByCustomer((prev) => ({ ...prev, [customerRow.id]: jobs }));
         },
@@ -280,18 +326,23 @@ export function LayoutStudioPage() {
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, [customers, hasJobContext, user?.uid]);
+  }, [activeCompanyId, customers, hasJobContext]);
 
   useEffect(() => {
-    if (!user?.uid || hasJobContext) return;
-    const jobs = Object.values(jobsByCustomer).flat();
-    if (jobs.length === 0) {
+    if (!activeCompanyId || hasJobContext) return;
+    const allJobs = Object.entries(jobsByCustomer).flatMap(([cid, rows]) =>
+      rows.map((row) => ({ cid, row }))
+    );
+    if (allJobs.length === 0) {
       setJobOptionsByJobId({});
       return;
     }
     let cancelled = false;
     void Promise.all(
-      jobs.map(async (jobRow) => [jobRow.id, await fetchOptionsForJob(jobRow.id, user.uid)] as const)
+      allJobs.map(
+        async ({ cid, row }) =>
+          [row.id, await fetchOptionsForJob(activeCompanyId, cid, row.id)] as const
+      )
     ).then((entries) => {
       if (cancelled) return;
       setJobOptionsByJobId(Object.fromEntries(entries));
@@ -299,31 +350,46 @@ export function LayoutStudioPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasJobContext, jobsByCustomer, user?.uid]);
+  }, [activeCompanyId, hasJobContext, jobsByCustomer]);
 
+  // Resolve jobId → customerId via collectionGroup when entering a job view.
   useEffect(() => {
-    if (!jobId || !hasJobContext) return;
+    if (!jobId || !hasJobContext || !activeCompanyId) return;
     let cancelled = false;
     (async () => {
-      const j = await getJob(jobId);
-      if (cancelled) return;
-      if (!j) {
-        setLoadError("Job not found.");
+      try {
+        const found = await findJobById(activeCompanyId, jobId);
+        if (cancelled) return;
+        if (!found) {
+          setLoadError("Job not found.");
+          setJob(null);
+          setJobCustomerId(null);
+          return;
+        }
+        setJobCustomerId(found.customerId);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to resolve job for layout studio", error);
+        setLoadError(
+          error instanceof Error
+            ? `Could not load job: ${error.message}`
+            : "Could not load job."
+        );
         setJob(null);
-        return;
+        setJobCustomerId(null);
       }
-      setJob(j);
     })();
     return () => {
       cancelled = true;
     };
-  }, [hasJobContext, jobId]);
+  }, [activeCompanyId, hasJobContext, jobId]);
 
   useEffect(() => {
-    if (!jobId || !user?.uid || !hasJobContext) return;
+    if (!jobId || !activeCompanyId || !jobCustomerId || !hasJobContext) return;
     return subscribeJob(
+      activeCompanyId,
+      jobCustomerId,
       jobId,
-      user.uid,
       (row) => {
         if (!row) {
           setLoadError("Job not found.");
@@ -335,12 +401,17 @@ export function LayoutStudioPage() {
       },
       () => setLoadError("Could not load job.")
     );
-  }, [hasJobContext, jobId, user?.uid]);
+  }, [activeCompanyId, hasJobContext, jobCustomerId, jobId]);
 
   useEffect(() => {
-    if (!jobId || !user?.uid || !hasJobContext) return;
-    return subscribeOptionsForJob(jobId, user.uid, setOptions);
-  }, [hasJobContext, jobId, user?.uid]);
+    if (!jobId || !activeCompanyId || !jobCustomerId || !hasJobContext) return;
+    return subscribeOptionsForJob(
+      activeCompanyId,
+      jobCustomerId,
+      jobId,
+      setOptions
+    );
+  }, [activeCompanyId, hasJobContext, jobCustomerId, jobId]);
 
   useEffect(() => {
     if (!hasJobContext || !job) return;
@@ -359,19 +430,19 @@ export function LayoutStudioPage() {
   }, [hasJobContext, job, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!hasJobContext) return;
+    if (!hasJobContext || !activeCompanyId) return;
     if (!job?.customerId) {
       setCustomer(null);
       return;
     }
     let cancelled = false;
-    void getCustomer(job.customerId).then((c) => {
+    void getCustomer(activeCompanyId, job.customerId).then((c) => {
       if (!cancelled) setCustomer(c);
     });
     return () => {
       cancelled = true;
     };
-  }, [hasJobContext, job?.customerId]);
+  }, [activeCompanyId, hasJobContext, job?.customerId]);
 
   const activeAreaIdFromQuery = searchParams.get("area");
   const jobAreas = hasJobContext && job ? jobAreasForJob(job) : [];
@@ -439,11 +510,11 @@ export function LayoutStudioPage() {
   }, [activeArea?.selectedOptionId, activeAreaOptions, optionFromQuery]);
 
   const handleOptionChange = (nextId: string) => {
-    if (hasJobContext && job && activeArea) {
+    if (hasJobContext && job && activeArea && activeCompanyId && jobCustomerId) {
       const nextAreas = jobAreasForJob(job).map((area) =>
         area.id === activeArea.id ? { ...area, selectedOptionId: nextId, updatedAt: new Date().toISOString() } : area
       );
-      void updateJob(job.id, {
+      void updateJob(activeCompanyId, jobCustomerId, job.id, {
         areas: nextAreas,
         areaType: nextAreas.map((area) => area.name).join(", "),
       });
@@ -465,7 +536,7 @@ export function LayoutStudioPage() {
   };
 
   const removeMaterialFromActiveArea = (optionId: string) => {
-    if (!job || !activeArea) return;
+    if (!job || !activeArea || !activeCompanyId || !jobCustomerId) return;
     const nextAssociatedOptionIds = activeAreaOptions
       .filter((option) => option.id !== optionId)
       .map((option) => option.id);
@@ -481,7 +552,7 @@ export function LayoutStudioPage() {
           }
         : area
     );
-    void updateJob(job.id, {
+    void updateJob(activeCompanyId, jobCustomerId, job.id, {
       areas: nextAreas,
       areaType: nextAreas.map((area) => area.name).join(", "),
     });
@@ -492,6 +563,10 @@ export function LayoutStudioPage() {
       setAreaMaterialsError("Sign in to add materials.");
       return;
     }
+    if (!activeCompanyId) {
+      setAreaMaterialsError("No active company.");
+      return;
+    }
     if (!areaMaterialsTarget || !areaMaterialsArea || !areaMaterialsJob) {
       setAreaMaterialsError("Choose an area first.");
       return;
@@ -500,6 +575,7 @@ export function LayoutStudioPage() {
       setAreaMaterialsError("Select at least one material.");
       return;
     }
+    const targetCustomerId = areaMaterialsJob.customerId;
     setAreaMaterialsSaving(true);
     setAreaMaterialsError(null);
     const existingOptions =
@@ -508,16 +584,24 @@ export function LayoutStudioPage() {
         : (jobOptionsByJobId[areaMaterialsJob.id] ?? []);
     const existingIds = new Set(existingOptions.map((option) => option.id));
     try {
-      const result = await addCatalogItemsToJobBatch(user.uid, areaMaterialsJob, items);
+      const result = await addCatalogItemsToJobBatch(
+        activeCompanyId,
+        areaMaterialsJob,
+        user.uid,
+        items
+      );
       if (result.added === 0) {
         setAreaMaterialsError(result.failures[0]?.message ?? "Could not add materials.");
         return;
       }
-      const refreshedOptions = await fetchOptionsForJob(areaMaterialsJob.id, user.uid);
-      const latestJob = await getJob(areaMaterialsJob.id);
-      const baseJobForAreaUpdate = latestJob ?? areaMaterialsJob;
+      const refreshedOptions = await fetchOptionsForJob(
+        activeCompanyId,
+        targetCustomerId,
+        areaMaterialsJob.id
+      );
+      const latestJob = areaMaterialsJob;
       const latestArea =
-        jobAreasForJob(baseJobForAreaUpdate).find((area) => area.id === areaMaterialsArea.id) ?? areaMaterialsArea;
+        jobAreasForJob(latestJob).find((area) => area.id === areaMaterialsArea.id) ?? areaMaterialsArea;
       setJobOptionsByJobId((prev) => ({ ...prev, [areaMaterialsJob.id]: refreshedOptions }));
       if (hasJobContext && job?.id === areaMaterialsJob.id) {
         setOptions(refreshedOptions);
@@ -534,7 +618,7 @@ export function LayoutStudioPage() {
         nextSelectedOptionId !== latestArea.selectedOptionId ||
         nextAssociatedOptionIds.join("|") !== (latestArea.associatedOptionIds ?? []).join("|")
       ) {
-        const nextAreas = jobAreasForJob(baseJobForAreaUpdate).map((area) =>
+        const nextAreas = jobAreasForJob(latestJob).map((area) =>
           area.id === latestArea.id
             ? {
                 ...area,
@@ -544,10 +628,15 @@ export function LayoutStudioPage() {
               }
             : area
         );
-        await updateJob(baseJobForAreaUpdate.id, {
-          areas: nextAreas,
-          areaType: nextAreas.map((area) => area.name).join(", "),
-        });
+        await updateJob(
+          activeCompanyId,
+          targetCustomerId,
+          latestJob.id,
+          {
+            areas: nextAreas,
+            areaType: nextAreas.map((area) => area.name).join(", "),
+          }
+        );
       }
       if (result.failures.length > 0) {
         setLoadError(
@@ -749,7 +838,26 @@ export function LayoutStudioPage() {
                       }}
                     >
                       <div className="ls-entry-job-summary">
-                        <h3 className="ls-entry-job-title">{jobRow.name}</h3>
+                        <div className="ls-entry-job-title-line">
+                          <h3 className="ls-entry-job-title">{jobRow.name}</h3>
+                          {(() => {
+                            const lifecycle = normalizeJobStatus(jobRow.status);
+                            const lifecycleColor = JOB_STATUS_COLOR[lifecycle];
+                            return (
+                              <span
+                                className={`ls-entry-job-lifecycle ls-entry-job-lifecycle--${lifecycle}`}
+                                title={`Lifecycle: ${JOB_STATUS_LABELS[lifecycle]}`}
+                                style={{
+                                  color: lifecycleColor,
+                                  borderColor: `${lifecycleColor}66`,
+                                  background: `${lifecycleColor}1f`,
+                                }}
+                              >
+                                {JOB_STATUS_LABELS[lifecycle]}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <p className="ls-entry-job-subtitle">
                           {areas.length} area{areas.length === 1 ? "" : "s"}
                         </p>
@@ -779,6 +887,14 @@ export function LayoutStudioPage() {
                         >
                           <Trash2 aria-hidden="true" />
                         </button>
+                        <Link
+                          to={`/jobs/${jobRow.id}`}
+                          className="ls-btn ls-btn-secondary"
+                          title="Open job detail page"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          View job
+                        </Link>
                         <button
                           type="button"
                           className="ls-btn ls-btn-outline-accent"
@@ -867,6 +983,7 @@ export function LayoutStudioPage() {
                                                   aria-label={`Remove ${option.productName} from ${area.name}`}
                                                   title={`Remove ${option.productName} from ${area.name}`}
                                                   onClick={() => {
+                                                    if (!activeCompanyId) return;
                                                     const nextAssociatedOptionIds = areaMaterialOptions
                                                       .filter((candidate) => candidate.id !== option.id)
                                                       .map((candidate) => candidate.id);
@@ -884,10 +1001,17 @@ export function LayoutStudioPage() {
                                                           }
                                                         : candidate
                                                     );
-                                                    void updateJob(jobRow.id, {
-                                                      areas: nextAreas,
-                                                      areaType: nextAreas.map((candidate) => candidate.name).join(", "),
-                                                    });
+                                                    void updateJob(
+                                                      activeCompanyId,
+                                                      jobRow.customerId,
+                                                      jobRow.id,
+                                                      {
+                                                        areas: nextAreas,
+                                                        areaType: nextAreas
+                                                          .map((candidate) => candidate.name)
+                                                          .join(", "),
+                                                      }
+                                                    );
                                                   }}
                                                 >
                                                   <X aria-hidden="true" />
@@ -1045,7 +1169,12 @@ export function LayoutStudioPage() {
           onClose={() => setCustomerModalOpen(false)}
           onSubmit={async (values: CustomerFormValues) => {
             if (!user?.uid) throw new Error("Not signed in");
-            const customerId = await createCustomer(user.uid, {
+            if (!activeCompanyId) throw new Error("No active company");
+            const customerId = await createCustomer(activeCompanyId, {
+              ownerUserId: user.uid,
+              createdByUserId: user.uid,
+              createdByDisplayName: profileDisplayName ?? null,
+              visibility: "company",
               customerType: values.customerType,
               businessName: values.businessName.trim(),
               firstName: values.firstName.trim(),
@@ -1064,13 +1193,15 @@ export function LayoutStudioPage() {
           initialValues={editingCustomer ? customerToFormValues(editingCustomer) : null}
           onClose={() => setEditingCustomerId(null)}
           onDelete={async () => {
-            if (!editingCustomer || !user?.uid) throw new Error("Choose a customer first.");
-            await deleteCustomer(editingCustomer.id, user.uid);
+            if (!editingCustomer) throw new Error("Choose a customer first.");
+            if (!activeCompanyId) throw new Error("No active company");
+            await deleteCustomer(activeCompanyId, editingCustomer.id);
             setSelectedCustomerId((prev) => (prev === editingCustomer.id ? null : prev));
           }}
           onSubmit={async (values: CustomerFormValues) => {
             if (!editingCustomer) throw new Error("Choose a customer first.");
-            await updateCustomer(editingCustomer.id, {
+            if (!activeCompanyId) throw new Error("No active company");
+            await updateCustomer(activeCompanyId, editingCustomer.id, {
               customerType: values.customerType,
               businessName: values.businessName.trim(),
               firstName: values.firstName.trim(),
@@ -1088,10 +1219,15 @@ export function LayoutStudioPage() {
           onClose={() => setJobModalOpen(false)}
           onSubmit={async (values: JobFormValues) => {
             if (!user?.uid) throw new Error("Not signed in");
+            if (!activeCompanyId) throw new Error("No active company");
             if (!activeCustomerId) throw new Error("Choose a customer first.");
             const initialAreaName = values.name.trim();
-            const createdJobId = await createJob(user.uid, {
-              customerId: activeCustomerId,
+            const createdJobId = await createJob(activeCompanyId, activeCustomerId, {
+              ownerUserId: user.uid,
+              createdByUserId: user.uid,
+              createdByDisplayName: profileDisplayName ?? null,
+              assignedUserId: user.uid,
+              visibility: "company",
               name: initialAreaName,
               contactName: values.contactName.trim(),
               contactPhone: values.contactPhone.trim(),
@@ -1134,7 +1270,10 @@ export function LayoutStudioPage() {
           }
           onSubmit={async (values: JobFormValues) => {
             if (!editingJobId) throw new Error("Missing job.");
-            await updateJob(editingJobId, {
+            if (!activeCompanyId) throw new Error("No active company");
+            const customerIdForJob = customerIdOfJob(editingJobId);
+            if (!customerIdForJob) throw new Error("Missing customer for job.");
+            await updateJob(activeCompanyId, customerIdForJob, editingJobId, {
               name: values.name.trim(),
               contactName: values.contactName.trim(),
               contactPhone: values.contactPhone.trim(),
@@ -1191,6 +1330,7 @@ export function LayoutStudioPage() {
                       .flat()
                       .find((candidate) => candidate.id === areaModalJobId);
                     if (!targetJob || !newAreaName.trim()) return;
+                    if (!activeCompanyId) return;
                     const createdAt = new Date().toISOString();
                     const existingAreas = jobAreasForJob(targetJob);
                     const importSource = parseImportedAreaSource(copyPlanSource, activeJobs);
@@ -1241,10 +1381,15 @@ export function LayoutStudioPage() {
                       ...existingAreas,
                       ...createdAreas,
                     ];
-                    await updateJob(targetJob.id, {
-                      areas: nextAreas,
-                      areaType: nextAreas.map((area) => area.name).join(", "),
-                    });
+                    await updateJob(
+                      activeCompanyId,
+                      targetJob.customerId,
+                      targetJob.id,
+                      {
+                        areas: nextAreas,
+                        areaType: nextAreas.map((area) => area.name).join(", "),
+                      }
+                    );
                     if (sameJobImport && importSource) {
                       const optionUpdates = targetJobOptions.flatMap((option) => {
                         const sourceAreaState = option.layoutAreaStates?.[importSource.area.id];
@@ -1259,7 +1404,13 @@ export function LayoutStudioPage() {
                       });
                       await Promise.all(
                         optionUpdates.map(({ optionId, layoutAreaStates }) =>
-                          updateJobComparisonOption(optionId, { layoutAreaStates })
+                          updateJobComparisonOption(
+                            activeCompanyId,
+                            targetJob.customerId,
+                            targetJob.id,
+                            optionId,
+                            { layoutAreaStates }
+                          )
                         )
                       );
                     }
@@ -1297,10 +1448,12 @@ export function LayoutStudioPage() {
           danger
           onCancel={() => setConfirmState(null)}
           onConfirm={() => {
-            if (!confirmState || !user?.uid) return;
+            if (!confirmState || !user?.uid || !activeCompanyId) return;
             if (confirmState.kind === "job") {
+              const cid = customerIdOfJob(confirmState.jobId);
+              if (!cid) return;
               void (async () => {
-                await deleteJob(confirmState.jobId, user.uid);
+                await deleteJob(activeCompanyId, cid, confirmState.jobId);
                 setConfirmState(null);
               })();
               return;
@@ -1314,10 +1467,15 @@ export function LayoutStudioPage() {
                 return;
               }
               const nextAreas = jobAreasForJob(targetJob).filter((area) => area.id !== confirmState.areaId);
-              await updateJob(targetJob.id, {
-                areas: nextAreas,
-                areaType: nextAreas.map((area) => area.name).join(", "),
-              });
+              await updateJob(
+                activeCompanyId,
+                targetJob.customerId,
+                targetJob.id,
+                {
+                  areas: nextAreas,
+                  areaType: nextAreas.map((area) => area.name).join(", "),
+                }
+              );
               setConfirmState(null);
             })();
           }}
@@ -1325,11 +1483,13 @@ export function LayoutStudioPage() {
         </div>
         {headerSearchSlot
           ? createPortal(
-              <input
-                className="ls-input ls-entry-search ls-entry-search--header"
-                placeholder="Search customers, jobs, areas..."
+              <SearchBar
+                variant="header"
+                id="layout-studio-search"
+                label="Search customers, jobs, areas"
+                placeholder="Search customers, jobs, areas…"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={setSearchQuery}
               />,
               headerSearchSlot
             )
@@ -1356,6 +1516,14 @@ export function LayoutStudioPage() {
 
   return (
     <>
+      <JobCollaborationBanner
+        viewers={collaboration.viewers}
+        activeEditor={collaboration.activeEditor}
+        lockedByOther={collaboration.lockedByOther}
+        onTakeover={() => {
+          void collaboration.takeover();
+        }}
+      />
       <LayoutStudioScreen
         job={job}
         customer={customer}
@@ -1367,6 +1535,7 @@ export function LayoutStudioPage() {
         onRemoveMaterialOption={removeMaterialFromActiveArea}
         onOpenAddMaterials={openAddMaterialsForActiveArea}
         ownerUserId={user.uid}
+        companyId={activeCompanyId ?? ""}
         onBack={() => navigate("/layout", { replace: true })}
         defaultPlanCanvasExpanded={defaultPlanCanvasExpanded}
       />

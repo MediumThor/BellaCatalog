@@ -1,22 +1,25 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import { createCustomer, subscribeCustomers } from "../services/compareQuoteFirestore";
 import { customerContactSummary, customerDisplayName, type CustomerRecord } from "../types/compareQuote";
 import { CreateCustomerModal, type CustomerFormValues } from "./CreateCustomerModal";
 
 export function CompareLandingPage() {
-  const { user } = useAuth();
+  const { user, profileDisplayName } = useAuth();
+  const { activeCompanyId } = useCompany();
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [custOpen, setCustOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [fireErr, setFireErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const u = user.uid;
-    return subscribeCustomers(u, setCustomers, (e) => setFireErr(e.message));
-  }, [user?.uid]);
+    if (!activeCompanyId) return;
+    return subscribeCustomers(activeCompanyId, setCustomers, (e) =>
+      setFireErr(e.message)
+    );
+  }, [activeCompanyId]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -114,7 +117,12 @@ export function CompareLandingPage() {
         onClose={() => setCustOpen(false)}
         onSubmit={async (values: CustomerFormValues) => {
           if (!user?.uid) throw new Error("Not signed in");
-          await createCustomer(user.uid, {
+          if (!activeCompanyId) throw new Error("No active company");
+          await createCustomer(activeCompanyId, {
+            ownerUserId: user.uid,
+            createdByUserId: user.uid,
+            createdByDisplayName: profileDisplayName ?? null,
+            visibility: "company",
             customerType: values.customerType,
             businessName: values.businessName.trim(),
             firstName: values.firstName.trim(),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { useCompany } from "../company/useCompany";
 import { AddressAutocompleteInput } from "./AddressAutocompleteInput";
 import {
   addCatalogItemsToJobBatch,
@@ -52,7 +53,8 @@ export function CompareCatalogOnboardingModal({
   selectedItems,
   onClearSelection,
 }: Props) {
-  const { user } = useAuth();
+  const { user, profileDisplayName } = useAuth();
+  const { activeCompanyId } = useCompany();
   const navigate = useNavigate();
   const [mode, setMode] = useState<FlowMode>("existing");
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
@@ -73,19 +75,24 @@ export function CompareCatalogOnboardingModal({
   } | null>(null);
 
   useEffect(() => {
-    if (!open || !user?.uid) return;
-    return subscribeCustomers(user.uid, setCustomers, (e) => setFireErr(e.message));
-  }, [open, user?.uid]);
+    if (!open || !activeCompanyId) return;
+    return subscribeCustomers(activeCompanyId, setCustomers, (e) =>
+      setFireErr(e.message)
+    );
+  }, [open, activeCompanyId]);
 
   useEffect(() => {
-    if (!open || !selectedCustomerId || !user?.uid) {
+    if (!open || !selectedCustomerId || !activeCompanyId) {
       setJobs([]);
       return;
     }
-    return subscribeJobsForCustomer(selectedCustomerId, user.uid, setJobs, (e) =>
-      setFireErr(e.message)
+    return subscribeJobsForCustomer(
+      activeCompanyId,
+      selectedCustomerId,
+      setJobs,
+      (e) => setFireErr(e.message)
     );
-  }, [open, selectedCustomerId, user?.uid]);
+  }, [open, selectedCustomerId, activeCompanyId]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,7 +126,13 @@ export function CompareCatalogOnboardingModal({
 
   const runBatchForJob = async (job: JobRecord) => {
     if (!user?.uid) throw new Error("Sign in to add slabs to a job.");
-    const { added, failures } = await addCatalogItemsToJobBatch(user.uid, job, selectedItems);
+    if (!activeCompanyId) throw new Error("No active company.");
+    const { added, failures } = await addCatalogItemsToJobBatch(
+      activeCompanyId,
+      job,
+      user.uid,
+      selectedItems
+    );
     if (added > 0) {
       onClearSelection();
     }
@@ -138,14 +151,18 @@ export function CompareCatalogOnboardingModal({
   const handleAddToExistingJob = async () => {
     setError(null);
     setResult(null);
-    if (!selectedJobId) {
+    if (!selectedJobId || !selectedCustomerId) {
       setError("Select a job.");
+      return;
+    }
+    if (!activeCompanyId) {
+      setError("No active company.");
       return;
     }
     setSaving(true);
     try {
-      const job = await getJob(selectedJobId);
-      if (!job || job.ownerUserId !== user?.uid) {
+      const job = await getJob(activeCompanyId, selectedCustomerId, selectedJobId);
+      if (!job) {
         setError("Could not load that job.");
         return;
       }
@@ -160,15 +177,19 @@ export function CompareCatalogOnboardingModal({
   const handleCreateJobThenAdd = async () => {
     setError(null);
     setResult(null);
-    if (!selectedCustomerId || !user?.uid) return;
+    if (!selectedCustomerId || !user?.uid || !activeCompanyId) return;
     if (!inlineJob.name.trim()) {
       setError("Job name is required.");
       return;
     }
     setSaving(true);
     try {
-      const jobId = await createJob(user.uid, {
-        customerId: selectedCustomerId,
+      const jobId = await createJob(activeCompanyId, selectedCustomerId, {
+        ownerUserId: user.uid,
+        createdByUserId: user.uid,
+        createdByDisplayName: profileDisplayName ?? null,
+        assignedUserId: user.uid,
+        visibility: "company",
         name: inlineJob.name.trim(),
         contactName: inlineJob.contactName.trim(),
         contactPhone: inlineJob.contactPhone.trim(),
@@ -182,7 +203,7 @@ export function CompareCatalogOnboardingModal({
         dxfAttachmentUrl: null,
         drawingAttachmentUrl: null,
       });
-      const job = await getJob(jobId);
+      const job = await getJob(activeCompanyId, selectedCustomerId, jobId);
       if (!job) {
         setError("Job was created but could not be loaded.");
         return;
@@ -202,6 +223,10 @@ export function CompareCatalogOnboardingModal({
       setError("Sign in to continue.");
       return;
     }
+    if (!activeCompanyId) {
+      setError("No active company.");
+      return;
+    }
     const hasBusiness = Boolean(newCustomer.businessName.trim());
     const hasPersonName = Boolean(newCustomer.firstName.trim() && newCustomer.lastName.trim());
     if (!hasBusiness && !hasPersonName) {
@@ -214,7 +239,11 @@ export function CompareCatalogOnboardingModal({
     }
     setSaving(true);
     try {
-      const customerId = await createCustomer(user.uid, {
+      const customerId = await createCustomer(activeCompanyId, {
+        ownerUserId: user.uid,
+        createdByUserId: user.uid,
+        createdByDisplayName: profileDisplayName ?? null,
+        visibility: "company",
         customerType: newCustomer.customerType,
         businessName: newCustomer.businessName.trim(),
         firstName: newCustomer.firstName.trim(),
@@ -224,8 +253,12 @@ export function CompareCatalogOnboardingModal({
         address: newCustomer.address.trim(),
         notes: newCustomer.notes.trim(),
       });
-      const jobId = await createJob(user.uid, {
-        customerId,
+      const jobId = await createJob(activeCompanyId, customerId, {
+        ownerUserId: user.uid,
+        createdByUserId: user.uid,
+        createdByDisplayName: profileDisplayName ?? null,
+        assignedUserId: user.uid,
+        visibility: "company",
         name: newJob.name.trim(),
         contactName: newJob.contactName.trim(),
         contactPhone: newJob.contactPhone.trim(),
@@ -239,7 +272,7 @@ export function CompareCatalogOnboardingModal({
         dxfAttachmentUrl: null,
         drawingAttachmentUrl: null,
       });
-      const job = await getJob(jobId);
+      const job = await getJob(activeCompanyId, customerId, jobId);
       if (!job) {
         setError("Job was created but could not be loaded.");
         return;

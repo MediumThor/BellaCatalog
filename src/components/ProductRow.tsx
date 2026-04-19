@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type MouseEvent as ReactMouseEvent } from "react";
 import type { CatalogItem, ColumnVisibility } from "../types/catalog";
 import { CatalogCollectionButton } from "./CatalogCollectionButton";
 import { EditIconButton } from "./EditIconButton";
@@ -31,6 +31,9 @@ type Props = {
   onToggleCompareBag?: (id: string) => void;
   collectionCount?: number;
   onOpenCollections?: (item: CatalogItem) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (id: string) => void;
 };
 
 function ProductRowInner({
@@ -51,6 +54,9 @@ function ProductRowInner({
   onToggleCompareBag,
   collectionCount = 0,
   onOpenCollections,
+  selectMode,
+  selected,
+  onToggleSelected,
 }: Props) {
   const hasImage = Boolean(item.imageUrl);
   const productHref = item.productPageUrl || item.sourceUrl;
@@ -58,8 +64,36 @@ function ProductRowInner({
   const liveHref = live?.detailPageUrl || live?.sourceUrl || null;
   const liveSizes = live?.availableSizes?.length ? live.availableSizes : [];
   const tagGroups = buildCatalogTagGroups(item);
+  const handleRowClick =
+    selectMode && onToggleSelected
+      ? (e: ReactMouseEvent<HTMLTableRowElement>) => {
+          const target = e.target as HTMLElement;
+          if (target.closest("a, button, input, label")) return;
+          onToggleSelected(item.id);
+        }
+      : undefined;
   return (
-    <tr data-favorite={favorite} data-compare-bag={compareBagSelected}>
+    <tr
+      data-favorite={favorite}
+      data-compare-bag={compareBagSelected}
+      data-selected={selected || undefined}
+      onClick={handleRowClick}
+    >
+      {selectMode && onToggleSelected ? (
+        <td className="catalog-table-select-cell">
+          <label
+            className="catalog-table-select"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelected(item.id)}
+              aria-label={`Select ${item.displayName}`}
+            />
+          </label>
+        </td>
+      ) : null}
       <td>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "0.35rem" }}>
           <FavoriteStar

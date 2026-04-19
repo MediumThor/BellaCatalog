@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   JobComparisonOptionRecord,
   JobRecord,
@@ -40,6 +40,19 @@ type Props = {
   onOpenQuoteSettings: () => void;
   customerExclusions: Record<LayoutQuoteCustomerRowId, boolean>;
   onSetCustomerExclusion: (rowId: LayoutQuoteCustomerRowId, excluded: boolean) => void | Promise<void>;
+  /** Quoted total override saved on the job (`null` means use the live estimate). */
+  jobQuotedTotalOverride: number | null;
+  /** Persisted deposit % override on the job. */
+  jobDepositPercentOverride: number | null;
+  /** Persisted deposit $ override on the job. */
+  jobDepositAmountOverride: number | null;
+  /** Company-wide default deposit % (Settings → Pricing defaults). */
+  companyDefaultDepositPercent: number | null;
+  /**
+   * Reports the live installed estimate up to the parent so it can be shown
+   * as the placeholder for the quoted-total override in the settings modal.
+   */
+  onLiveEstimateChange?: (total: number | null) => void;
 };
 
 export function QuotePhaseView({
@@ -60,6 +73,11 @@ export function QuotePhaseView({
   onOpenQuoteSettings,
   customerExclusions,
   onSetCustomerExclusion,
+  jobQuotedTotalOverride,
+  jobDepositPercentOverride,
+  jobDepositAmountOverride,
+  companyDefaultDepositPercent,
+  onLiveEstimateChange,
 }: Props) {
   const [slabPricingOpen, setSlabPricingOpen] = useState(false);
   const [showOverviewPrice, setShowOverviewPrice] = useState(false);
@@ -145,6 +163,29 @@ export function QuotePhaseView({
 
   const customerPerSqft =
     customerTotal != null && quoteAreaSqFt > 0 ? customerTotal / quoteAreaSqFt : null;
+
+  useEffect(() => {
+    onLiveEstimateChange?.(customerTotal);
+  }, [customerTotal, onLiveEstimateChange]);
+
+  const resolvedTotalForDeposit = jobQuotedTotalOverride ?? customerTotal ?? null;
+  const resolvedDepositPercent =
+    jobDepositPercentOverride != null ? jobDepositPercentOverride : companyDefaultDepositPercent;
+  const resolvedDepositAmount = useMemo(() => {
+    if (jobDepositAmountOverride != null) return jobDepositAmountOverride;
+    if (resolvedDepositPercent != null && resolvedTotalForDeposit != null) {
+      return Math.round((resolvedDepositPercent / 100) * resolvedTotalForDeposit * 100) / 100;
+    }
+    return null;
+  }, [jobDepositAmountOverride, resolvedDepositPercent, resolvedTotalForDeposit]);
+  const depositSourceLabel =
+    jobDepositAmountOverride != null
+      ? "fixed override"
+      : jobDepositPercentOverride != null
+        ? "job override"
+        : companyDefaultDepositPercent != null
+          ? "company default"
+          : null;
   const analytics = useMemo(
     () =>
       computeQuoteAnalytics({
@@ -555,12 +596,7 @@ export function QuotePhaseView({
                 dt={
                   <>
                     Cutouts{" "}
-                    {commercial.cutoutEachPrice > 0 ? (
-                      <span className="ls-quote-dl-sub">
-                        ({commercial.sinkCutoutCount} sink + {commercial.outletCutoutCount} outlet ×{" "}
-                        {formatMoney(commercial.cutoutEachPrice)})
-                      </span>
-                    ) : null}
+                    <CutoutsSubLabel commercial={commercial} />
                   </>
                 }
                 dd={formatMoney(commercial.sinkAddOnTotal)}
@@ -636,6 +672,37 @@ export function QuotePhaseView({
 
         </dl>
 
+        <div
+          className="ls-quote-deposit-row"
+          aria-label="Required deposit (saved on the job)"
+        >
+          <div className="ls-quote-deposit-row__copy">
+            <span className="ls-quote-deposit-row__label">Required deposit</span>
+            <span className="ls-quote-deposit-row__sub ls-muted">
+              {jobQuotedTotalOverride != null
+                ? `Based on quoted total override ${formatMoney(jobQuotedTotalOverride)}`
+                : customerTotal != null
+                  ? `Based on installed estimate ${formatMoney(customerTotal)}`
+                  : "Set a quoted total to compute deposit."}
+              {resolvedDepositPercent != null
+                ? ` · ${formatPercentDisplay(resolvedDepositPercent)}%${
+                    depositSourceLabel ? ` (${depositSourceLabel})` : ""
+                  }`
+                : " · No deposit configured"}
+            </span>
+          </div>
+          <div className="ls-quote-deposit-row__value">
+            <strong>{resolvedDepositAmount != null ? formatMoney(resolvedDepositAmount) : "—"}</strong>
+            <button
+              type="button"
+              className="ls-btn ls-btn-secondary ls-btn-xs"
+              onClick={onOpenQuoteSettings}
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
         {(job.assumptions || option.notes) ? (
           <div className="ls-quote-assumptions">
             <p className="ls-quote-assumptions-title">Assumptions & notes</p>
@@ -669,8 +736,38 @@ export function QuotePhaseView({
   );
 }
 
+function CutoutsSubLabel({
+  commercial,
+}: {
+  commercial: import("../utils/commercialQuote").CommercialQuoteBreakdown;
+}) {
+  const flatSinks = Math.max(0, commercial.sinkCutoutCount - commercial.customSinkCount);
+  const flatTerms: string[] = [];
+  if (commercial.cutoutEachPrice > 0) {
+    if (flatSinks > 0) flatTerms.push(`${flatSinks} sink`);
+    if (commercial.outletCutoutCount > 0)
+      flatTerms.push(`${commercial.outletCutoutCount} outlet`);
+  }
+  const flatPart =
+    flatTerms.length > 0
+      ? `${flatTerms.join(" + ")} × ${formatMoney(commercial.cutoutEachPrice)}`
+      : "";
+  const customPart =
+    commercial.customSinkCount > 0
+      ? `${commercial.customSinkCount} custom sink${commercial.customSinkCount === 1 ? "" : "s"} = ${formatMoney(commercial.customSinkAddOnTotal)}`
+      : "";
+  const parts = [flatPart, customPart].filter(Boolean);
+  if (parts.length === 0) return null;
+  return <span className="ls-quote-dl-sub">({parts.join("; ")})</span>;
+}
+
 function chargeModeLabel(mode: MaterialChargeMode): string {
   return mode === "full_slab" ? "Full slab" : "Material used";
+}
+
+function formatPercentDisplay(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : String(rounded);
 }
 
 function QuoteDlRow({

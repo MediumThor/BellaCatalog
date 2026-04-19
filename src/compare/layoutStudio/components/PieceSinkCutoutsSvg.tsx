@@ -3,9 +3,9 @@ import {
   FAUCET_HOLE_RADIUS_IN,
   localFaucetHoleCentersInches,
   sinkCenterWorldInDisplay,
+  sinkDimsForSink,
   sinkLocalToSlabMatrixStr,
   sinkOutlinePathDLocal,
-  sinkTemplateDims,
 } from "../utils/pieceSinks";
 
 type Props = {
@@ -113,7 +113,7 @@ export function PieceSinkCutoutsSvg({
         const traceMarkerHalf = Math.max(1.2, inchForPath * 0.22);
         const traceMarkerRadius = Math.max(0.8, inchForPath * 0.08);
         const traceMarkerStroke = Math.max(0.12, inchForPath * 0.007);
-        const dims = sinkTemplateDims(sink.templateKind);
+        const dims = sinkDimsForSink(sink);
         const wIn = dims.widthIn * inchForPath;
         const hIn = dims.depthIn * inchForPath;
         const labelName = sink.name.trim();
